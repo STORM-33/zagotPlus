@@ -9,7 +9,7 @@ Since: 2026-01-11
 none
 
 ## Git
-Branch: master
+Branch: feature/phase-0-project-setup
 Uncommitted: 0 files
 
 ## Stats
