@@ -13,13 +13,13 @@ Branch: master
 Uncommitted: 0 files
 
 ## Stats
-Sessions: 2 done | 0 blocked
-Streak: 2
+Sessions: 3 done | 0 blocked
+Streak: 3
 Last reflect: never
 Scratchpad: 0 items
 
 ## Deferred
-none
+reflect: 3+ sessions completed
 
 ## Next
-Run `work` to start next session (init-supabase)
+Run `reflect` to consolidate memory (Phase 0 complete!)

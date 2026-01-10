@@ -82,3 +82,24 @@ Notes:
 - Build successful: `./gradlew assembleDebug`
 - Hilt DI components generated correctly
 - Sessions 2 done, 0 blocked, streak: 2
+
+---
+
+### Session: phase-0/init-supabase
+Status: completed
+Files:
+  - supabase/migrations/20260111000000_initial_schema.sql (created)
+  - supabase/README.md (created)
+  - .ctx/sessions/phase-0/init-supabase/report.md (created)
+
+Notes:
+- Created comprehensive database schema migration
+- Tables: locations, products, transactions with UNIQUE local_id
+- Inventory view (computed from transactions)
+- RLS enabled with permissive anon policies
+- Performance indexes on key columns
+- Seed data: 2 locations, 4 products
+- Comprehensive setup documentation with testing guide
+- Commit: `feat(supabase): add initial database schema and migration`
+- Sessions 3 done, 0 blocked, streak: 3
+- **Phase 0 complete!** All setup sessions finished
