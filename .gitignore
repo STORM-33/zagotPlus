@@ -1,0 +1,56 @@
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+
+# Gradle
+.gradle/
+build/
+*/build/
+gradlew
+gradlew.bat
+gradle/wrapper/
+
+# Local configuration
+local.properties
+*.env
+*.env.local
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# Kotlin
+*.kt.swp
+
+# Room schema
+*.db-shm
+*.db-wal
+
+# Misc
+*.log
+*.hprof
+captures/
+.externalNativeBuild
+.cxx
