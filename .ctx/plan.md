@@ -10,9 +10,9 @@ Initialize repository structure, Android project with Hilt, and Supabase backend
 ## Progress
 
 - Total sessions: 3
-- Completed: 0
+- Completed: 1
 - Blocked: 0
-- Remaining: 3
+- Remaining: 2
 
 ## Phases
 
@@ -24,7 +24,7 @@ Establish the project foundation: git repository, Android app skeleton, and Supa
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | init-repo | low | pending | none |
+| 1 | init-repo | low | completed | none |
 | 2 | init-android | medium | pending | init-repo |
 | 3 | init-supabase | medium | pending | init-repo |
 

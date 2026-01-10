@@ -1,20 +1,20 @@
 # State
 
 ## Current
-Mode: working
-Active: phase-0/init-repo
+Mode: ready
+Active: none
 Since: 2026-01-11
 
 ## Blockers
 none
 
 ## Git
-Branch: main
+Branch: master
 Uncommitted: 0 files
 
 ## Stats
-Sessions: 0 done | 0 blocked
-Streak: 0
+Sessions: 1 done | 0 blocked
+Streak: 1
 Last reflect: never
 Scratchpad: 0 items
 
@@ -22,4 +22,4 @@ Scratchpad: 0 items
 none
 
 ## Next
-Run `work` to start session init-repo
+Run `work` to start next session (init-android or init-supabase)

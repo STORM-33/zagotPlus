@@ -43,3 +43,19 @@ Notes:
 - Session 2: init-android (medium) - Android project skeleton with Hilt
 - Session 3: init-supabase (medium) - Supabase schema and RLS
 - Sessions 2 and 3 can run in parallel after session 1
+
+---
+
+### Session: phase-0/init-repo
+Status: completed
+Files:
+  - .gitignore (created)
+  - README.md (created)
+  - All .ctx/ files (committed)
+
+Notes:
+- Initialized git repository
+- Created comprehensive .gitignore for Android/Kotlin
+- Created README with project overview
+- Initial commit: `chore: initialize repository`
+- Sessions 1 done, 0 blocked, streak: 1
