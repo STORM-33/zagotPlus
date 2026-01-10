@@ -1,10 +1,10 @@
 # File Tree
 
-Updated: 2026-01-10
+Updated: 2026-01-11
 
 ## Overview
 
-Zagot+ is organized as a monorepo with Android app, documentation, and Claude Auto OS workspace.
+Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, and UI layers.
 
 ## Root (/)
@@ -12,11 +12,11 @@ Android follows Clean Architecture with clear separation: data, domain, and UI l
 - CLAUDE.md - Claude Auto OS configuration
 - MASTER_PLAN.md - Complete project specification (20 sessions across 5 phases)
 - README.md - Project overview and setup instructions
-- .gitignore - Version control exclusions
+- .gitignore - Version control exclusions (Android/Kotlin patterns)
 
 ## Claude Workspace (.ctx/)
 
-### state and planning (6 files)
+### state and planning
 - state.md - Current mode, active session, stats, deferred actions
 - plan.md - Active work plan with phases and sessions
 - journal.md - Append-only log of all work
@@ -29,107 +29,86 @@ Android follows Clean Architecture with clear separation: data, domain, and UI l
 - modules/supabase.md - Backend schema and sync context
 - modules/hardware.md - Scales and printer integration notes
 
-### modes/ (workflow instructions)
-- plan.md - Planning mode instructions
-- work.md - Execution mode instructions
-- do.md - Quick task mode
-- reflect.md - Memory consolidation mode
-- validate.md - Consistency checking
-- archive.md - Completed work archiving
-- blocked.md - Recovery from blockers
-- status.md - Status reporting
+### modes/ (8 workflow files)
+plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status.md
 
-### templates/ (session briefs)
-- feature.md - New feature session template
-- bugfix.md - Bug fix session template
-- refactor.md - Code improvement template
-- research.md - Investigation template
+### templates/ (4 session templates)
+feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/{phase}/{session}/ (work artifacts)
-- brief.md - Session objectives and requirements
-- report.md - Session outcomes and decisions
+### sessions/phase-0/ (Phase 0 - completed)
+- _overview.md - Phase summary
+- init-repo/ - brief.md, report.md
+- init-android/ - brief.md, report.md
+- init-supabase/ - brief.md, report.md
 
-### history/ (archived work)
+### history/
 - index.md - Decisions, patterns, lessons learned
-- {plan-name}/ - Archived completed plans
 
-## Android App (android/)
+## Android App (android/) - IMPLEMENTED
 
-### Project Root (android/)
-- build.gradle.kts - Project-level Gradle config
+### Project Root
+- build.gradle.kts - Project-level Gradle config (AGP 8.3.1)
 - settings.gradle.kts - Module configuration
-- gradle.properties - Build properties
+- gradle.properties - Build properties (JDK 21)
+- gradlew, gradlew.bat - Gradle wrapper scripts
+- local.properties - SDK location (not in git)
+
+### Gradle Version Catalog
+- gradle/libs.versions.toml - All dependency versions centralized
 
 ### App Module (android/app/)
 - build.gradle.kts - App dependencies (Compose, Room, Hilt, Supabase)
-- AndroidManifest.xml - Permissions, hardware features
+- proguard-rules.pro - ProGuard configuration
+- src/main/AndroidManifest.xml - Permissions, hardware features
 
-### Main Source (android/app/src/main/)
+### Kotlin Source (app/src/main/kotlin/com/zagot/zagotplus/)
 
-#### Kotlin Source (kotlin/com/zagot/)
+**Application (implemented)**
+- ZagotApp.kt - @HiltAndroidApp application class
+- MainActivity.kt - @AndroidEntryPoint single activity with Compose
 
-**Application**
-- ZagotApp.kt - Application class with Hilt setup
-- MainActivity.kt - Single activity container
+**Data Layer (data/) - placeholder structure**
+- local/.gitkeep - Room database (Phase 1)
+- remote/.gitkeep - Supabase integration (Phase 1)
+- repository/.gitkeep - Repository implementations (Phase 1)
 
-**Data Layer (data/)**
-- local/ - Room database
-  - entities/ - Room entities (Location, Product, Transaction)
-  - dao/ - Data Access Objects
-  - ZagotDatabase.kt - Room database instance
-  - TypeConverters.kt - UUID, Timestamp, Enum converters
-- remote/ - Supabase integration
-  - SupabaseClient.kt - Supabase instance
-  - dto/ - Data Transfer Objects for API
-- repository/ - Repository pattern implementations
-  - LocationRepository.kt
-  - ProductRepository.kt
-  - TransactionRepository.kt
-  - InventoryRepository.kt
+**Domain Layer (domain/) - placeholder structure**
+- model/.gitkeep - Business models (Phase 1)
 
-**Domain Layer (domain/)**
-- model/ - Business models (may differ from entities)
-  - Transaction.kt
-  - InventoryItem.kt
-  - Location.kt
-  - Product.kt
-
-**Sync Layer (sync/)**
-- SyncWorker.kt - WorkManager periodic sync
-- SyncService.kt - Push/pull logic
-- ConflictResolver.kt - Duplicate detection (local_id)
+**Sync Layer (sync/) - placeholder**
+- .gitkeep - WorkManager sync (Phase 1)
 
 **UI Layer (ui/)**
-- theme/ - Compose theme (colors, typography, shapes)
-- navigation/ - NavHost and navigation graph
-- components/ - Reusable UI components
-- screens/
-  - auth/ - PIN entry screen
-  - purchase/ - Purchase flow (kiosk + mobile)
-  - sale/ - Sale flow
-  - transfer/ - Transfer between locations
-  - inventory/ - Stock view
-  - history/ - Transaction list
-  - products/ - Product CRUD
-  - reports/ - Daily summaries
-  - settings/ - Sync status, device config
+- theme/Theme.kt - Material 3 theme (placeholder colors)
+- theme/Type.kt - Typography configuration
+- navigation/.gitkeep - NavHost (Phase 2)
+- screens/.gitkeep - Compose screens (Phase 2)
+- components/.gitkeep - Reusable components (Phase 2)
 
-**Hardware Integration (hardware/)**
-- scales/ - TCP/IP communication with USR-W610
-  - ScalesManager.kt - Connection and data parsing
-  - ScalesProtocol.kt - Protocol parser (ST,GS,+12.34kg)
-- printer/ - Bluetooth ESC/POS
-  - PrinterManager.kt - Bluetooth connection
-  - ReceiptFormatter.kt - ESC/POS command builder
-  - ReceiptTemplate.kt - Ukrainian receipt layout
+### Resources (app/src/main/res/)
+- values/strings.xml - String resources
+- values-uk/strings.xml - Ukrainian translations
+- values/themes.xml - XML theme fallback
+- mipmap-*/.gitkeep - Launcher icons (Phase 4)
 
-#### Resources (res/)
-- values/ - strings.xml (Ukrainian), colors.xml, themes.xml
-- drawable/ - Icons and graphics
-- mipmap/ - App launcher icons
+## Supabase Backend (supabase/) - IMPLEMENTED
 
-## Documentation (docs/)
+### Migrations
+- migrations/20260111000000_initial_schema.sql - Initial schema with:
+  - locations table (kiosk/mobile types)
+  - products table (with default pricing)
+  - transactions table (append-only ledger with local_id UNIQUE)
+  - inventory view (computed from transactions)
+  - RLS policies (permissive anon access)
+  - Performance indexes
+  - Seed data (2 locations, 4 products)
 
+### Documentation
+- README.md - Setup instructions, schema overview, testing guide
+
+## Documentation (docs/) - NOT YET CREATED
+
+Planned:
 - HARDWARE.md - Scales and printer integration details
 - RECEIPTS.md - Receipt format and legal notes
 - SYNC.md - Sync strategy and conflict resolution
