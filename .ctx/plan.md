@@ -10,9 +10,9 @@ Initialize repository structure, Android project with Hilt, and Supabase backend
 ## Progress
 
 - Total sessions: 3
-- Completed: 1
+- Completed: 2
 - Blocked: 0
-- Remaining: 2
+- Remaining: 1
 
 ## Phases
 
@@ -25,7 +25,7 @@ Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
 | 1 | init-repo | low | completed | none |
-| 2 | init-android | medium | pending | init-repo |
+| 2 | init-android | medium | completed | init-repo |
 | 3 | init-supabase | medium | pending | init-repo |
 
 ## Dependencies Graph

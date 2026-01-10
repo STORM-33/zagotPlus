@@ -13,8 +13,8 @@ Branch: master
 Uncommitted: 0 files
 
 ## Stats
-Sessions: 1 done | 0 blocked
-Streak: 1
+Sessions: 2 done | 0 blocked
+Streak: 2
 Last reflect: never
 Scratchpad: 0 items
 
@@ -22,4 +22,4 @@ Scratchpad: 0 items
 none
 
 ## Next
-Run `work` to start next session (init-android or init-supabase)
+Run `work` to start next session (init-supabase)

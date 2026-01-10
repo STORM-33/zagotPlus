@@ -13,9 +13,6 @@ release/
 .gradle/
 build/
 */build/
-gradlew
-gradlew.bat
-gradle/wrapper/
 
 # Local configuration
 local.properties
