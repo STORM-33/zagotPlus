@@ -9,7 +9,7 @@ Last updated: 2026-01-11
 | Phase 0: Setup | 2026-01-11 | 3 | completed |
 | Phase 1: Data Layer | 2026-01-11 | 4 | completed |
 | Phase 2: Core UI | 2026-01-11 | 5 | completed |
-| Phase 3: Audit Remediation | 2026-01-11 | 3 (of 7) | in-progress |
+| Phase 3: Audit Remediation | 2026-01-11 | 7 | completed |
 
 ## Decisions Log
 
@@ -50,6 +50,10 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 3 | Partial sync treated as success | Data is safe on server, pull retries automatically | fix-sync-partial-failure |
 | 2026-01-11 | Phase 3 | Remove destructive migration fallback | Prevent data loss on schema updates in production | fix-database-migrations |
 | 2026-01-11 | Phase 3 | @Ignore SyncServiceTest (not delete) | Preserve test logic for future use with proper mocking | test-sync-service |
+| 2026-01-11 | Phase 3 | UUID per device stored in SharedPreferences | Persistent device ID for transaction tracking | implement-device-id |
+| 2026-01-11 | Phase 3 | Salt + PBKDF2 for PIN hashing | Security hardening over simple SHA-256 | fix-pin-security |
+| 2026-01-11 | Phase 3 | Persisted lockout with timestamp | Survives app restart, uses monotonic time | fix-pin-security |
+| 2026-01-11 | Phase 3 | String type for decimal DTOs | Preserves exact precision in JSON serialization | fix-decimal-precision |
 
 ## Lessons Learned
 
@@ -71,6 +75,7 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 2 | lifecycle-runtime-compose needed | Required for collectAsStateWithLifecycle |
 | 2026-01-11 | Phase 3 | Supabase client cannot be unit-tested directly | Library starts internal coroutines, causes hangs | test-sync-service |
 | 2026-01-11 | Phase 3 | Extract interface for testability | Wrap Supabase calls in interface for mocking | test-sync-service |
+| 2026-01-11 | Phase 3 | SharedPreferences for device UUID | Same pattern as SyncPreferences | implement-device-id |
 
 ## Patterns & Solutions
 
@@ -108,6 +113,11 @@ Last updated: 2026-01-11
 | Sync result sealed class | Success/Partial/Failure states with phase tracking | fix-sync-partial-failure |
 | Migration infrastructure | Empty MIGRATIONS array + addMigrations(*MIGRATIONS) | fix-database-migrations |
 | Deferred test execution | @Ignore with documented reason, not deletion | test-sync-service |
+| Device ID injection | Inject DevicePreferences into repository | implement-device-id |
+| PBKDF2 key derivation | 10,000 iterations with random salt | fix-pin-security |
+| Lockout persistence | Store failed attempts + timestamp in SharedPreferences | fix-pin-security |
+| Monotonic lockout timing | SystemClock.elapsedRealtime() for tamper-resistant countdown | fix-pin-security |
+| Decimal DTO serialization | Use String instead of Double for BigDecimal in DTOs | fix-decimal-precision |
 
 ## Tags
 

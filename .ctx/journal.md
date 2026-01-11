@@ -494,3 +494,26 @@ Work Summary:
 - Commit: `test(inventory): add unit tests for computeInventory` (cc2f63f)
 
 Sessions: 5 done (Phase 3), 0 blocked, streak: 2
+
+---
+
+### Session: phase-3.3/fix-decimal-precision
+Status: completed
+Complexity: medium
+
+Objective: Fix BigDecimal→Double conversion that loses precision in DTOs and UI.
+
+Work Summary:
+- Changed ProductDto to use String for defaultBuyPrice/defaultSellPrice
+- Changed TransactionDto to use String for weightKg/pricePerKg/totalAmount
+- Updated DTO conversion: BigDecimal(string) and toPlainString()
+- Removed .toDouble() from PurchaseScreen and SaleScreen formatting
+- Build successful
+- Commit: `fix(sync): use String instead of Double for decimal values in DTOs` (455bd5e)
+
+Key Decision:
+- String type in DTOs preserves exact decimal representation in JSON
+- No floating-point errors during Supabase sync
+
+Sessions: 7 done (Phase 3), 0 blocked, streak: 1
+**Phase 3 complete!** All audit remediation sessions finished.

@@ -10,9 +10,9 @@ Address critical issues from code audit. Priority: stability first (sync, tests,
 ## Progress
 
 - Total sessions: 7
-- Completed: 6
+- Completed: 7
 - Blocked: 0
-- Remaining: 1
+- Remaining: 0
 
 ## Historical Context
 
@@ -56,14 +56,14 @@ Sessions:
 | 5 | test-inventory-computation | medium | completed | none |
 
 ### Phase 3.3: Security Hardening
-Status: pending
+Status: completed
 Improve PIN security and fix decimal precision.
 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
 | 6 | fix-pin-security | medium | completed | none |
-| 7 | fix-decimal-precision | medium | pending | none |
+| 7 | fix-decimal-precision | medium | completed | none |
 
 ## Dependencies Graph
 
