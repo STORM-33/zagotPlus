@@ -8,9 +8,9 @@ Redesign purchase flow: main screen with today's batches history + weight placeh
 
 ## Progress
 - Total sessions: 5
-- Completed: 3
+- Completed: 5
 - Blocked: 0
-- Remaining: 2
+- Remaining: 0
 
 ## Phases
 
@@ -24,8 +24,8 @@ Sessions:
 | 1 | db-batches | medium | completed | none |
 | 2 | product-images | medium | completed | none |
 | 3 | purchase-main-screen | medium | completed | db-batches |
-| 4 | purchase-entry-flow | high | pending | db-batches, product-images |
-| 5 | purchase-summary | medium | pending | purchase-entry-flow |
+| 4 | purchase-entry-flow | high | completed | db-batches, product-images |
+| 5 | purchase-summary | medium | completed | purchase-entry-flow |
 
 ## Dependencies Graph
 

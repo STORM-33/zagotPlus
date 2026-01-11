@@ -726,3 +726,66 @@ Key Decisions:
 - Entry flow placeholder ready for session 4 implementation
 
 Sessions: 3 done (Phase 5), 0 blocked, streak: 3
+
+---
+
+### Session: phase-5/purchase-entry-flow
+Status: completed
+Complexity: high
+Duration: ~20 minutes
+
+Objective: Implement the multi-step purchase entry flow: product grid → weight/price input → position list → notes.
+
+Work Summary:
+- Created PurchaseEntryViewModel with 3 screen states and position management
+- Created PurchaseEntryScreen with ProductGrid, WeightEntry, PositionsList components
+- ProductGrid uses LazyVerticalGrid with GridCells.Adaptive for phone/tablet
+- ProductTile shows Coil AsyncImage or placeholder icon
+- WeightEntry with scale placeholder, manual input, price, calculated total
+- PositionsList with add/remove positions, notes field, action buttons
+- On finalize: creates PurchaseBatch + Transactions atomically via repository
+- Updated NavGraph to use real PurchaseEntryScreen (removed placeholder)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): implement multi-step purchase entry flow` (d4c0ab6)
+
+Key Decisions:
+- GridCells.Adaptive(120.dp) for responsive grid layout
+- 3 screen states in enum (PRODUCT_GRID, WEIGHT_ENTRY, POSITIONS_LIST)
+- PurchasePosition data class for line items with UUID id
+- Price auto-fills from product.defaultBuyPrice
+- Summary screen deferred to session 5 (just returns to main for now)
+
+Sessions: 4 done (Phase 5), 0 blocked, streak: 1
+
+---
+
+### Session: phase-5/purchase-summary
+Status: completed
+Complexity: medium
+Duration: ~5 minutes
+
+Objective: Implement summary display overlay and database save for completed purchase batches.
+
+Work Summary:
+- Created PurchaseSummaryScreen.kt with PurchaseSummaryOverlay composable
+- Full-screen overlay with semi-transparent scrim background
+- Shows all positions (product, weight × price = total)
+- Shows totals (weight, amount) and notes if present
+- Tap anywhere to confirm and save
+- Added SUMMARY state to PurchaseEntryScreenState enum
+- Split finalize() into show summary + confirmSave()
+- confirmSave() saves batch+transactions atomically
+- Removed navigateToSummary flag (replaced by overlay approach)
+- Added TODO comment for receipt printing (Phase 6)
+- Updated NavGraph (simplified PurchaseEntryScreen params)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): add summary overlay before saving batch` (3df3896)
+
+Key Decisions:
+- Overlay instead of separate navigation (simpler flow)
+- Tap to confirm (matches brief specification)
+- isSaving flag prevents double-tap during save
+- Error returns to POSITIONS_LIST with snackbar
+
+Sessions: 5 done (Phase 5), 0 blocked, streak: 2
+**Phase 5 complete!** All 5 purchase flow redesign sessions finished.

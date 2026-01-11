@@ -11,6 +11,7 @@ Last updated: 2026-01-11
 | Phase 2: Core UI | 2026-01-11 | 5 | completed | history/phase-2-core-ui |
 | Phase 3: Audit Remediation | 2026-01-11 | 7 | completed | history/phase-3-audit-remediation |
 | Phase 4: Supporting UI | 2026-01-11 | 4 | completed | history/phase-4-supporting-ui |
+| Phase 5: Purchase Flow Redesign | 2026-01-11 | 3/5 | in_progress | sessions/phase-5-purchase-flow |
 
 ## Decisions Log
 
@@ -63,6 +64,13 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 4 | DatePickerDialog defaults to today | Most common use case for reports | screen-reports |
 | 2026-01-11 | Phase 4 | BigDecimal.sumOf for aggregation | Accurate decimal summation | screen-reports |
 | 2026-01-11 | Phase 4 | Location selection in DevicePreferences | Persist default location across sessions | screen-settings |
+| 2026-01-11 | Phase 5 | database.withTransaction for atomic batch | Ensures batch + transactions created together | db-batches |
+| 2026-01-11 | Phase 5 | SQLite date functions for today query | localtime aware filtering for batches | db-batches |
+| 2026-01-11 | Phase 5 | SET_NULL on batch_id FK delete | Preserve transactions if batch deleted | db-batches |
+| 2026-01-11 | Phase 5 | Store content:// URI directly | No file copying needed for images | product-images |
+| 2026-01-11 | Phase 5 | Coil for async image loading | Built-in caching, simpler than Glide | product-images |
+| 2026-01-11 | Phase 5 | LazyColumn with Flow for batch list | Reactive UI with automatic updates | purchase-main-screen |
+| 2026-01-11 | Phase 5 | Weight placeholder until scales | "--" display, scales integration deferred | purchase-main-screen |
 
 ## Lessons Learned
 
@@ -88,6 +96,9 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 4 | TransactionQueryBuilder for SQL | Cleaner than string concatenation | screen-history |
 | 2026-01-11 | Phase 4 | Filter state resets on app restart | Not persisted - per session only | screen-history |
 | 2026-01-11 | Phase 4 | Summary computation in ViewModel | Flexibility over DAO aggregation | screen-reports |
+| 2026-01-11 | Phase 5 | Room MIGRATION_1_2 and MIGRATION_2_3 | Explicit SQL for schema upgrades | db-batches, product-images |
+| 2026-01-11 | Phase 5 | ActivityResultContracts.GetContent | Modern image picker API | product-images |
+| 2026-01-11 | Phase 5 | Divider vs HorizontalDivider | Material3 compatibility issue | purchase-main-screen |
 
 ## Patterns & Solutions
 
@@ -141,7 +152,14 @@ Last updated: 2026-01-11
 | Settings sections | Group settings by category (Sync, Device, Data, About) | screen-settings |
 | Device ID display | Truncated UUID with tap-to-copy functionality | screen-settings |
 | Location selector | RadioButton list with persisted selection | screen-settings |
+| Atomic batch creation | database.withTransaction wraps batch + transactions insert | db-batches |
+| Today's batches query | SQLite date functions with localtime for timezone | db-batches |
+| Image URI storage | Content URI from picker stored directly (Coil caches) | product-images |
+| Product image display | Coil AsyncImage with placeholder Icon | product-images |
+| Image picker dialog | ActivityResultContracts.GetContent in composable | product-images |
+| Batch list display | LazyColumn with BatchItem composable, Flow observation | purchase-main-screen |
+| Weight placeholder | Static "--" text until hardware integration | purchase-main-screen |
 
 ## Tags
 
-#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk #filtering #crud #reports #settings
+#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk #filtering #crud #reports #settings #batches #images #coil

@@ -1,13 +1,13 @@
 # File Tree
 
-Updated: 2026-01-11 (Post-Phase 4 Reflect)
+Updated: 2026-01-11 (Post-Phase 5 Reflect - Sessions 1-3)
 
 ## Overview
 
 Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, sync, and UI layers.
-**Phases 0-4 complete** - Data layer, core UI, audit remediation, and supporting UI all implemented.
-**Next**: Phase 5 (Hardware integration - scales, printer)
+**Phase 5 in progress** - Purchase Flow Redesign (3/5 sessions complete).
+**Next**: Session 4 (purchase-entry-flow)
 
 ## Root (/)
 
@@ -37,16 +37,18 @@ plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status
 ### templates/ (4 session templates)
 feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/phase-4-supporting-ui/ (completed, pending archive)
-- screen-history/ - Filter/search UI with RawQuery builder
-- screen-products/ - CRUD operations with validation
-- screen-reports/ - Daily summaries with export
-- screen-settings/ - Sync status, device config
+### sessions/phase-5-purchase-flow/ (active)
+- db-batches/ - Batch table and FK implementation
+- product-images/ - Image column and Coil integration
+- purchase-main-screen/ - Redesigned batch history screen
+- purchase-entry-flow/ - (session 4, pending)
+- purchase-summary/ - (session 5, pending)
 
-### history/phase-0/ (archived)
-### history/phase-1/ (archived)
-### history/phase-2/ (pending archive)
+### history/phase-0-setup/ (archived)
+### history/phase-1-data-layer/ (archived)
+### history/phase-2-core-ui/ (archived)
 ### history/phase-3-audit-remediation/ (archived)
+### history/phase-4-supporting-ui/ (archived)
 
 ### history/
 - index.md - Decisions, patterns, lessons learned
@@ -79,13 +81,15 @@ feature.md, bugfix.md, refactor.md, research.md
 *local/* - Room database
 - converter/Converters.kt - TypeConverters (UUID, Instant, BigDecimal)
 - entity/LocationEntity.kt - Location table entity
-- entity/ProductEntity.kt - Product table entity
-- entity/TransactionEntity.kt - Transaction table with foreign keys and indexes
+- entity/ProductEntity.kt - Product table entity with imageUri
+- entity/TransactionEntity.kt - Transaction table with foreign keys, indexes, and batch_id
+- entity/PurchaseBatchEntity.kt - Batch grouping for multi-position purchases
 - dao/LocationDao.kt - Location CRUD with Flow queries
 - dao/ProductDao.kt - Product CRUD with active filtering
 - dao/TransactionDao.kt - Transaction CRUD with sync queries
+- dao/PurchaseBatchDao.kt - Batch CRUD with today's batches query
 - DatabaseModule.kt - Hilt module for database singleton
-- ZagotDatabase.kt - Room database (version 1)
+- ZagotDatabase.kt - Room database (version 3 with MIGRATION_1_2, MIGRATION_2_3)
 
 *remote/* - Supabase integration
 - dto/LocationDto.kt - Location DTO with entity mapping
@@ -95,8 +99,9 @@ feature.md, bugfix.md, refactor.md, research.md
 
 *repository/* - Repository implementations
 - LocationRepositoryImpl.kt - Location repository with entity-domain mapping
-- ProductRepositoryImpl.kt - Product repository with entity-domain mapping
-- TransactionRepositoryImpl.kt - Transaction repository with inventory computation + device ID
+- ProductRepositoryImpl.kt - Product repository with entity-domain mapping and imageUri
+- TransactionRepositoryImpl.kt - Transaction repository with inventory computation + device ID + batch support
+- PurchaseBatchRepositoryImpl.kt - Atomic batch creation with transactions
 - RepositoryModule.kt - Hilt bindings for repositories
 
 *preferences/* - SharedPreferences wrappers
@@ -106,14 +111,16 @@ feature.md, bugfix.md, refactor.md, research.md
 
 *model/*
 - Location.kt - Domain model with LocationType enum (KIOSK, MOBILE)
-- Product.kt - Domain model with price and active status
-- Transaction.kt - Domain model with TransactionType enum
+- Product.kt - Domain model with price, active status, and imageUri
+- Transaction.kt - Domain model with TransactionType enum and batchId
 - InventoryItem.kt - Computed inventory (location + product + weight)
+- PurchaseBatch.kt - Batch domain model (totals, item count)
 
 *repository/* - Interfaces
 - LocationRepository.kt - Location data access interface
-- ProductRepository.kt - Product data access interface
+- ProductRepository.kt - Product data access interface with image support
 - TransactionRepository.kt - Transaction + inventory interface
+- PurchaseBatchRepository.kt - Batch CRUD with atomic creation
 
 **Sync Layer (sync/) - FULLY IMPLEMENTED**
 - SyncWorker.kt - CoroutineWorker with @HiltWorker for background sync
@@ -143,8 +150,9 @@ feature.md, bugfix.md, refactor.md, research.md
 - PinViewModel.kt - PIN set/verify/lockout logic (survives app restart)
 
 *screens/purchase/*
-- PurchaseScreen.kt - Product dropdown, weight/price inputs, total calculation
-- PurchaseViewModel.kt - Form state, validation, transaction creation
+- PurchaseScreen.kt - Batch history list, weight placeholder, new client navigation
+- PurchaseViewModel.kt - Today's batches observation, navigation state
+- PurchaseEntryScreen.kt - (Placeholder for session 4)
 
 *screens/sale/*
 - SaleScreen.kt - Similar to purchase with inventory awareness
@@ -171,7 +179,7 @@ feature.md, bugfix.md, refactor.md, research.md
 - SettingsViewModel.kt - Sync status, pending count, location selection
 
 ### Test Source (app/src/test/kotlin/com/zagot/zagotplus/)
-- ui/screens/purchase/PurchaseViewModelTest.kt - 10 unit tests
+- ui/screens/purchase/PurchaseViewModelTest.kt - 6 unit tests (redesigned)
 - ui/screens/sale/SaleViewModelTest.kt - 10 unit tests
 - ui/screens/products/ProductsViewModelTest.kt - 16 unit tests
 - ui/screens/auth/AuthPreferencesTest.kt - 9 unit tests (salt, lockout, persistence)
@@ -196,6 +204,11 @@ feature.md, bugfix.md, refactor.md, research.md
   - RLS policies (permissive anon access)
   - Performance indexes
   - Seed data (2 locations, 4 products)
+- migrations/20260111000001_purchase_batches.sql - Batch support:
+  - purchase_batches table
+  - batch_id FK on transactions
+- migrations/20260111000002_product_images.sql - Image support:
+  - image_uri column on products
 
 ### Documentation
 - README.md - Setup instructions, schema overview, testing guide
