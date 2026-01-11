@@ -699,3 +699,30 @@ Key Decisions:
 - Placeholder icon (Icons.Filled.Image) for products without images
 
 Sessions: 2 done (Phase 5), 0 blocked, streak: 2
+
+---
+
+### Session: phase-5/purchase-main-screen
+Status: completed
+Complexity: medium
+Duration: ~10 minutes
+
+Objective: Redesign main purchase screen with today's batch history, weight placeholder, and new client navigation.
+
+Work Summary:
+- Rewrote PurchaseScreen with new layout (weight placeholder, batch list, new client button)
+- Rewrote PurchaseViewModel to observe today's batches via PurchaseBatchRepository
+- Created BatchItem composable for displaying batch info (time, weight, amount, positions)
+- Added empty state when no batches today
+- Added PurchaseEntry destination and placeholder screen
+- Updated NavGraph with navigation callback and entry flow route
+- Updated PurchaseViewModelTest for new ViewModel API (6 tests)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): redesign main screen with batch history` (116a023)
+
+Key Decisions:
+- LazyColumn with Flow observation (reactive batch list)
+- Weight placeholder shows "-- кг" (scales integration deferred to Phase 6)
+- Entry flow placeholder ready for session 4 implementation
+
+Sessions: 3 done (Phase 5), 0 blocked, streak: 3
