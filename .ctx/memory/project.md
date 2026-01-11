@@ -65,10 +65,13 @@ Physical goods movement creates two linked transactions atomically:
 - **Language**: UI text in Ukrainian, code/comments in English
 
 ## Entry Points
-- `ZagotApp.kt` - Application class (Hilt setup)
+- `ZagotApp.kt` - Application class (Hilt setup + periodic sync init)
 - `MainActivity.kt` - Single activity host
-- `data/repository/*Repository.kt` - Data access layer
-- `sync/SyncWorker.kt` - Background sync orchestration
+- `domain/repository/*Repository.kt` - Repository interfaces (clean architecture)
+- `data/repository/*RepositoryImpl.kt` - Repository implementations
+- `sync/SyncService.kt` - Push/pull sync logic
+- `sync/SyncWorker.kt` - WorkManager background sync
+- `sync/SyncManager.kt` - Periodic/manual sync scheduling
 
 ## Database Schema
 
@@ -105,12 +108,15 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 0 complete** - Android skeleton and Supabase schema ready. Proceeding to Phase 1.
+**Phase 1 complete** - Data layer fully implemented. Ready for Phase 2 (Core UI).
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 12MB APK)
 - Hilt DI: Components generated correctly
 - Supabase migration: Schema SQL ready for deployment
+- Room database: Entities, DAOs, TypeConverters working
+- Repository layer: Offline-first data access with domain models
+- Sync infrastructure: Push/pull sync with WorkManager scheduling
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)

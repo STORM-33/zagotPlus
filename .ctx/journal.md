@@ -215,3 +215,30 @@ Key Decisions:
 Sessions: 7 done, 0 blocked, streak: 4
 **Phase 1 complete!** All data layer sessions finished.
 
+---
+
+## 2026-01-11 (continued)
+
+### Archive - Phase 0 & Phase 1 Complete
+Status: completed
+Files:
+  - .ctx/history/phase-0/ (archived sessions + SUMMARY.md)
+  - .ctx/history/phase-1/ (archived sessions + SUMMARY.md)
+  - .ctx/history/index.md (updated decisions, lessons, patterns)
+  - .ctx/state.md (updated)
+  - .ctx/sessions/ (cleaned, only .gitkeep remains)
+
+Notes:
+- **Phase 0 archived**: 3 sessions (init-repo, init-android, init-supabase)
+  - Foundation: Git, Android skeleton, Supabase schema
+- **Phase 1 archived**: 4 sessions (room-schema, repository, supabase-sync, sync-worker)
+  - Complete offline-first data layer implemented
+  - Room database with entities, DAOs, TypeConverters
+  - Repository layer with domain models and clean architecture
+  - Supabase sync with bidirectional push/pull
+  - WorkManager background sync with status tracking
+- All 7 sessions completed successfully, 0 blocked
+- Knowledge extracted to history index (17 decisions, 9 lessons, 17 patterns)
+- Active sessions workspace cleaned
+- Ready for Phase 2: Core UI
+
