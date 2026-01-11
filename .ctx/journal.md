@@ -414,3 +414,27 @@ Summary:
 - Key decisions captured: bottom nav order, sync icon states, BigDecimal for precision
 - Lessons learned: lifecycle-runtime-compose dependency, BigDecimal.compareTo for tests
 - Ready for archive
+
+---
+
+### Session: phase-3.1/fix-sync-partial-failure
+Status: completed
+Complexity: high
+
+Objective: Fix sync partial failure handling to distinguish Success/Partial/Failure states.
+
+Work Summary:
+- Converted SyncResult from data class to sealed class with 3 states
+- Success: both push and pull succeeded
+- Partial: push succeeded, pull failed (data safe on server)
+- Failure: push failed (no data sent)
+- Updated SyncService.sync() to track push/pull separately
+- Updated SyncWorker to handle Partial as success (will retry pull on next sync)
+- Added SyncPhase enum for failure categorization
+- All existing tests pass (32 tests total)
+- Commit: `fix(sync): handle partial sync failures correctly` (756f6f5)
+
+Key Decision:
+- Partial treated as success in WorkManager - data is safe, pull retries automatically
+
+Sessions: 1 done (Phase 3), 0 blocked, streak: 1
