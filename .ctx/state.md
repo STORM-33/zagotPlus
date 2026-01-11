@@ -1,8 +1,8 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
+Mode: working
+Active: phase-5-purchase-flow/product-images
 Since: 2026-01-11T20:47:00Z
 
 ## Blockers

@@ -29,7 +29,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         TransactionEntity::class,
         PurchaseBatchEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -84,6 +84,15 @@ abstract class ZagotDatabase : RoomDatabase() {
                 // Add batch_id column to transactions
                 db.execSQL("ALTER TABLE transactions ADD COLUMN batch_id TEXT")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_batch_id ON transactions(batch_id)")
+            }
+        }
+
+        /**
+         * Migration from version 2 to 3: Add image_uri column to products.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE products ADD COLUMN image_uri TEXT")
             }
         }
     }

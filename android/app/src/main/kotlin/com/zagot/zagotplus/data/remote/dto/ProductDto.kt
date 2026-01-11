@@ -28,7 +28,10 @@ data class ProductDto(
     val isActive: Boolean,
 
     @SerialName("created_at")
-    val createdAt: String
+    val createdAt: String,
+
+    @SerialName("image_uri")
+    val imageUri: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -39,7 +42,8 @@ data class ProductDto(
         defaultBuyPrice = defaultBuyPrice?.let { BigDecimal.valueOf(it) },
         defaultSellPrice = defaultSellPrice?.let { BigDecimal.valueOf(it) },
         isActive = isActive,
-        createdAt = Instant.parse(createdAt)
+        createdAt = Instant.parse(createdAt),
+        imageUri = imageUri
     )
 
     companion object {
@@ -52,7 +56,8 @@ data class ProductDto(
             defaultBuyPrice = entity.defaultBuyPrice?.toDouble(),
             defaultSellPrice = entity.defaultSellPrice?.toDouble(),
             isActive = entity.isActive,
-            createdAt = entity.createdAt.toString()
+            createdAt = entity.createdAt.toString(),
+            imageUri = entity.imageUri
         )
     }
 }

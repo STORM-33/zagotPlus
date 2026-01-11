@@ -28,7 +28,8 @@ object DatabaseModule {
      * NEVER use fallbackToDestructiveMigration() - user data must be preserved.
      */
     private val MIGRATIONS: Array<Migration> = arrayOf(
-        ZagotDatabase.MIGRATION_1_2
+        ZagotDatabase.MIGRATION_1_2,
+        ZagotDatabase.MIGRATION_2_3
     )
 
     /**

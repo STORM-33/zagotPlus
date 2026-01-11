@@ -203,7 +203,7 @@ class ProductsViewModelTest {
     fun `saveProduct calls createProduct for new product`() = runTest {
         val newProduct = testProduct.copy(id = UUID.randomUUID(), name = "New Product")
         coEvery {
-            productRepository.createProduct(any(), any(), any())
+            productRepository.createProduct(any(), any(), any(), any())
         } returns newProduct
 
         viewModel = createViewModel()
@@ -220,7 +220,8 @@ class ProductsViewModelTest {
             productRepository.createProduct(
                 name = "New Product",
                 defaultBuyPrice = BigDecimal("45.00"),
-                defaultSellPrice = BigDecimal("50.00")
+                defaultSellPrice = BigDecimal("50.00"),
+                imageUri = null
             )
         }
 
@@ -286,7 +287,7 @@ class ProductsViewModelTest {
     @Test
     fun `dismissError clears error`() = runTest {
         coEvery {
-            productRepository.createProduct(any(), any(), any())
+            productRepository.createProduct(any(), any(), any(), any())
         } throws RuntimeException("Database error")
 
         viewModel = createViewModel()

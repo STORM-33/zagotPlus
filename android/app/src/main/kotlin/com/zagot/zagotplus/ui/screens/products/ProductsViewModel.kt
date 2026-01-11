@@ -26,6 +26,7 @@ data class ProductsUiState(
     val dialogName: String = "",
     val dialogBuyPrice: String = "",
     val dialogSellPrice: String = "",
+    val dialogImageUri: String? = null,
     val dialogNameError: String? = null,
     val dialogBuyPriceError: String? = null,
     val dialogSellPriceError: String? = null
@@ -87,6 +88,7 @@ class ProductsViewModel @Inject constructor(
                 dialogName = "",
                 dialogBuyPrice = "",
                 dialogSellPrice = "",
+                dialogImageUri = null,
                 dialogNameError = null,
                 dialogBuyPriceError = null,
                 dialogSellPriceError = null
@@ -102,6 +104,7 @@ class ProductsViewModel @Inject constructor(
                 dialogName = product.name,
                 dialogBuyPrice = product.defaultBuyPrice?.toPlainString() ?: "",
                 dialogSellPrice = product.defaultSellPrice?.toPlainString() ?: "",
+                dialogImageUri = product.imageUri,
                 dialogNameError = null,
                 dialogBuyPriceError = null,
                 dialogSellPriceError = null
@@ -138,6 +141,10 @@ class ProductsViewModel @Inject constructor(
                 dialogSellPriceError = validatePrice(price)
             ) 
         }
+    }
+
+    fun setDialogImageUri(uri: String) {
+        _uiState.update { it.copy(dialogImageUri = uri) }
     }
 
     private fun validateName(name: String): String? {
@@ -183,7 +190,8 @@ class ProductsViewModel @Inject constructor(
                     val updated = state.editingProduct!!.copy(
                         name = state.dialogName.trim(),
                         defaultBuyPrice = buyPrice,
-                        defaultSellPrice = sellPrice
+                        defaultSellPrice = sellPrice,
+                        imageUri = state.dialogImageUri
                     )
                     productRepository.updateProduct(updated)
                     _uiState.update {
@@ -198,7 +206,8 @@ class ProductsViewModel @Inject constructor(
                     productRepository.createProduct(
                         name = state.dialogName.trim(),
                         defaultBuyPrice = buyPrice,
-                        defaultSellPrice = sellPrice
+                        defaultSellPrice = sellPrice,
+                        imageUri = state.dialogImageUri
                     )
                     _uiState.update {
                         it.copy(
