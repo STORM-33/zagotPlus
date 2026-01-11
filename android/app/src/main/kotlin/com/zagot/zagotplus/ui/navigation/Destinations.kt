@@ -1,0 +1,45 @@
+package com.zagot.zagotplus.ui.navigation
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.ui.graphics.vector.ImageVector
+
+/**
+ * Navigation destinations for the app.
+ */
+sealed class Destination(
+    val route: String,
+    val title: String,
+    val icon: ImageVector
+) {
+    data object Purchase : Destination(
+        route = "purchase",
+        title = "Закупівля",
+        icon = Icons.Filled.ShoppingCart
+    )
+    
+    data object Sale : Destination(
+        route = "sale",
+        title = "Продаж",
+        icon = Icons.Filled.Sell
+    )
+    
+    data object Inventory : Destination(
+        route = "inventory",
+        title = "Залишки",
+        icon = Icons.Filled.Inventory
+    )
+    
+    data object History : Destination(
+        route = "history",
+        title = "Історія",
+        icon = Icons.Filled.History
+    )
+    
+    companion object {
+        val bottomNavItems = listOf(Purchase, Sale, Inventory, History)
+    }
+}
