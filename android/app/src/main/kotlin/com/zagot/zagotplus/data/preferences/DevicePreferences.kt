@@ -3,6 +3,9 @@ package com.zagot.zagotplus.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,6 +22,14 @@ class DevicePreferences @Inject constructor(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
+
+    private val _selectedLocationIdFlow = MutableStateFlow(getSelectedLocationId())
+
+    /**
+     * Observable flow of selected location ID.
+     * Emits new value whenever location is changed via setSelectedLocationId.
+     */
+    val selectedLocationIdFlow: StateFlow<UUID?> = _selectedLocationIdFlow.asStateFlow()
 
     /**
      * Get or generate a unique device ID.
@@ -46,9 +57,11 @@ class DevicePreferences @Inject constructor(
 
     /**
      * Set the selected location ID for this device.
+     * Updates both SharedPreferences and the observable flow.
      */
     fun setSelectedLocationId(locationId: UUID) {
         prefs.edit().putString(KEY_SELECTED_LOCATION, locationId.toString()).apply()
+        _selectedLocationIdFlow.value = locationId
     }
 
     companion object {

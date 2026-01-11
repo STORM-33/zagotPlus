@@ -2,6 +2,7 @@ package com.zagot.zagotplus.ui.screens.sale
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
@@ -9,14 +10,18 @@ import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.util.UUID
 import javax.inject.Inject
 
 data class SaleUiState(
@@ -52,15 +57,19 @@ data class SaleUiState(
                 (pricePerKg.toBigDecimalOrNull() ?: BigDecimal.ZERO) > BigDecimal.ZERO
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SaleViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val transactionRepository: TransactionRepository,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    private val devicePreferences: DevicePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SaleUiState())
     val uiState: StateFlow<SaleUiState> = _uiState.asStateFlow()
+
+    private var locationsMap: Map<UUID, Location> = emptyMap()
 
     init {
         loadData()
@@ -70,27 +79,42 @@ class SaleViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Load products
+                // Load locations map once
+                locationsMap = locationRepository.getAllLocations().first().associateBy { it.id }
+                
+                // Load products once
                 val products = productRepository.getActiveProducts().first()
-                // Load first location as current (for now)
-                val locations = locationRepository.getAllLocations().first()
-                val currentLocation = locations.firstOrNull()
-
-                // Load inventory for current location
-                val inventory = if (currentLocation != null) {
-                    transactionRepository.getInventoryByLocation(currentLocation.id).first()
-                } else {
-                    emptyList()
-                }
-
-                _uiState.update {
-                    it.copy(
-                        products = products,
-                        inventory = inventory,
-                        currentLocation = currentLocation,
-                        isLoading = false
-                    )
-                }
+                _uiState.update { it.copy(products = products) }
+                
+                // Observe selected location changes and inventory reactively
+                devicePreferences.selectedLocationIdFlow
+                    .flatMapLatest { selectedLocationId ->
+                        val locationId = selectedLocationId ?: locationsMap.keys.firstOrNull()
+                        if (locationId != null) {
+                            transactionRepository.getInventoryByLocation(locationId)
+                        } else {
+                            flowOf(emptyList())
+                        }
+                    }
+                    .collect { inventory ->
+                        val selectedLocationId = devicePreferences.getSelectedLocationId() 
+                            ?: locationsMap.keys.firstOrNull()
+                        val currentLocation = selectedLocationId?.let { locationsMap[it] }
+                        
+                        _uiState.update { state ->
+                            // Update available weight if product is selected
+                            val newAvailableWeight = state.selectedProduct?.let { product ->
+                                inventory.find { it.productId == product.id }?.totalWeightKg
+                            } ?: BigDecimal.ZERO
+                            
+                            state.copy(
+                                inventory = inventory,
+                                currentLocation = currentLocation,
+                                availableWeight = newAvailableWeight,
+                                isLoading = false
+                            )
+                        }
+                    }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -157,9 +181,7 @@ class SaleViewModel @Inject constructor(
                     notes = state.notes.ifBlank { null }
                 )
                 
-                // Reload inventory after sale
-                val newInventory = transactionRepository.getInventoryByLocation(location.id).first()
-                
+                // Inventory will auto-update via Flow observation
                 _uiState.update {
                     it.copy(
                         selectedProduct = null,
@@ -167,7 +189,6 @@ class SaleViewModel @Inject constructor(
                         weight = "",
                         pricePerKg = "",
                         notes = "",
-                        inventory = newInventory,
                         isLoading = false,
                         showSuccess = true
                     )

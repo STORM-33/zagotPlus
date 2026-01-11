@@ -32,8 +32,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +62,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -214,15 +217,15 @@ private fun ProductGrid(
             modifier = modifier,
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Немає активних товарів",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            EmptyState(
+                icon = EmptyStateIcons.Products,
+                title = "Немає активних товарів",
+                description = "Додайте товари в налаштуваннях"
             )
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 120.dp),
+            columns = GridCells.Adaptive(minSize = 140.dp),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -248,7 +251,7 @@ private fun ProductTile(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -256,14 +259,14 @@ private fun ProductTile(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Product image or placeholder
+            // Product image or placeholder - LARGER for easier tapping
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surface),
                 contentAlignment = Alignment.Center
             ) {
@@ -278,18 +281,18 @@ private fun ProductTile(
                     Icon(
                         imageVector = Icons.Filled.Image,
                         contentDescription = null,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             // Product name
             Text(
                 text = product.name,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -298,10 +301,11 @@ private fun ProductTile(
             
             // Default price
             product.defaultBuyPrice?.let { price ->
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "₴${price.toPlainString()}/кг",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -325,7 +329,7 @@ private fun WeightEntry(
         modifier = modifier.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Weight from scales (placeholder)
+        // Weight from scales - LARGE display
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -335,7 +339,7 @@ private fun WeightEntry(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -345,13 +349,14 @@ private fun WeightEntry(
                 )
                 Text(
                     text = scaleWeight?.let { "${it.toPlainString()} кг" } ?: "-- кг",
-                    style = MaterialTheme.typography.displayMedium,
+                    style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "(ваги не підключено)",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             }
@@ -364,7 +369,10 @@ private fun WeightEntry(
             value = weight,
             onValueChange = onWeightChange,
             label = { Text("Вага (кг)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Next
+            ),
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -376,7 +384,10 @@ private fun WeightEntry(
             value = price,
             onValueChange = onPriceChange,
             label = { Text("Ціна за кг (₴)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done
+            ),
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -393,17 +404,17 @@ private fun WeightEntry(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Сума:",
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleLarge
                 )
                 Text(
                     text = total?.let { "₴${it.toPlainString()}" } ?: "₴0.00",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -412,17 +423,20 @@ private fun WeightEntry(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Add position button
+        // Add position button - LARGER touch target
         Button(
             onClick = onAddPosition,
             enabled = canAdd,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(64.dp)
         ) {
             Icon(Icons.Filled.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Додати позицію")
+            Text(
+                text = "Додати позицію",
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }
@@ -448,7 +462,7 @@ private fun PositionsList(
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(positions, key = { it.id }) { position ->
                 PositionItem(
@@ -460,14 +474,19 @@ private fun PositionsList(
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Add another product button
+                // Add another product button - LARGER
                 OutlinedButton(
                     onClick = onAddAnother,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Додати ще товар")
+                    Text(
+                        text = "Додати ще товар",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
 
@@ -481,7 +500,8 @@ private fun PositionsList(
                     label = { Text("Примітки") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
-                    maxLines = 4
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                 )
             }
         }
@@ -513,39 +533,49 @@ private fun PositionsList(
                     )
                     Text(
                         text = "₴${totalAmount.toPlainString()}",
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Action buttons
+            // Action buttons - LARGER touch targets
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
                     onClick = onCancel,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     ),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Скасувати")
+                    Text(
+                        text = "Скасувати",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
                 Button(
                     onClick = onFinalize,
                     enabled = canFinalize,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Розрахувати")
+                    Text(
+                        text = "Розрахувати",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }

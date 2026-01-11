@@ -27,11 +27,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,24 +66,34 @@ fun PurchaseScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Weight placeholder
+            // Weight placeholder - LARGE display for visibility
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
-                Text(
-                    text = "Вага: ${uiState.weightPlaceholder}",
-                    style = MaterialTheme.typography.headlineMedium,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    textAlign = TextAlign.Center
-                )
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Вага",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = uiState.weightPlaceholder,
+                        style = MaterialTheme.typography.displayLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Section header
             Text(
@@ -91,7 +102,7 @@ fun PurchaseScreen(
                 fontWeight = FontWeight.Bold
             )
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            Divider(modifier = Modifier.padding(vertical = 12.dp))
 
             // Batches list or empty state
             if (uiState.isLoading) {
@@ -110,16 +121,16 @@ fun PurchaseScreen(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Закупівель сьогодні ще немає",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    EmptyState(
+                        icon = EmptyStateIcons.Purchase,
+                        title = "Закупівель ще немає",
+                        description = "Натисніть кнопку нижче, щоб почати нову закупівлю"
                     )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(
                         items = uiState.todaysBatches,
@@ -132,12 +143,12 @@ fun PurchaseScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // New client button
+            // New client button - LARGER touch target
             Button(
                 onClick = { viewModel.onNewClientClick() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(64.dp)
             ) {
                 Text(
                     text = "НОВИЙ КЛІЄНТ",

@@ -19,6 +19,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -87,12 +88,31 @@ class ReportsViewModel @Inject constructor(
 
     private var products: Map<UUID, Product> = emptyMap()
     private var locations: Map<UUID, Location> = emptyMap()
+    private var lastKnownCount: Int = -1
 
     private val decimalFormat = DecimalFormat("#,##0.00")
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
     init {
         loadReferencesAndData()
+        observeTransactionChanges()
+    }
+
+    /**
+     * Observe transaction count changes to auto-refresh when new transactions are added.
+     */
+    private fun observeTransactionChanges() {
+        viewModelScope.launch {
+            transactionRepository.getTotalTransactionCount()
+                .distinctUntilChanged()
+                .collect { count ->
+                    // Only refresh if count changed after initial load
+                    if (lastKnownCount >= 0 && count != lastKnownCount) {
+                        loadDayData(_uiState.value.selectedDate)
+                    }
+                    lastKnownCount = count
+                }
+        }
     }
 
     private fun loadReferencesAndData() {

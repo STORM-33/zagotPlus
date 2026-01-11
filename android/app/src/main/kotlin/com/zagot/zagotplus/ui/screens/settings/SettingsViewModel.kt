@@ -47,19 +47,21 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _copySuccess = MutableStateFlow(false)
+    private val _selectedLocationId = MutableStateFlow(devicePreferences.getSelectedLocationId())
 
     val uiState: StateFlow<SettingsUiState> = combine(
         syncStatusRepository.syncStatus,
         transactionDao.getUnsyncedCountFlow(),
         locationRepository.getAllLocations(),
-        _copySuccess
-    ) { syncStatus, pendingCount, locations, copySuccess ->
+        _copySuccess,
+        _selectedLocationId
+    ) { syncStatus, pendingCount, locations, copySuccess, selectedLocationId ->
         SettingsUiState(
             syncStatus = syncStatus,
             pendingCount = pendingCount,
             deviceId = devicePreferences.getDeviceId(),
             locations = locations,
-            selectedLocationId = devicePreferences.getSelectedLocationId(),
+            selectedLocationId = selectedLocationId,
             appVersion = BuildConfig.VERSION_NAME,
             copySuccess = copySuccess
         )
@@ -79,8 +81,7 @@ class SettingsViewModel @Inject constructor(
 
     fun selectLocation(locationId: UUID) {
         devicePreferences.setSelectedLocationId(locationId)
-        // Trigger recomposition by emitting a new value
-        _copySuccess.update { false }
+        _selectedLocationId.value = locationId
     }
 
     fun copyDeviceId() {

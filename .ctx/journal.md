@@ -810,3 +810,27 @@ Stats reset: 0 sessions done, 0 blocked, streak: 0
 Mode: ready - Ready for Phase 6 planning (Hardware Integration)
 
 ---
+
+### Merge: feature/purchase-flow-redesign → master
+Status: completed
+Date: 2026-01-11T21:40:00Z
+
+Merged Phase 5 (Purchase Flow Redesign) to master:
+- 53 files changed: 3,470 insertions, 474 deletions
+- Merge commit: 539dfbb
+- Deleted feature branch: feature/purchase-flow-redesign
+- All Phase 5 work now in master
+
+Phase 5 deliverables:
+- Batch-level transaction grouping
+- Product images with Coil
+- Adaptive grid layout (phone/tablet)
+- Multi-position purchase entry flow
+- Summary overlay with atomic save
+- Room schema v1 → v3
+- Supabase migrations (batches + images)
+
+Branch: master (clean)
+Ready for Phase 6 planning
+
+---

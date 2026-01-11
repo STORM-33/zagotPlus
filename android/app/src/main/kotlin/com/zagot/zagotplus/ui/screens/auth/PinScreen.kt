@@ -111,12 +111,12 @@ private fun PinKeypad(
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // Rows 1-3: digits 1-9
         for (row in 0..2) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 for (col in 1..3) {
                     val digit = row * 3 + col
@@ -129,15 +129,15 @@ private fun PinKeypad(
             }
         }
 
-        // Row 4: backspace, 0, empty
+        // Row 4: empty, 0, backspace
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             KeypadButton(
                 text = "",
                 onClick = { },
                 enabled = false,
-                modifier = Modifier.size(80.dp)
+                modifier = Modifier.size(88.dp)
             )
             
             KeypadButton(
@@ -149,12 +149,12 @@ private fun PinKeypad(
             IconButton(
                 onClick = onBackspaceClick,
                 enabled = enabled,
-                modifier = Modifier.size(80.dp)
+                modifier = Modifier.size(88.dp)
             ) {
                 Icon(
                     Icons.Default.Backspace,
                     contentDescription = "Видалити",
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
         }
@@ -170,7 +170,7 @@ private fun KeypadButton(
 ) {
     Box(
         modifier = modifier
-            .size(80.dp)
+            .size(88.dp)
             .clip(CircleShape)
             .background(
                 if (enabled && text.isNotEmpty()) {
@@ -185,7 +185,7 @@ private fun KeypadButton(
         if (text.isNotEmpty()) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.displaySmall,
                 color = if (enabled) {
                     MaterialTheme.colorScheme.onPrimaryContainer
                 } else {

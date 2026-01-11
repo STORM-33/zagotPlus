@@ -49,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.Instant
@@ -187,10 +189,10 @@ fun ReportsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Немає даних за цей день",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        EmptyState(
+                            icon = EmptyStateIcons.Transactions,
+                            title = "Немає даних",
+                            description = "За ${dateFormatter.format(uiState.selectedDate)} транзакцій не знайдено"
                         )
                     }
                 }

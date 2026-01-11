@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
@@ -15,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -33,6 +35,7 @@ class SaleViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var locationRepository: LocationRepository
+    private lateinit var devicePreferences: DevicePreferences
     private lateinit var viewModel: SaleViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -67,14 +70,17 @@ class SaleViewModelTest {
         productRepository = mockk()
         transactionRepository = mockk()
         locationRepository = mockk()
+        devicePreferences = mockk()
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
         every { transactionRepository.getInventoryByLocation(testLocationId) } returns flowOf(listOf(testInventory))
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocationId)
+        every { devicePreferences.getSelectedLocationId() } returns testLocationId
     }
 
     private fun createViewModel(): SaleViewModel {
-        return SaleViewModel(productRepository, transactionRepository, locationRepository)
+        return SaleViewModel(productRepository, transactionRepository, locationRepository, devicePreferences)
     }
 
     @Test

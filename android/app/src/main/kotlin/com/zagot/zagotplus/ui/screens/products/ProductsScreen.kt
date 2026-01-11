@@ -56,6 +56,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,12 +138,18 @@ fun ProductsScreen(
             if (uiState.isLoading && uiState.products.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (uiState.products.isEmpty()) {
-                Text(
-                    text = "Немає товарів. Натисніть + щоб додати.",
-                    modifier = Modifier.align(Alignment.Center),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyState(
+                        icon = EmptyStateIcons.Products,
+                        title = "Немає товарів",
+                        description = "Натисніть кнопку + щоб додати перший товар",
+                        actionLabel = "Додати товар",
+                        onAction = { viewModel.showAddDialog() }
+                    )
+                }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
@@ -225,21 +233,19 @@ private fun ProductCard(
                     }
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    product.defaultBuyPrice?.let { price ->
-                        Text(
-                            text = "Купівля: ${priceFormat.format(price)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    product.defaultSellPrice?.let { price ->
-                        Text(
-                            text = "Продаж: ${priceFormat.format(price)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                product.defaultBuyPrice?.let { price ->
+                    Text(
+                        text = "Купівля: ${priceFormat.format(price)} грн",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                product.defaultSellPrice?.let { price ->
+                    Text(
+                        text = "Продаж: ${priceFormat.format(price)} грн",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 if (!product.isActive) {
                     Text(
