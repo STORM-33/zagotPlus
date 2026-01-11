@@ -36,7 +36,8 @@ class TransactionRepositoryImpl @Inject constructor(
         locationId: UUID,
         productId: UUID,
         weightKg: BigDecimal,
-        pricePerKg: BigDecimal
+        pricePerKg: BigDecimal,
+        notes: String?
     ): Transaction {
         val totalAmount = weightKg * pricePerKg
         val entity = TransactionEntity(
@@ -49,7 +50,7 @@ class TransactionRepositoryImpl @Inject constructor(
             weightKg = weightKg,
             pricePerKg = pricePerKg,
             totalAmount = totalAmount,
-            notes = null,
+            notes = notes?.ifBlank { null },
             deviceId = null, // TODO: Set device ID from shared prefs
             createdAt = Instant.now(),
             syncedAt = null
@@ -62,7 +63,8 @@ class TransactionRepositoryImpl @Inject constructor(
         locationId: UUID,
         productId: UUID,
         weightKg: BigDecimal,
-        pricePerKg: BigDecimal
+        pricePerKg: BigDecimal,
+        notes: String?
     ): Transaction {
         val totalAmount = weightKg * pricePerKg
         val entity = TransactionEntity(
@@ -75,7 +77,7 @@ class TransactionRepositoryImpl @Inject constructor(
             weightKg = -weightKg, // Sales are negative
             pricePerKg = pricePerKg,
             totalAmount = totalAmount,
-            notes = null,
+            notes = notes?.ifBlank { null },
             deviceId = null,
             createdAt = Instant.now(),
             syncedAt = null

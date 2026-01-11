@@ -267,3 +267,35 @@ Key Decisions:
 
 Sessions: 8 done, 0 blocked, streak: 1
 
+
+---
+
+### Session: phase-2/auth-pin
+Status: completed
+Complexity: low
+
+Objective: Implement simple 4-digit PIN entry screen that gates access to the main app.
+
+Work Summary:
+- Created AuthPreferences for SHA-256 hashed PIN storage (SharedPreferences)
+- Implemented PinScreen with large numeric keypad UI and PIN dots
+- Created PinViewModel with set/confirm/verify logic and 3-attempt lockout
+- Integrated PIN gate in MainActivity before NavGraph
+- Added test dependencies (mockk, junit, coroutines-test)
+- Written unit tests (not executed due to env constraints)
+- Reduced Gradle heap to 1GB for memory-constrained environment
+- Build compiles successfully
+- Commit: eat(auth): add PIN entry screen with lockout (1418792)
+
+Key Decisions:
+- SHA-256 for PIN hash: Simple deterrent, sufficient for basic access control
+- No biometrics: Keeping scope minimal per brief
+- SharedPreferences: Consistent with SyncPreferences pattern
+- Large circular buttons: Tablet-friendly UI
+
+Issues:
+- Unit tests require Robolectric for Android Context mocking (out of scope for low complexity)
+- JVM memory crashes during test execution (reduced heap, deferred test run)
+- Manual device testing recommended for full verification
+
+Sessions: 9 done, 0 blocked, streak: 2

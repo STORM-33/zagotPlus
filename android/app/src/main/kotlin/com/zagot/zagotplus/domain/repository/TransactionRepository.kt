@@ -28,13 +28,15 @@ interface TransactionRepository {
      * @param productId Product being purchased
      * @param weightKg Weight in kilograms
      * @param pricePerKg Price per kilogram
+     * @param notes Optional notes
      * @return Created transaction
      */
     suspend fun createPurchase(
         locationId: UUID,
         productId: UUID,
         weightKg: BigDecimal,
-        pricePerKg: BigDecimal
+        pricePerKg: BigDecimal,
+        notes: String? = null
     ): Transaction
 
     /**
@@ -44,13 +46,15 @@ interface TransactionRepository {
      * @param productId Product being sold
      * @param weightKg Weight in kilograms
      * @param pricePerKg Price per kilogram
+     * @param notes Optional notes
      * @return Created transaction
      */
     suspend fun createSale(
         locationId: UUID,
         productId: UUID,
         weightKg: BigDecimal,
-        pricePerKg: BigDecimal
+        pricePerKg: BigDecimal,
+        notes: String? = null
     ): Transaction
 
     /**
