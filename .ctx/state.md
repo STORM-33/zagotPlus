@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T00:58:00Z
+Mode: working
+Active: phase-2/auth-pin
+Since: 2026-01-11T00:50:26Z
 
 ## Blockers
 none

@@ -6,10 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.zagot.zagotplus.sync.SyncManager
 import com.zagot.zagotplus.sync.SyncStatusRepository
 import com.zagot.zagotplus.ui.navigation.NavGraph
+import com.zagot.zagotplus.ui.screens.auth.PinScreen
 import com.zagot.zagotplus.ui.theme.ZagotPlusTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -23,6 +27,8 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var syncManager: SyncManager
     
+    private var isAuthenticated by mutableStateOf(false)
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -31,10 +37,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NavGraph(
-                        syncStatusFlow = syncStatusRepository.syncStatus,
-                        onSyncClick = { syncManager.triggerManualSync() }
-                    )
+                    if (isAuthenticated) {
+                        NavGraph(
+                            syncStatusFlow = syncStatusRepository.syncStatus,
+                            onSyncClick = { syncManager.triggerManualSync() }
+                        )
+                    } else {
+                        PinScreen(
+                            onAuthenticated = { isAuthenticated = true }
+                        )
+                    }
                 }
             }
         }
