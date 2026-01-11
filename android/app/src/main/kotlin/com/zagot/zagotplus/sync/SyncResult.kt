@@ -1,24 +1,49 @@
 package com.zagot.zagotplus.sync
 
 /**
- * Result of a sync operation, containing success status and statistics.
+ * Result of a sync operation.
+ *
+ * States:
+ * - Success: Both push and pull completed successfully
+ * - Partial: Push succeeded but pull failed (data is on server, retry pull on next sync)
+ * - Failure: Push failed (no data sent to server)
  */
-data class SyncResult(
-    val success: Boolean,
-    val pushedCount: Int = 0,
-    val pulledCount: Int = 0,
-    val error: String? = null
-) {
-    companion object {
-        fun success(pushed: Int, pulled: Int) = SyncResult(
-            success = true,
-            pushedCount = pushed,
-            pulledCount = pulled
-        )
+sealed class SyncResult {
+    /** Both push and pull completed successfully */
+    data class Success(
+        val pushed: Int,
+        val pulled: Int
+    ) : SyncResult()
 
-        fun failure(error: String) = SyncResult(
-            success = false,
-            error = error
-        )
-    }
+    /** Push succeeded, pull failed. Data is on server but we couldn't fetch updates. */
+    data class Partial(
+        val pushed: Int,
+        val pullError: String
+    ) : SyncResult()
+
+    /** Sync failed. No transactions were pushed. */
+    data class Failure(
+        val error: String,
+        val phase: SyncPhase = SyncPhase.UNKNOWN
+    ) : SyncResult()
+
+    /** Count of transactions pushed (0 for Failure) */
+    val pushedCount: Int
+        get() = when (this) {
+            is Success -> pushed
+            is Partial -> pushed
+            is Failure -> 0
+        }
+
+    /** Whether the sync was at least partially successful (some data pushed) */
+    val isAtLeastPartial: Boolean
+        get() = this is Success || this is Partial
+}
+
+/** Phase where sync failed */
+enum class SyncPhase {
+    REFERENCE_DATA,
+    PUSH,
+    PULL,
+    UNKNOWN
 }

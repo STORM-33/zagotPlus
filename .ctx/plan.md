@@ -1,77 +1,81 @@
-# Plan: Phase 2 - Core UI
+# Plan: Phase 3 - Audit Remediation
 
 Created: 2026-01-11
-Status: archived
-Archived: 2026-01-11
-Archive Path: .ctx/history/2026-01-11_phase-2-core-ui/
+Status: active
 
 ## Overview
 
-Build the core user interface: navigation structure, PIN authentication, and the three main workflow screens (purchase, sale, inventory).
+Address critical issues from code audit. Priority: stability first (sync, tests, migrations) → security → features.
 
 ## Progress
 
-- Total sessions: 5
-- Completed: 5
+- Total sessions: 7
+- Completed: 0
 - Blocked: 0
-- Remaining: 0
+- Remaining: 7
 
 ## Historical Context
 
-**Relevant decisions from Phase 0-1:**
-- Hilt DI: `@HiltAndroidApp` on App, `@AndroidEntryPoint` on Activity
-- Compose BOM 2024.02.02 for consistent UI dependencies
-- Repository layer provides domain models (Location, Product, Transaction, InventoryItem)
-- Flow-based DAO queries enable reactive UI with `collectAsState()`
-- Inventory is computed on-the-fly (sum of transactions)
+**From audit:**
+- Sync partial failure handling creates data inconsistency
+- BigDecimal→Double conversion loses precision
+- PIN security lacks salt, lockout not persisted
+- `.fallbackToDestructiveMigration()` will delete data
+- `deviceId = null` breaks multi-device conflict resolution
+- SyncService and computeInventory lack tests
 
-**Patterns to reuse:**
-- Material 3 theming (Theme.kt, Type.kt already exist)
-- Hilt ViewModel injection with `@HiltViewModel`
-- StateFlow for reactive sync status (SyncStatusRepository)
-
-**Lessons to apply:**
-- Use extension functions for clean model mapping
-- Flow-based queries for reactive lists
+**Accepted trade-offs:**
+- RLS "allow all" acceptable for single-org device auth
+- Repository pattern provides testability (keep it)
+- Domain layer provides type safety (keep it)
+- O(n) inventory acceptable until > 1000 transactions
 
 ## Phases
 
-### Phase 2: Core UI
-Status: in_progress
-Implements navigation, PIN auth, and the three core screens: purchase (buy from population), sale (sell wholesale), and inventory (stock overview).
+### Phase 3.1: Sync Reliability
+Status: pending
+Fix sync partial failure handling and add comprehensive tests.
 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | navigation | medium | completed | none |
-| 2 | auth-pin | low | completed | navigation |
-| 3 | screen-purchase | high | completed | navigation |
-| 4 | screen-sale | high | completed | navigation |
-| 5 | screen-inventory | medium | completed | navigation |
+| 1 | fix-sync-partial-failure | high | pending | none |
+| 2 | test-sync-service | high | pending | fix-sync-partial-failure |
+
+### Phase 3.2: Data Integrity
+Status: pending
+Fix migrations, device ID, and add inventory tests.
+
+Sessions:
+| # | Session | Complexity | Status | Depends On |
+|---|---------|------------|--------|------------|
+| 3 | fix-database-migrations | medium | pending | none |
+| 4 | implement-device-id | low | pending | none |
+| 5 | test-inventory-computation | medium | pending | none |
+
+### Phase 3.3: Security Hardening
+Status: pending
+Improve PIN security and fix decimal precision.
+
+Sessions:
+| # | Session | Complexity | Status | Depends On |
+|---|---------|------------|--------|------------|
+| 6 | fix-pin-security | medium | pending | none |
+| 7 | fix-decimal-precision | medium | pending | none |
 
 ## Dependencies Graph
 
 ```
-navigation -> auth-pin
-navigation -> screen-purchase
-navigation -> screen-sale
-navigation -> screen-inventory
+fix-sync-partial-failure -> test-sync-service
+(3, 4, 5, 6, 7 can run in parallel)
 ```
-
-Execution order: navigation → (auth-pin || screen-purchase || screen-sale || screen-inventory)
-
-Note: Sessions 2-5 can run in parallel after navigation is complete.
 
 ## Open Questions
 
-- PIN storage: SharedPreferences (simple) vs DataStore (modern)? → Default to SharedPreferences for consistency with SyncPreferences
-- Bottom bar items: Which 3-4 screens go in bottom nav?
+None - priorities clarified with user.
 
 ## Notes
 
-- Navigation session creates the NavHost and bottom bar scaffold
-- auth-pin is lowest complexity (simple PIN entry, no biometrics)
-- screen-purchase and screen-sale are high complexity due to transaction creation logic
-- screen-inventory is simpler (read-only, uses existing repository Flow)
-- UI text in Ukrainian, code/comments in English
-- Mock weight input for now (hardware integration is Phase 4)
+- Phase 3.4 (RLS, pagination, performance) deferred to post-MVP
+- All changes must pass existing tests before merge
+- Manual sync test required after each sync-related change

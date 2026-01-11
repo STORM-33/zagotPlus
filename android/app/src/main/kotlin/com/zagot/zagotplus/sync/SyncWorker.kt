@@ -10,11 +10,11 @@ import dagger.assisted.AssistedInject
 
 /**
  * Background worker for periodic synchronization with Supabase.
- * 
+ *
  * Executes push-then-pull sync strategy:
  * 1. Push local unsynced transactions to Supabase
  * 2. Pull new remote transactions from Supabase
- * 
+ *
  * Retries with exponential backoff on failure.
  */
 @HiltWorker
@@ -33,22 +33,31 @@ class SyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting sync work (attempt ${runAttemptCount + 1})")
-        
+
         return try {
             // Update status to syncing
             syncStatusRepository.setSyncing()
-            
+
             // Perform sync
-            val result = syncService.sync()
-            
-            if (result.success) {
-                // Success - update status
-                syncStatusRepository.setIdle()
-                Log.d(TAG, "Sync succeeded: pushed=${result.pushedCount}, pulled=${result.pulledCount}")
-                Result.success()
-            } else {
-                // Sync failed - retry or fail
-                handleFailure(result.error ?: "Unknown error")
+            when (val result = syncService.sync()) {
+                is SyncResult.Success -> {
+                    syncStatusRepository.setIdle()
+                    Log.d(TAG, "Sync succeeded: pushed=${result.pushed}, pulled=${result.pulled}")
+                    Result.success()
+                }
+
+                is SyncResult.Partial -> {
+                    // Partial success - data was pushed, but pull failed
+                    // Mark as idle (not error) since push succeeded
+                    syncStatusRepository.setIdle()
+                    Log.w(TAG, "Sync partial: pushed=${result.pushed}, pull failed: ${result.pullError}")
+                    // Return success - we'll try pull again on next sync
+                    Result.success()
+                }
+
+                is SyncResult.Failure -> {
+                    handleFailure(result.error)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Sync work failed", e)

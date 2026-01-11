@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T09:00:00Z
+Mode: working
+Active: phase-3.1/fix-sync-partial-failure
+Since: 2026-01-11T10:00:00Z
 
 ## Blockers
 none
@@ -22,4 +22,4 @@ Scratchpad: 0 items
 none
 
 ## Next
-Phase 2 archived. Ready for Phase 3 planning with `plan` command.
+Complete fix-sync-partial-failure, then test-sync-service.

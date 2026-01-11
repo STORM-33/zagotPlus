@@ -39,44 +39,72 @@ class SyncService @Inject constructor(
 
     /**
      * Perform full sync: push local changes, then pull remote changes.
-     * Returns SyncResult with statistics or error.
+     *
+     * Returns:
+     * - Success: Both push and pull succeeded
+     * - Partial: Push succeeded, pull failed (data is safe on server)
+     * - Failure: Push failed (no data sent)
      */
     suspend fun sync(): SyncResult {
-        return try {
-            Log.d(TAG, "Starting sync...")
+        Log.d(TAG, "Starting sync...")
 
-            // Pull reference data first (locations, products)
-            pullReferenceData()
+        // Step 1: Pull reference data (non-critical, log and continue on failure)
+        pullReferenceData()
 
-            // Push pending transactions
-            val pushedCount = pushPendingTransactions()
-            Log.d(TAG, "Pushed $pushedCount transactions")
-
-            // Pull new transactions from other devices
-            val pulledCount = pullNewTransactions()
-            Log.d(TAG, "Pulled $pulledCount transactions")
-
-            SyncResult.success(pushed = pushedCount, pulled = pulledCount)
+        // Step 2: Push pending transactions
+        val pushResult = try {
+            pushPendingTransactions()
         } catch (e: Exception) {
-            Log.e(TAG, "Sync failed", e)
-            SyncResult.failure(e.message ?: "Unknown error")
+            Log.e(TAG, "Push failed", e)
+            return SyncResult.Failure(
+                error = e.message ?: "Push failed",
+                phase = SyncPhase.PUSH
+            )
         }
+        Log.d(TAG, "Pushed ${pushResult.successCount} transactions (${pushResult.failedCount} failed)")
+
+        // Step 3: Pull new transactions
+        val pullResult = try {
+            pullNewTransactions()
+        } catch (e: Exception) {
+            Log.e(TAG, "Pull failed after successful push", e)
+            // Push succeeded but pull failed - return Partial
+            return SyncResult.Partial(
+                pushed = pushResult.successCount,
+                pullError = e.message ?: "Pull failed"
+            )
+        }
+        Log.d(TAG, "Pulled $pullResult transactions")
+
+        return SyncResult.Success(
+            pushed = pushResult.successCount,
+            pulled = pullResult
+        )
     }
+
+    /**
+     * Result of push operation tracking both successes and failures.
+     */
+    private data class PushResult(val successCount: Int, val failedCount: Int)
 
     /**
      * Push all unsynced local transactions to Supabase.
      * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * @throws Exception if network or critical error occurs
      */
-    suspend fun pushPendingTransactions(): Int {
+    private suspend fun pushPendingTransactions(): PushResult {
         val pending = transactionDao.getUnsynced()
         if (pending.isEmpty()) {
             Log.d(TAG, "No pending transactions to push")
-            return 0
+            return PushResult(0, 0)
         }
 
         Log.d(TAG, "Pushing ${pending.size} pending transactions")
 
         var successCount = 0
+        var failedCount = 0
+
         for (entity in pending) {
             try {
                 val dto = TransactionDto.fromEntity(entity)
@@ -86,18 +114,21 @@ class SyncService @Inject constructor(
                 successCount++
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to push transaction ${entity.localId}", e)
-                // Continue with next transaction - don't fail entire sync
+                failedCount++
+                // Continue with next transaction - individual failures don't stop sync
             }
         }
 
-        return successCount
+        return PushResult(successCount, failedCount)
     }
 
     /**
      * Pull new transactions from Supabase that were created after last sync.
      * Inserts or updates local Room database.
+     *
+     * @throws Exception if network error occurs
      */
-    suspend fun pullNewTransactions(): Int {
+    private suspend fun pullNewTransactions(): Int {
         val lastSync = syncPreferences.getLastSyncTimestamp()
         Log.d(TAG, "Pulling transactions created after $lastSync")
 
