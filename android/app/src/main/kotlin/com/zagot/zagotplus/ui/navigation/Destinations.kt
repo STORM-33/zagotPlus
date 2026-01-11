@@ -36,6 +36,12 @@ sealed class Destination(
         icon = Icons.Filled.Sell
     )
     
+    data object SaleEntry : Destination(
+        route = "sale_entry",
+        title = "Новий продаж",
+        icon = Icons.Filled.Sell
+    )
+    
     data object Inventory : Destination(
         route = "inventory",
         title = "Залишки",

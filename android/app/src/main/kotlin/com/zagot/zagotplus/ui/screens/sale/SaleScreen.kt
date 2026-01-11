@@ -9,55 +9,47 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.text.DecimalFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SaleScreen(
     modifier: Modifier = Modifier,
-    viewModel: SaleViewModel = hiltViewModel()
+    viewModel: SaleViewModel = hiltViewModel(),
+    onNavigateToNewSale: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
 
-    LaunchedEffect(uiState.showSuccess) {
-        if (uiState.showSuccess) {
-            snackbarHostState.showSnackbar("Продаж збережено")
-            viewModel.dismissSuccess()
+    LaunchedEffect(uiState.navigateToNewSale) {
+        if (uiState.navigateToNewSale) {
+            onNavigateToNewSale()
+            viewModel.onNavigationHandled()
         }
     }
 
@@ -68,201 +60,74 @@ fun SaleScreen(
         }
     }
 
+    // Refresh when screen becomes visible again
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Location header card
-            uiState.currentLocation?.let { location ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = location.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "Продаж",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
+            // Section header
+            Text(
+                text = "Продажі сьогодні",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-            // Product dropdown with inventory info
-            var productExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = productExpanded,
-                onExpandedChange = { productExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = uiState.selectedProduct?.name ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Товар") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = productExpanded) },
-                    supportingText = if (uiState.selectedProduct != null) {
-                        { Text("В наявності: ${decimalFormat.format(uiState.availableWeight)} кг") }
-                    } else null,
+            Divider(modifier = Modifier.padding(vertical = 12.dp))
+
+            // Sales list or empty state
+            if (uiState.isLoading) {
+                Box(
                     modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = productExpanded,
-                    onDismissRequest = { productExpanded = false }
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    uiState.products.forEach { product ->
-                        val inventory = uiState.inventory.find { it.productId == product.id }
-                        val availableKg = inventory?.totalWeightKg ?: java.math.BigDecimal.ZERO
-                        DropdownMenuItem(
-                            text = { 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(product.name)
-                                    Text(
-                                        text = "${decimalFormat.format(availableKg)} кг",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            },
-                            onClick = {
-                                viewModel.selectProduct(product)
-                                productExpanded = false
-                            }
-                        )
-                    }
+                    CircularProgressIndicator()
                 }
-            }
-
-            // Weight input
-            OutlinedTextField(
-                value = uiState.weight,
-                onValueChange = { value -> viewModel.setWeight(value) },
-                label = { Text("Вага") },
-                suffix = { Text("кг") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal,
-                    imeAction = ImeAction.Next
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Inventory warning
-            if (uiState.showInventoryWarning) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Перевищує залишок!",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            }
-
-            // Price input
-            OutlinedTextField(
-                value = uiState.pricePerKg,
-                onValueChange = { value -> viewModel.setPricePerKg(value) },
-                label = { Text("Ціна") },
-                suffix = { Text("грн/кг") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal,
-                    imeAction = ImeAction.Next
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Total display card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Row(
+            } else if (uiState.todaysSales.isEmpty()) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Сума:",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    EmptyState(
+                        icon = EmptyStateIcons.Sale,
+                        title = "Продажів ще немає",
+                        description = "Натисніть кнопку нижче, щоб почати новий продаж"
                     )
-                    Text(
-                        text = uiState.total?.let { "₴${decimalFormat.format(it)}" } ?: "₴0.00",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = uiState.todaysSales,
+                        key = { it.transaction.id }
+                    ) { saleItem ->
+                        SaleItem(saleItem = saleItem)
+                    }
                 }
             }
 
-            // Notes input (buyer info)
-            OutlinedTextField(
-                value = uiState.notes,
-                onValueChange = { value -> viewModel.setNotes(value) },
-                label = { Text("Покупець / примітки") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Save button
+            // New sale button
             Button(
-                onClick = { viewModel.saveSale() },
-                enabled = uiState.canSave && !uiState.isLoading,
+                onClick = { viewModel.onNewSaleClick() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
             ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        strokeWidth = 2.dp
-                    )
-                }
                 Text(
-                    text = "ПРОДАТИ",
+                    text = "НОВИЙ ПРОДАЖ",
                     style = MaterialTheme.typography.titleMedium
                 )
             }
@@ -272,5 +137,64 @@ fun SaleScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+@Composable
+private fun SaleItem(
+    saleItem: SaleDisplayItem,
+    modifier: Modifier = Modifier
+) {
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    val decimalFormat = remember { DecimalFormat("#,##0.0") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+
+    val transaction = saleItem.transaction
+    val time = transaction.createdAt
+        .atZone(ZoneId.systemDefault())
+        .format(timeFormatter)
+    // Weight is stored as negative for sales, display as positive
+    val weight = "${decimalFormat.format(abs(transaction.weightKg.toDouble()))} кг"
+    val amount = transaction.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = time,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+            ) {
+                Text(
+                    text = saleItem.productName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = weight,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = amount,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }

@@ -33,6 +33,7 @@ import com.zagot.zagotplus.ui.screens.products.ProductsScreen
 import com.zagot.zagotplus.ui.screens.purchase.PurchaseEntryScreen
 import com.zagot.zagotplus.ui.screens.purchase.PurchaseScreen
 import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
+import com.zagot.zagotplus.ui.screens.sale.SaleEntryScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import kotlinx.coroutines.flow.Flow
@@ -154,7 +155,16 @@ fun NavGraph(
                 )
             }
             composable(Destination.Sale.route) {
-                SaleScreen()
+                SaleScreen(
+                    onNavigateToNewSale = {
+                        navController.navigate(Destination.SaleEntry.route)
+                    }
+                )
+            }
+            composable(Destination.SaleEntry.route) {
+                SaleEntryScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
             composable(Destination.Inventory.route) {
                 InventoryScreen()

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Receipt
+import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
  */
 object EmptyStateIcons {
     val Purchase = Icons.Outlined.ShoppingCart
+    val Sale = Icons.Outlined.Sell
     val Inventory = Icons.Outlined.Inventory2
     val History = Icons.Outlined.History
     val Products = Icons.Outlined.Category
