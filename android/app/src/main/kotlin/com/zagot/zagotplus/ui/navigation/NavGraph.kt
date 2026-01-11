@@ -1,17 +1,13 @@
 package com.zagot.zagotplus.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -22,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -35,45 +30,12 @@ import com.zagot.zagotplus.ui.components.SyncStatusIcon
 import com.zagot.zagotplus.ui.screens.history.HistoryScreen
 import com.zagot.zagotplus.ui.screens.inventory.InventoryScreen
 import com.zagot.zagotplus.ui.screens.products.ProductsScreen
+import com.zagot.zagotplus.ui.screens.purchase.PurchaseEntryScreen
 import com.zagot.zagotplus.ui.screens.purchase.PurchaseScreen
 import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import kotlinx.coroutines.flow.Flow
-
-/**
- * Placeholder for purchase entry flow - to be implemented in session 4.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PurchaseEntryPlaceholder(
-    onNavigateBack: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Нова закупівля") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Тут буде форма закупівлі\n(сесія 4)",
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,10 +149,9 @@ fun NavGraph(
                 )
             }
             composable(Destination.PurchaseEntry.route) {
-                // TODO: Implement in session 4 (purchase-entry-flow)
-                // For now, just navigate back
-                PurchaseEntryPlaceholder(
-                    onNavigateBack = { navController.popBackStack() }
+                PurchaseEntryScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToSummary = { navController.popBackStack() } // For now, just go back. Summary in session 5.
                 )
             }
             composable(Destination.Sale.route) {
