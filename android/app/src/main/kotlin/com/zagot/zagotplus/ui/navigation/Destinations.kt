@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory
@@ -44,6 +45,12 @@ sealed class Destination(
         route = "products",
         title = "Товари",
         icon = Icons.Filled.Category
+    )
+    
+    data object Reports : Destination(
+        route = "reports",
+        title = "Звіти",
+        icon = Icons.Filled.Assessment
     )
     
     companion object {
