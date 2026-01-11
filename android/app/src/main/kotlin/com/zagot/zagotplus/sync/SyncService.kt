@@ -172,6 +172,7 @@ class SyncService @Inject constructor(
     /**
      * Pull reference data (locations and products) from Supabase.
      * These are master data managed on server, pulled to local DB.
+     * Uses upsert logic to handle existing records with child FK references.
      */
     private suspend fun pullReferenceData() {
         try {
@@ -181,7 +182,13 @@ class SyncService @Inject constructor(
                 .decodeList<LocationDto>()
 
             locations.forEach { dto ->
-                locationDao.insert(dto.toEntity())
+                val entity = dto.toEntity()
+                val existing = locationDao.getById(entity.id)
+                if (existing == null) {
+                    locationDao.insert(entity)
+                } else {
+                    locationDao.update(entity)
+                }
             }
             Log.d(TAG, "Pulled ${locations.size} locations")
 
@@ -191,7 +198,13 @@ class SyncService @Inject constructor(
                 .decodeList<ProductDto>()
 
             products.forEach { dto ->
-                productDao.insert(dto.toEntity())
+                val entity = dto.toEntity()
+                val existing = productDao.getById(entity.id)
+                if (existing == null) {
+                    productDao.insert(entity)
+                } else {
+                    productDao.update(entity)
+                }
             }
             Log.d(TAG, "Pulled ${products.size} products")
 
