@@ -33,6 +33,7 @@ import com.zagot.zagotplus.ui.screens.products.ProductsScreen
 import com.zagot.zagotplus.ui.screens.purchase.PurchaseScreen
 import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
+import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +95,16 @@ fun NavGraph(
                                     Icon(Destination.Reports.icon, contentDescription = null)
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text("Налаштування") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(Destination.Settings.route)
+                                },
+                                leadingIcon = {
+                                    Icon(Destination.Settings.icon, contentDescription = null)
+                                }
+                            )
                         }
                     }
                 )
@@ -149,6 +160,12 @@ fun NavGraph(
             composable(Destination.Reports.route) {
                 ReportsScreen(
                     onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Destination.Settings.route) {
+                SettingsScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToProducts = { navController.navigate(Destination.Products.route) }
                 )
             }
         }

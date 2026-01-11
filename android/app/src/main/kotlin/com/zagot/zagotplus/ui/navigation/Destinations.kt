@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,6 +52,12 @@ sealed class Destination(
         route = "reports",
         title = "Звіти",
         icon = Icons.Filled.Assessment
+    )
+    
+    data object Settings : Destination(
+        route = "settings",
+        title = "Налаштування",
+        icon = Icons.Filled.Settings
     )
     
     companion object {
