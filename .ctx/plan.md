@@ -10,9 +10,9 @@ Address critical issues from code audit. Priority: stability first (sync, tests,
 ## Progress
 
 - Total sessions: 7
-- Completed: 3
+- Completed: 4
 - Blocked: 0
-- Remaining: 4
+- Remaining: 3
 
 ## Historical Context
 
@@ -52,7 +52,7 @@ Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
 | 3 | fix-database-migrations | medium | completed | none |
-| 4 | implement-device-id | low | pending | none |
+| 4 | implement-device-id | low | completed | none |
 | 5 | test-inventory-computation | medium | pending | none |
 
 ### Phase 3.3: Security Hardening
