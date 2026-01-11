@@ -108,7 +108,7 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 5 in progress** - Purchase Flow Redesign. 3 of 5 sessions complete.
+**Phase 5 complete!** 🎉 Purchase Flow Redesign. All 5 sessions finished.
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
@@ -123,6 +123,8 @@ Physical goods movement creates two linked transactions atomically:
 - Navigation: Bottom nav with 4 destinations + overflow menu for secondary screens
 - PIN auth: 4-digit entry with PBKDF2 hashing and persistent lockout
 - Purchase screen: Redesigned with batch history, weight placeholder, new client nav
+- Purchase entry flow: 3-step flow (product grid → weight/price → positions list)
+- Purchase summary: Full-screen overlay with tap-to-confirm
 - Sale screen: Inventory awareness, exceeding-stock warning
 - Inventory screen: Location tabs, negative inventory highlighting
 - Inventory computation: Unit tested (9 tests)
@@ -149,4 +151,4 @@ See MASTER_PLAN.md for complete breakdown:
 - Phase 4: Supporting UI (4 sessions) - history, products, reports, settings ✓
 - Phase 5: Hardware (4 sessions) - scales, printer, receipts, polish
 
-Completed: 26 sessions | Remaining: 2 sessions (purchase-entry-flow, purchase-summary)
+Completed: 28 sessions across Phases 0-5 | Next: Phase 6 (Hardware Integration)

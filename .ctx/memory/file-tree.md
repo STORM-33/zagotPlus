@@ -1,13 +1,13 @@
 # File Tree
 
-Updated: 2026-01-11 (Post-Phase 5 Reflect - Sessions 1-3)
+Updated: 2026-01-11 (Post-Phase 5 Complete)
 
 ## Overview
 
 Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, sync, and UI layers.
-**Phase 5 in progress** - Purchase Flow Redesign (3/5 sessions complete).
-**Next**: Session 4 (purchase-entry-flow)
+**Phase 5 complete!** 🎉 Purchase Flow Redesign (5/5 sessions).
+**Next**: Phase 6 (Hardware Integration)
 
 ## Root (/)
 
@@ -37,18 +37,19 @@ plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status
 ### templates/ (4 session templates)
 feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/phase-5-purchase-flow/ (active)
+### sessions/phase-5-purchase-flow/ (complete - pending archive)
 - db-batches/ - Batch table and FK implementation
 - product-images/ - Image column and Coil integration
 - purchase-main-screen/ - Redesigned batch history screen
-- purchase-entry-flow/ - (session 4, pending)
-- purchase-summary/ - (session 5, pending)
+- purchase-entry-flow/ - Multi-step purchase entry flow
+- purchase-summary/ - Summary overlay with atomic save
 
 ### history/phase-0-setup/ (archived)
 ### history/phase-1-data-layer/ (archived)
 ### history/phase-2-core-ui/ (archived)
 ### history/phase-3-audit-remediation/ (archived)
 ### history/phase-4-supporting-ui/ (archived)
+### history/phase-5-purchase-flow/ (pending archive)
 
 ### history/
 - index.md - Decisions, patterns, lessons learned
@@ -152,7 +153,9 @@ feature.md, bugfix.md, refactor.md, research.md
 *screens/purchase/*
 - PurchaseScreen.kt - Batch history list, weight placeholder, new client navigation
 - PurchaseViewModel.kt - Today's batches observation, navigation state
-- PurchaseEntryScreen.kt - (Placeholder for session 4)
+- PurchaseEntryScreen.kt - Multi-step entry flow (product grid → weight → positions)
+- PurchaseEntryViewModel.kt - Entry flow state with position management
+- PurchaseSummaryScreen.kt - Full-screen summary overlay with tap-to-confirm
 
 *screens/sale/*
 - SaleScreen.kt - Similar to purchase with inventory awareness
