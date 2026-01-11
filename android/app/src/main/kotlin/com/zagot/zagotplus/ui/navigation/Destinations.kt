@@ -24,6 +24,12 @@ sealed class Destination(
         icon = Icons.Filled.ShoppingCart
     )
     
+    data object PurchaseEntry : Destination(
+        route = "purchase_entry",
+        title = "Нова закупівля",
+        icon = Icons.Filled.ShoppingCart
+    )
+    
     data object Sale : Destination(
         route = "sale",
         title = "Продаж",

@@ -9,47 +9,46 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.domain.model.PurchaseBatch
 import java.text.DecimalFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PurchaseScreen(
     modifier: Modifier = Modifier,
-    viewModel: PurchaseViewModel = hiltViewModel()
+    viewModel: PurchaseViewModel = hiltViewModel(),
+    onNavigateToNewClient: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.showSuccess) {
-        if (uiState.showSuccess) {
-            snackbarHostState.showSnackbar("Закупівлю збережено")
-            viewModel.dismissSuccess()
+    LaunchedEffect(uiState.navigateToNewClient) {
+        if (uiState.navigateToNewClient) {
+            onNavigateToNewClient()
+            viewModel.onNavigationHandled()
         }
     }
 
@@ -65,112 +64,85 @@ fun PurchaseScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Location display
-            uiState.currentLocation?.let { location ->
+            // Weight placeholder
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
                 Text(
-                    text = "Локація: ${location.name}",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Вага: ${uiState.weightPlaceholder}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    textAlign = TextAlign.Center
                 )
             }
 
-            // Product dropdown
-            var productExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = productExpanded,
-                onExpandedChange = { productExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = uiState.selectedProduct?.name ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Товар") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = productExpanded) },
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section header
+            Text(
+                text = "Закупівлі сьогодні",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Batches list or empty state
+            if (uiState.isLoading) {
+                Box(
                     modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = productExpanded,
-                    onDismissRequest = { productExpanded = false }
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    uiState.products.forEach { product ->
-                        DropdownMenuItem(
-                            text = { Text(product.name) },
-                            onClick = {
-                                viewModel.selectProduct(product)
-                                productExpanded = false
-                            }
-                        )
+                    CircularProgressIndicator()
+                }
+            } else if (uiState.todaysBatches.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Закупівель сьогодні ще немає",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        items = uiState.todaysBatches,
+                        key = { it.id }
+                    ) { batch ->
+                        BatchItem(batch = batch)
                     }
                 }
             }
 
-            // Weight input
-            OutlinedTextField(
-                value = uiState.weight,
-                onValueChange = { value -> viewModel.setWeight(value) },
-                label = { Text("Вага") },
-                suffix = { Text("кг") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Price input
-            OutlinedTextField(
-                value = uiState.pricePerKg,
-                onValueChange = { value -> viewModel.setPricePerKg(value) },
-                label = { Text("Ціна") },
-                suffix = { Text("грн/кг") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Total display
-            val totalFormat = remember { DecimalFormat("#,##0.00") }
-            val formattedTotal = uiState.total?.let { total -> "${totalFormat.format(total)} грн" } ?: "—"
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // New client button
+            Button(
+                onClick = { viewModel.onNewClientClick() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
             ) {
                 Text(
-                    text = "Сума:",
+                    text = "НОВИЙ КЛІЄНТ",
                     style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = formattedTotal,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            // Notes input
-            OutlinedTextField(
-                value = uiState.notes,
-                onValueChange = { value -> viewModel.setNotes(value) },
-                label = { Text("Примітки") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Save button
-            Button(
-                onClick = { viewModel.savePurchase() },
-                enabled = uiState.canSave && !uiState.isLoading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        strokeWidth = 2.dp
-                    )
-                }
-                Text("ЗБЕРЕГТИ")
             }
         }
 
@@ -178,5 +150,57 @@ fun PurchaseScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+@Composable
+private fun BatchItem(
+    batch: PurchaseBatch,
+    modifier: Modifier = Modifier
+) {
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    val decimalFormat = remember { DecimalFormat("#,##0.0") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+
+    val time = batch.createdAt
+        .atZone(ZoneId.systemDefault())
+        .format(timeFormatter)
+    val weight = batch.totalWeightKg?.let { "${decimalFormat.format(it)} кг" } ?: "-- кг"
+    val amount = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
+    val positions = "${batch.itemCount ?: 0} поз"
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = time,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = weight,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = amount,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = positions,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
