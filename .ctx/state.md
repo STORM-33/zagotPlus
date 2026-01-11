@@ -1,8 +1,8 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
+Mode: working
+Active: phase-2/screen-sale
 Since: 2026-01-11T01:15:00Z
 
 ## Blockers
