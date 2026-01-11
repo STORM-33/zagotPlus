@@ -2,6 +2,8 @@ package com.zagot.zagotplus.data.local
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
@@ -21,8 +23,19 @@ import javax.inject.Singleton
 object DatabaseModule {
 
     /**
+     * Database migrations. Add new migrations here as schema evolves.
+     * NEVER use fallbackToDestructiveMigration() - user data must be preserved.
+     */
+    private val MIGRATIONS: Array<Migration> = arrayOf(
+        // Example for future:
+        // Migration(1, 2) { database ->
+        //     database.execSQL("ALTER TABLE transactions ADD COLUMN new_field TEXT")
+        // }
+    )
+
+    /**
      * Provides singleton instance of ZagotDatabase.
-     * Uses fallbackToDestructiveMigration during development.
+     * Uses explicit migrations to preserve user data across schema changes.
      */
     @Provides
     @Singleton
@@ -34,7 +47,7 @@ object DatabaseModule {
             ZagotDatabase::class.java,
             "zagot_database"
         )
-            .fallbackToDestructiveMigration() // TODO: Remove in production, add migrations
+            .addMigrations(*MIGRATIONS)
             .build()
     }
 
