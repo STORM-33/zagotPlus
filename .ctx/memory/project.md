@@ -108,7 +108,7 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 3 complete** - Audit remediation. 7 of 7 sessions complete.
+**Phase 4 complete** - Supporting UI. 4 of 4 sessions complete.
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
@@ -120,12 +120,16 @@ Physical goods movement creates two linked transactions atomically:
 - Sync partial failure handling: Success/Partial/Failure states
 - Database migrations: No more destructive fallback
 - Device ID: Persistent UUID per device for transaction tracking
-- Navigation: Bottom nav with 4 destinations
+- Navigation: Bottom nav with 4 destinations + overflow menu for secondary screens
 - PIN auth: 4-digit entry with PBKDF2 hashing and persistent lockout
 - Purchase screen: Product selection, weight/price input, transaction creation
 - Sale screen: Inventory awareness, exceeding-stock warning
 - Inventory screen: Location tabs, negative inventory highlighting
 - Inventory computation: Unit tested (9 tests)
+- History screen: Filtering (type, date, location) + product search
+- Products screen: CRUD operations with validation, 16 unit tests
+- Reports screen: Daily summaries with copy/share export
+- Settings screen: Sync status, device ID, location selector
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)
@@ -136,10 +140,11 @@ Physical goods movement creates two linked transactions atomically:
 
 ## Development Phases
 See MASTER_PLAN.md for complete breakdown:
-- Phase 0: Setup (3 sessions) - repo, Android project, Supabase schema
-- Phase 1: Data Layer (4 sessions) - Room, repositories, sync
-- Phase 2: Core UI (5 sessions) - navigation, auth, purchase/sale/inventory screens
-- Phase 3: Supporting UI (4 sessions) - history, products, reports, settings
-- Phase 4: Hardware (4 sessions) - scales, printer, receipts, polish
+- Phase 0: Setup (3 sessions) - repo, Android project, Supabase schema ✓
+- Phase 1: Data Layer (4 sessions) - Room, repositories, sync ✓
+- Phase 2: Core UI (5 sessions) - navigation, auth, purchase/sale/inventory screens ✓
+- Phase 3: Audit Remediation (7 sessions) - sync fixes, security hardening ✓
+- Phase 4: Supporting UI (4 sessions) - history, products, reports, settings ✓
+- Phase 5: Hardware (4 sessions) - scales, printer, receipts, polish
 
-Total: 20 sessions
+Completed: 23 sessions | Remaining: 4 sessions (hardware integration)
