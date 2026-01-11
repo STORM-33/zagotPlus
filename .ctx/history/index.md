@@ -4,12 +4,12 @@ Last updated: 2026-01-11
 
 ## Plans
 
-| Plan | Date | Sessions | Status |
-|------|------|----------|--------|
-| Phase 0: Setup | 2026-01-11 | 3 | completed |
-| Phase 1: Data Layer | 2026-01-11 | 4 | completed |
-| Phase 2: Core UI | 2026-01-11 | 5 | completed |
-| Phase 3: Audit Remediation | 2026-01-11 | 7 | completed |
+| Plan | Date | Sessions | Status | Location |
+|------|------|----------|--------|----------|
+| Phase 0: Setup | 2026-01-11 | 3 | completed | history/phase-0-setup |
+| Phase 1: Data Layer | 2026-01-11 | 4 | completed | history/phase-1-data-layer |
+| Phase 2: Core UI | 2026-01-11 | 5 | completed | history/phase-2-core-ui |
+| Phase 3: Audit Remediation | 2026-01-11 | 7 | completed | history/phase-3-audit-remediation |
 
 ## Decisions Log
 
