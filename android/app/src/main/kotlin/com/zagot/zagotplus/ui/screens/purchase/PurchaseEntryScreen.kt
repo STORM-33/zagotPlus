@@ -67,7 +67,6 @@ import java.math.BigDecimal
 @Composable
 fun PurchaseEntryScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToSummary: () -> Unit,
     viewModel: PurchaseEntryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -78,13 +77,6 @@ fun PurchaseEntryScreen(
         if (uiState.navigateBack) {
             viewModel.onNavigationHandled()
             onNavigateBack()
-        }
-    }
-
-    LaunchedEffect(uiState.navigateToSummary) {
-        if (uiState.navigateToSummary) {
-            viewModel.onNavigationHandled()
-            onNavigateToSummary()
         }
     }
 
@@ -100,28 +92,33 @@ fun PurchaseEntryScreen(
         PurchaseEntryScreenState.PRODUCT_GRID -> "Оберіть товар"
         PurchaseEntryScreenState.WEIGHT_ENTRY -> uiState.selectedProduct?.name ?: "Введіть дані"
         PurchaseEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
+        PurchaseEntryScreenState.SUMMARY -> "Підсумок"
     }
 
-    val showBackToGrid = uiState.screenState != PurchaseEntryScreenState.PRODUCT_GRID
+    val showBackToGrid = uiState.screenState != PurchaseEntryScreenState.PRODUCT_GRID && 
+                         uiState.screenState != PurchaseEntryScreenState.SUMMARY
+    val showTopBar = uiState.screenState != PurchaseEntryScreenState.SUMMARY
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(topBarTitle) },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (showBackToGrid) {
-                                viewModel.backToGrid()
-                            } else {
-                                viewModel.cancel()
+            if (showTopBar) {
+                TopAppBar(
+                    title = { Text(topBarTitle) },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                if (showBackToGrid) {
+                                    viewModel.backToGrid()
+                                } else {
+                                    viewModel.cancel()
+                                }
                             }
+                        ) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
                         }
-                    ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
                     }
-                }
-            )
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
@@ -130,8 +127,19 @@ fun PurchaseEntryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when {
-                uiState.isLoading -> {
+            // Show summary overlay if in SUMMARY state
+            if (uiState.screenState == PurchaseEntryScreenState.SUMMARY) {
+                PurchaseSummaryOverlay(
+                    positions = uiState.positions,
+                    notes = uiState.notes,
+                    totalWeight = uiState.totalWeight,
+                    totalAmount = uiState.totalAmount,
+                    isSaving = uiState.isSaving,
+                    onConfirm = viewModel::confirmSave
+                )
+            } else {
+                when {
+                    uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -184,8 +192,12 @@ fun PurchaseEntryScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
+                        PurchaseEntryScreenState.SUMMARY -> {
+                            // Handled above as overlay
+                        }
                     }
                 }
+            }
             }
         }
     }

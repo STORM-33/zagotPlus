@@ -37,7 +37,8 @@ data class PurchasePosition(
 enum class PurchaseEntryScreenState {
     PRODUCT_GRID,    // Selecting product from grid
     WEIGHT_ENTRY,    // Entering weight/price for selected product
-    POSITIONS_LIST   // Viewing/editing positions before finalizing
+    POSITIONS_LIST,  // Viewing/editing positions before finalizing
+    SUMMARY          // Showing summary overlay before saving
 }
 
 /**
@@ -55,7 +56,6 @@ data class PurchaseEntryUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
-    val navigateToSummary: Boolean = false,
     val navigateBack: Boolean = false
 ) {
     val currentTotal: BigDecimal?
@@ -203,6 +203,16 @@ class PurchaseEntryViewModel @Inject constructor(
         val state = _uiState.value
         if (state.positions.isEmpty()) return
 
+        // Show summary overlay instead of saving immediately
+        _uiState.update {
+            it.copy(screenState = PurchaseEntryScreenState.SUMMARY)
+        }
+    }
+
+    fun confirmSave() {
+        val state = _uiState.value
+        if (state.positions.isEmpty()) return
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
@@ -246,20 +256,30 @@ class PurchaseEntryViewModel @Inject constructor(
 
                 purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
 
+                // TODO: Print receipt here (Phase 6 - hardware integration)
+                // printReceipt(batch, positions)
+
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        navigateToSummary = true
+                        navigateBack = true
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isSaving = false,
+                        screenState = PurchaseEntryScreenState.POSITIONS_LIST,
                         error = e.message ?: "Помилка збереження"
                     )
                 }
             }
+        }
+    }
+
+    fun dismissSummary() {
+        _uiState.update {
+            it.copy(screenState = PurchaseEntryScreenState.POSITIONS_LIST)
         }
     }
 
@@ -269,10 +289,7 @@ class PurchaseEntryViewModel @Inject constructor(
 
     fun onNavigationHandled() {
         _uiState.update {
-            it.copy(
-                navigateToSummary = false,
-                navigateBack = false
-            )
+            it.copy(navigateBack = false)
         }
     }
 

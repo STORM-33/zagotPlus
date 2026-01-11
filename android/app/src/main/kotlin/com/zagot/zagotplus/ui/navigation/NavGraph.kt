@@ -150,8 +150,7 @@ fun NavGraph(
             }
             composable(Destination.PurchaseEntry.route) {
                 PurchaseEntryScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToSummary = { navController.popBackStack() } // For now, just go back. Summary in session 5.
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             composable(Destination.Sale.route) {
