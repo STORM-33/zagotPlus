@@ -2,6 +2,7 @@ package com.zagot.zagotplus.sync
 
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
+import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import io.github.jan.supabase.SupabaseClient
@@ -47,6 +48,7 @@ class SyncServiceTest {
     private lateinit var supabaseClient: SupabaseClient
     private lateinit var postgrest: Postgrest
     private lateinit var transactionDao: TransactionDao
+    private lateinit var purchaseBatchDao: PurchaseBatchDao
     private lateinit var locationDao: LocationDao
     private lateinit var productDao: ProductDao
     private lateinit var syncPreferences: SyncPreferences
@@ -77,15 +79,18 @@ class SyncServiceTest {
         supabaseClient = mockk(relaxed = true)
         postgrest = mockk(relaxed = true)
         transactionDao = mockk()
+        purchaseBatchDao = mockk()
         locationDao = mockk()
         productDao = mockk()
         syncPreferences = mockk()
 
         every { supabaseClient.postgrest } returns postgrest
+        coEvery { purchaseBatchDao.getUnsynced() } returns emptyList()
 
         syncService = SyncService(
             supabaseClient = supabaseClient,
             transactionDao = transactionDao,
+            purchaseBatchDao = purchaseBatchDao,
             locationDao = locationDao,
             productDao = productDao,
             syncPreferences = syncPreferences

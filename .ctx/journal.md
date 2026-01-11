@@ -639,3 +639,174 @@ Features:
 
 Sessions: 4 done (Phase 4), 0 blocked, streak: 4
 **Phase 4 complete!** All supporting UI sessions finished.
+
+---
+
+## 2026-01-11 (Phase 5)
+
+### Session: phase-5/db-batches
+Status: completed
+Complexity: medium
+Duration: ~20 minutes
+
+Objective: Add database support for purchase batches - grouping multiple transaction line items under one client session.
+
+Work Summary:
+- Created Supabase migration for purchase_batches table with batch_id FK on transactions
+- Created PurchaseBatchEntity Room entity with proper FK and indexes
+- Created PurchaseBatchDao with today's batches query (SQLite date functions)
+- Added batch_id column to TransactionEntity with FK to purchase_batches
+- Created Room MIGRATION_1_2 for schema upgrade
+- Created PurchaseBatch domain model
+- Created PurchaseBatchRepository interface
+- Created PurchaseBatchRepositoryImpl with atomic batch+transactions creation
+- Updated RepositoryModule with binding
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(db): add purchase_batches table and batch_id FK` (f3d7933)
+
+Key Decisions:
+- database.withTransaction for atomic batch creation
+- SQLite date functions for today's batches query (localtime aware)
+- batch_id FK with SET_NULL on delete (preserve transactions if batch deleted)
+
+Sessions: 1 done (Phase 5), 0 blocked, streak: 1
+
+---
+
+### Session: phase-5/product-images
+Status: completed
+Complexity: medium
+Duration: ~15 minutes
+
+Objective: Add image support to products for display in purchase flow product grid.
+
+Work Summary:
+- Created Supabase migration for image_uri column on products table
+- Added image_uri column to ProductEntity with Room MIGRATION_2_3
+- Updated Product domain model, ProductDto with imageUri property
+- Updated ProductRepositoryImpl with imageUri in entity mapping
+- Added Coil dependency (v2.5.0) for async image loading
+- Updated ProductCard to show 48dp product image or placeholder
+- Added image picker to AddEditProductDialog using ActivityResultContracts
+- Updated ProductsViewModel with dialogImageUri state management
+- Fixed ProductsViewModelTest for new createProduct signature
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(products): add image support to products` (f092025)
+
+Key Decisions:
+- Store content:// URI directly (no file copying to app storage)
+- Coil handles caching and async loading automatically
+- Placeholder icon (Icons.Filled.Image) for products without images
+
+Sessions: 2 done (Phase 5), 0 blocked, streak: 2
+
+---
+
+### Session: phase-5/purchase-main-screen
+Status: completed
+Complexity: medium
+Duration: ~10 minutes
+
+Objective: Redesign main purchase screen with today's batch history, weight placeholder, and new client navigation.
+
+Work Summary:
+- Rewrote PurchaseScreen with new layout (weight placeholder, batch list, new client button)
+- Rewrote PurchaseViewModel to observe today's batches via PurchaseBatchRepository
+- Created BatchItem composable for displaying batch info (time, weight, amount, positions)
+- Added empty state when no batches today
+- Added PurchaseEntry destination and placeholder screen
+- Updated NavGraph with navigation callback and entry flow route
+- Updated PurchaseViewModelTest for new ViewModel API (6 tests)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): redesign main screen with batch history` (116a023)
+
+Key Decisions:
+- LazyColumn with Flow observation (reactive batch list)
+- Weight placeholder shows "-- кг" (scales integration deferred to Phase 6)
+- Entry flow placeholder ready for session 4 implementation
+
+Sessions: 3 done (Phase 5), 0 blocked, streak: 3
+
+---
+
+### Session: phase-5/purchase-entry-flow
+Status: completed
+Complexity: high
+Duration: ~20 minutes
+
+Objective: Implement the multi-step purchase entry flow: product grid → weight/price input → position list → notes.
+
+Work Summary:
+- Created PurchaseEntryViewModel with 3 screen states and position management
+- Created PurchaseEntryScreen with ProductGrid, WeightEntry, PositionsList components
+- ProductGrid uses LazyVerticalGrid with GridCells.Adaptive for phone/tablet
+- ProductTile shows Coil AsyncImage or placeholder icon
+- WeightEntry with scale placeholder, manual input, price, calculated total
+- PositionsList with add/remove positions, notes field, action buttons
+- On finalize: creates PurchaseBatch + Transactions atomically via repository
+- Updated NavGraph to use real PurchaseEntryScreen (removed placeholder)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): implement multi-step purchase entry flow` (d4c0ab6)
+
+Key Decisions:
+- GridCells.Adaptive(120.dp) for responsive grid layout
+- 3 screen states in enum (PRODUCT_GRID, WEIGHT_ENTRY, POSITIONS_LIST)
+- PurchasePosition data class for line items with UUID id
+- Price auto-fills from product.defaultBuyPrice
+- Summary screen deferred to session 5 (just returns to main for now)
+
+Sessions: 4 done (Phase 5), 0 blocked, streak: 1
+
+---
+
+### Session: phase-5/purchase-summary
+Status: completed
+Complexity: medium
+Duration: ~5 minutes
+
+Objective: Implement summary display overlay and database save for completed purchase batches.
+
+Work Summary:
+- Created PurchaseSummaryScreen.kt with PurchaseSummaryOverlay composable
+- Full-screen overlay with semi-transparent scrim background
+- Shows all positions (product, weight × price = total)
+- Shows totals (weight, amount) and notes if present
+- Tap anywhere to confirm and save
+- Added SUMMARY state to PurchaseEntryScreenState enum
+- Split finalize() into show summary + confirmSave()
+- confirmSave() saves batch+transactions atomically
+- Removed navigateToSummary flag (replaced by overlay approach)
+- Added TODO comment for receipt printing (Phase 6)
+- Updated NavGraph (simplified PurchaseEntryScreen params)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(purchase): add summary overlay before saving batch` (3df3896)
+
+Key Decisions:
+- Overlay instead of separate navigation (simpler flow)
+- Tap to confirm (matches brief specification)
+- isSaving flag prevents double-tap during save
+- Error returns to POSITIONS_LIST with snackbar
+
+Sessions: 5 done (Phase 5), 0 blocked, streak: 2
+**Phase 5 complete!** All 5 purchase flow redesign sessions finished.
+
+---
+
+### Archive: phase-5-purchase-flow
+Status: completed
+Date: 2026-01-11T21:37:00Z
+
+Archived Phase 5 (Purchase Flow Redesign):
+- 5 sessions completed: db-batches, product-images, purchase-main-screen, purchase-entry-flow, purchase-summary
+- Location: .ctx/history/2026-01-11_phase-5-purchase-flow/
+- Generated summary with key decisions, discoveries, and lessons learned
+- Updated history index with patterns and solutions
+- Removed phase-5-purchase-flow/ from active sessions/
+- Reset session stats for next phase
+
+Branch: feature/purchase-flow-redesign (ready for PR when Phase 6 planning confirms next steps)
+
+Stats reset: 0 sessions done, 0 blocked, streak: 0
+Mode: ready - Ready for Phase 6 planning (Hardware Integration)
+
+---

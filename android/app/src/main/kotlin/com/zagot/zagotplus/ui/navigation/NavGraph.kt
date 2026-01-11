@@ -30,6 +30,7 @@ import com.zagot.zagotplus.ui.components.SyncStatusIcon
 import com.zagot.zagotplus.ui.screens.history.HistoryScreen
 import com.zagot.zagotplus.ui.screens.inventory.InventoryScreen
 import com.zagot.zagotplus.ui.screens.products.ProductsScreen
+import com.zagot.zagotplus.ui.screens.purchase.PurchaseEntryScreen
 import com.zagot.zagotplus.ui.screens.purchase.PurchaseScreen
 import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
@@ -141,7 +142,16 @@ fun NavGraph(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Destination.Purchase.route) {
-                PurchaseScreen()
+                PurchaseScreen(
+                    onNavigateToNewClient = {
+                        navController.navigate(Destination.PurchaseEntry.route)
+                    }
+                )
+            }
+            composable(Destination.PurchaseEntry.route) {
+                PurchaseEntryScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
             composable(Destination.Sale.route) {
                 SaleScreen()

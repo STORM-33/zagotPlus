@@ -6,6 +6,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
+import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import dagger.Module
 import dagger.Provides
@@ -27,10 +28,8 @@ object DatabaseModule {
      * NEVER use fallbackToDestructiveMigration() - user data must be preserved.
      */
     private val MIGRATIONS: Array<Migration> = arrayOf(
-        // Example for future:
-        // Migration(1, 2) { database ->
-        //     database.execSQL("ALTER TABLE transactions ADD COLUMN new_field TEXT")
-        // }
+        ZagotDatabase.MIGRATION_1_2,
+        ZagotDatabase.MIGRATION_2_3
     )
 
     /**
@@ -76,5 +75,14 @@ object DatabaseModule {
     @Singleton
     fun provideTransactionDao(database: ZagotDatabase): TransactionDao {
         return database.transactionDao()
+    }
+
+    /**
+     * Provides PurchaseBatchDao from database.
+     */
+    @Provides
+    @Singleton
+    fun providePurchaseBatchDao(database: ZagotDatabase): PurchaseBatchDao {
+        return database.purchaseBatchDao()
     }
 }

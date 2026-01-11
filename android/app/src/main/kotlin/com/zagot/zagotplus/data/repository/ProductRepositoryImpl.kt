@@ -36,7 +36,8 @@ class ProductRepositoryImpl @Inject constructor(
     override suspend fun createProduct(
         name: String,
         defaultBuyPrice: BigDecimal?,
-        defaultSellPrice: BigDecimal?
+        defaultSellPrice: BigDecimal?,
+        imageUri: String?
     ): Product {
         val entity = ProductEntity(
             id = UUID.randomUUID(),
@@ -44,7 +45,8 @@ class ProductRepositoryImpl @Inject constructor(
             defaultBuyPrice = defaultBuyPrice,
             defaultSellPrice = defaultSellPrice,
             isActive = true,
-            createdAt = Instant.now()
+            createdAt = Instant.now(),
+            imageUri = imageUri
         )
         productDao.insert(entity)
         return entity.toDomain()
@@ -57,7 +59,8 @@ class ProductRepositoryImpl @Inject constructor(
             defaultBuyPrice = product.defaultBuyPrice,
             defaultSellPrice = product.defaultSellPrice,
             isActive = product.isActive,
-            createdAt = product.createdAt
+            createdAt = product.createdAt,
+            imageUri = product.imageUri
         )
         productDao.update(entity)
     }
@@ -74,6 +77,7 @@ class ProductRepositoryImpl @Inject constructor(
         defaultBuyPrice = defaultBuyPrice,
         defaultSellPrice = defaultSellPrice,
         isActive = isActive,
-        createdAt = createdAt
+        createdAt = createdAt,
+        imageUri = imageUri
     )
 }

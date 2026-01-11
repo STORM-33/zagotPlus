@@ -37,5 +37,8 @@ data class ProductEntity(
     val isActive: Boolean,
 
     @ColumnInfo(name = "created_at")
-    val createdAt: Instant
+    val createdAt: Instant,
+
+    @ColumnInfo(name = "image_uri")
+    val imageUri: String? = null
 )

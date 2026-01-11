@@ -13,5 +13,6 @@ data class Product(
     val defaultBuyPrice: BigDecimal?,
     val defaultSellPrice: BigDecimal?,
     val isActive: Boolean,
-    val createdAt: Instant
+    val createdAt: Instant,
+    val imageUri: String? = null
 )

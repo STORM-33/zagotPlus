@@ -31,7 +31,8 @@ interface ProductRepository {
     suspend fun createProduct(
         name: String,
         defaultBuyPrice: BigDecimal?,
-        defaultSellPrice: BigDecimal?
+        defaultSellPrice: BigDecimal?,
+        imageUri: String? = null
     ): Product
 
     /**

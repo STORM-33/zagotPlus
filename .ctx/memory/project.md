@@ -108,28 +108,32 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 4 complete** - Supporting UI. 4 of 4 sessions complete.
+**Phase 5 complete!** 🎉 Purchase Flow Redesign. All 5 sessions finished.
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
 - Hilt DI: Components generated correctly
 - Supabase migration: Schema SQL ready for deployment
-- Room database: Entities, DAOs, TypeConverters working
+- Room database: Entities, DAOs, TypeConverters, migrations working
 - Repository layer: Offline-first data access with domain models
 - Sync infrastructure: Push/pull sync with WorkManager scheduling
 - Sync partial failure handling: Success/Partial/Failure states
-- Database migrations: No more destructive fallback
+- Database migrations: MIGRATION_1_2 (batches), MIGRATION_2_3 (images)
 - Device ID: Persistent UUID per device for transaction tracking
 - Navigation: Bottom nav with 4 destinations + overflow menu for secondary screens
 - PIN auth: 4-digit entry with PBKDF2 hashing and persistent lockout
-- Purchase screen: Product selection, weight/price input, transaction creation
+- Purchase screen: Redesigned with batch history, weight placeholder, new client nav
+- Purchase entry flow: 3-step flow (product grid → weight/price → positions list)
+- Purchase summary: Full-screen overlay with tap-to-confirm
 - Sale screen: Inventory awareness, exceeding-stock warning
 - Inventory screen: Location tabs, negative inventory highlighting
 - Inventory computation: Unit tested (9 tests)
 - History screen: Filtering (type, date, location) + product search
-- Products screen: CRUD operations with validation, 16 unit tests
+- Products screen: CRUD with images (Coil), 16 unit tests
 - Reports screen: Daily summaries with copy/share export
 - Settings screen: Sync status, device ID, location selector
+- Purchase batches: Atomic batch + transactions creation, today's batches query
+- Product images: Image picker, Coil async loading, placeholder icons
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)
@@ -147,4 +151,4 @@ See MASTER_PLAN.md for complete breakdown:
 - Phase 4: Supporting UI (4 sessions) - history, products, reports, settings ✓
 - Phase 5: Hardware (4 sessions) - scales, printer, receipts, polish
 
-Completed: 23 sessions | Remaining: 4 sessions (hardware integration)
+Completed: 28 sessions across Phases 0-5 | Next: Phase 6 (Hardware Integration)
