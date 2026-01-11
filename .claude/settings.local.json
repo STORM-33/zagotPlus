@@ -7,7 +7,8 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nchore: update state after fix-sync-partial-failure\n\nSession: phase-3.1/fix-sync-partial-failure completed\nEOF\n\\)\")",
       "Bash(./gradlew :app:testDebugUnitTest:*)",
       "Bash(cmd.exe /c \"gradlew.bat :app:testDebugUnitTest\")",
-      "Bash(bash -c:*)"
+      "Bash(bash -c:*)",
+      "Bash(./gradlew :app:assembleDebug:*)"
     ]
   }
 }
