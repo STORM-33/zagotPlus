@@ -1,8 +1,8 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
+Mode: working
+Active: room-schema
 Since: 2026-01-11
 
 ## Blockers
