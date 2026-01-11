@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11
+Mode: working
+Active: phase-1/repository
+Since: 2026-01-11T00:13:22Z
 
 ## Blockers
 none
