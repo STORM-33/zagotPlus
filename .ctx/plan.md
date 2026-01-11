@@ -10,9 +10,9 @@ Implement the local data layer (Room) and Supabase sync infrastructure for offli
 ## Progress
 
 - Total sessions: 4
-- Completed: 1
+- Completed: 2
 - Blocked: 0
-- Remaining: 3
+- Remaining: 2
 
 ## Historical Context
 
@@ -34,7 +34,7 @@ Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
 | 1 | room-schema | medium | completed | none |
-| 2 | repository | medium | pending | room-schema |
+| 2 | repository | medium | completed | room-schema |
 | 3 | supabase-sync | high | pending | room-schema |
 | 4 | sync-worker | medium | pending | repository, supabase-sync |
 
