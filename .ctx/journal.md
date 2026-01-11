@@ -477,3 +477,20 @@ Work Summary:
 - Commit: `feat(data): implement device ID for transaction tracking` (ac62800)
 
 Sessions: 4 done (Phase 3), 0 blocked, streak: 1
+
+---
+
+### Session: phase-3.2/test-inventory-computation
+Status: completed
+Complexity: medium
+
+Objective: Add unit tests for computeInventory function in TransactionRepositoryImpl.
+
+Work Summary:
+- Created TransactionRepositoryImplTest with 9 test cases
+- Tests cover: empty transactions, single purchase, net calculation, grouping, transfers, null filtering
+- Used MockK for mocking TransactionDao and DevicePreferences
+- All 9 tests pass: `testDebugUnitTest > 9 tests completed`
+- Commit: `test(inventory): add unit tests for computeInventory` (cc2f63f)
+
+Sessions: 5 done (Phase 3), 0 blocked, streak: 2
