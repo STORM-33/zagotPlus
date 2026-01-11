@@ -1,12 +1,12 @@
 # File Tree
 
-Updated: 2026-01-11 (Post-Phase 1 Reflect)
+Updated: 2026-01-11 (Post-Phase 2 Reflect)
 
 ## Overview
 
 Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, sync, and UI layers.
-**Data layer is fully implemented** - Phase 1 complete.
+**Core UI is fully implemented** - Phase 2 complete. Data + UI layers working.
 
 ## Root (/)
 
@@ -36,18 +36,16 @@ plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status
 ### templates/ (4 session templates)
 feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/phase-0/ (Phase 0 - completed, archived)
+### sessions/phase-2/ (Phase 2 - completed, pending archive)
 - _overview.md - Phase summary
-- init-repo/ - brief.md, report.md
-- init-android/ - brief.md, report.md
-- init-supabase/ - brief.md, report.md
+- navigation/ - brief.md, report.md (NavHost, bottom bar, routing)
+- auth-pin/ - brief.md, report.md (PIN entry, lockout, hashing)
+- screen-purchase/ - brief.md, report.md (purchase form, ViewModel, tests)
+- screen-sale/ - brief.md, report.md (sale form, inventory warnings)
+- screen-inventory/ - brief.md, report.md (location tabs, stock display)
 
-### sessions/phase-1/ (Phase 1 - completed)
-- _overview.md - Phase summary
-- room-schema/ - brief.md, report.md (entities, DAOs, TypeConverters)
-- repository/ - brief.md, report.md (repository layer, domain models)
-- supabase-sync/ - brief.md, report.md (Supabase client, sync service)
-- sync-worker/ - brief.md, report.md (WorkManager, periodic sync)
+### history/phase-0/ (archived)
+### history/phase-1/ (archived)
 
 ### history/
 - index.md - Decisions, patterns, lessons learned
@@ -121,12 +119,44 @@ feature.md, bugfix.md, refactor.md, research.md
 - SyncStatus.kt - Sync state model (IDLE, SYNCING, ERROR)
 - SyncStatusRepository.kt - StateFlow for reactive sync status
 
-**UI Layer (ui/)**
-- theme/Theme.kt - Material 3 theme (placeholder colors)
-- theme/Type.kt - Typography configuration
-- navigation/.gitkeep - NavHost (Phase 2)
-- screens/.gitkeep - Compose screens (Phase 2)
-- components/.gitkeep - Reusable components (Phase 2)
+**UI Layer (ui/) - FULLY IMPLEMENTED**
+
+*theme/*
+- Theme.kt - Material 3 theme (placeholder colors)
+- Type.kt - Typography configuration
+
+*navigation/*
+- Destinations.kt - Sealed class with route definitions and bottom nav items
+- NavGraph.kt - Scaffold with TopAppBar, NavigationBar, and NavHost
+
+*components/*
+- SyncStatusIcon.kt - Animated sync status indicator
+
+*screens/auth/*
+- AuthPreferences.kt - SHA-256 PIN hash storage (SharedPreferences)
+- PinScreen.kt - Large numeric keypad UI with PIN dots
+- PinViewModel.kt - PIN set/verify/lockout logic
+
+*screens/purchase/*
+- PurchaseScreen.kt - Product dropdown, weight/price inputs, total calculation
+- PurchaseViewModel.kt - Form state, validation, transaction creation
+
+*screens/sale/*
+- SaleScreen.kt - Similar to purchase with inventory awareness
+- SaleViewModel.kt - Inventory tracking, over-stock warning
+
+*screens/inventory/*
+- InventoryScreen.kt - Location tabs (TabRow), product list with quantities
+- InventoryViewModel.kt - Location selection, sync integration
+
+*screens/history/*
+- HistoryScreen.kt - Placeholder (Phase 3)
+
+### Test Source (app/src/test/kotlin/com/zagot/zagotplus/)
+- ui/screens/purchase/PurchaseViewModelTest.kt - 10 unit tests
+- ui/screens/sale/SaleViewModelTest.kt - 10 unit tests
+- ui/screens/auth/AuthPreferencesTest.kt - Unit tests (needs Robolectric)
+- ui/screens/auth/PinViewModelTest.kt - Unit tests (needs Robolectric)
 
 ### Resources (app/src/main/res/)
 - values/strings.xml - String resources
