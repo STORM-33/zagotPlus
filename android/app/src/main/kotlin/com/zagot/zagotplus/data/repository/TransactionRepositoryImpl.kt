@@ -209,6 +209,7 @@ class TransactionRepositoryImpl @Inject constructor(
         notes = notes,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        batchId = batchId
     )
 }

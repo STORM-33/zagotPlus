@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T20:25:00Z
+Mode: working
+Active: phase-5-purchase-flow/db-batches
+Since: 2026-01-11T20:27:00Z
 
 ## Blockers
 none

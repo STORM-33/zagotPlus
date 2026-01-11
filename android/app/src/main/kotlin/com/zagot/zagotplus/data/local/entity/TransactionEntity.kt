@@ -28,6 +28,7 @@ import java.util.UUID
  * @property deviceId Identifies which device created the transaction
  * @property createdAt Timestamp when transaction was created
  * @property syncedAt Timestamp when synced to Supabase (null = pending sync)
+ * @property batchId Optional reference to parent purchase batch
  */
 @Entity(
     tableName = "transactions",
@@ -49,6 +50,12 @@ import java.util.UUID
             parentColumns = ["id"],
             childColumns = ["product_id"],
             onDelete = ForeignKey.RESTRICT
+        ),
+        ForeignKey(
+            entity = PurchaseBatchEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["batch_id"],
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [
@@ -56,6 +63,7 @@ import java.util.UUID
         Index(value = ["location_id"]),
         Index(value = ["transfer_location_id"]),
         Index(value = ["product_id"]),
+        Index(value = ["batch_id"]),
         Index(value = ["synced_at"])
     ]
 )
@@ -98,5 +106,8 @@ data class TransactionEntity(
     val createdAt: Instant,
 
     @ColumnInfo(name = "synced_at")
-    val syncedAt: Instant?
+    val syncedAt: Instant?,
+
+    @ColumnInfo(name = "batch_id")
+    val batchId: UUID? = null
 )
