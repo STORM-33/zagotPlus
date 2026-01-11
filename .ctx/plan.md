@@ -8,9 +8,9 @@ Redesign purchase flow: main screen with today's batches history + weight placeh
 
 ## Progress
 - Total sessions: 5
-- Completed: 0
+- Completed: 1
 - Blocked: 0
-- Remaining: 5
+- Remaining: 4
 
 ## Phases
 
@@ -21,7 +21,7 @@ Complete overhaul of purchase screen to support batch transactions (multiple pos
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | db-batches | medium | pending | none |
+| 1 | db-batches | medium | completed | none |
 | 2 | product-images | medium | pending | none |
 | 3 | purchase-main-screen | medium | pending | db-batches |
 | 4 | purchase-entry-flow | high | pending | db-batches, product-images |

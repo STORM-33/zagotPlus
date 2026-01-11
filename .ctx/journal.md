@@ -639,3 +639,34 @@ Features:
 
 Sessions: 4 done (Phase 4), 0 blocked, streak: 4
 **Phase 4 complete!** All supporting UI sessions finished.
+
+---
+
+## 2026-01-11 (Phase 5)
+
+### Session: phase-5/db-batches
+Status: completed
+Complexity: medium
+Duration: ~20 minutes
+
+Objective: Add database support for purchase batches - grouping multiple transaction line items under one client session.
+
+Work Summary:
+- Created Supabase migration for purchase_batches table with batch_id FK on transactions
+- Created PurchaseBatchEntity Room entity with proper FK and indexes
+- Created PurchaseBatchDao with today's batches query (SQLite date functions)
+- Added batch_id column to TransactionEntity with FK to purchase_batches
+- Created Room MIGRATION_1_2 for schema upgrade
+- Created PurchaseBatch domain model
+- Created PurchaseBatchRepository interface
+- Created PurchaseBatchRepositoryImpl with atomic batch+transactions creation
+- Updated RepositoryModule with binding
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(db): add purchase_batches table and batch_id FK` (f3d7933)
+
+Key Decisions:
+- database.withTransaction for atomic batch creation
+- SQLite date functions for today's batches query (localtime aware)
+- batch_id FK with SET_NULL on delete (preserve transactions if batch deleted)
+
+Sessions: 1 done (Phase 5), 0 blocked, streak: 1
