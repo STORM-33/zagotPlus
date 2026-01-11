@@ -606,3 +606,36 @@ Features:
 - Report text format for copy/share
 
 Sessions: 3 done (Phase 4), 0 blocked, streak: 3
+
+---
+
+### Session: phase-4/screen-settings
+Status: completed
+Complexity: low
+
+Objective: Create a Settings screen showing sync status and device configuration.
+
+Work Summary:
+- Created SettingsViewModel with sync status, pending count, location selection
+- Created SettingsScreen with sections: Sync, Device, Data, About
+- Added getSelectedLocationId/setSelectedLocationId to DevicePreferences
+- Added Settings destination with Settings icon
+- Added Settings to overflow menu in NavGraph
+- Sync status from SyncStatusRepository, pending count from TransactionDao
+- Device ID with copy-to-clipboard functionality
+- Location selector with RadioButton list
+- Products navigation from Settings → ProductsScreen
+- App version from BuildConfig.VERSION_NAME
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(settings): add Settings screen with sync status and device config` (f4d4896)
+
+Features:
+- Sync status: Synced / Pending: N / Error with last sync time
+- Manual "Синхронізувати зараз" button
+- Device ID truncated display with copy on tap
+- Location selection persisted in DevicePreferences
+- Products navigation link
+- Version display
+
+Sessions: 4 done (Phase 4), 0 blocked, streak: 4
+**Phase 4 complete!** All supporting UI sessions finished.
