@@ -8,9 +8,9 @@ Complete the remaining UI screens: enhance History with filters/search, add Prod
 
 ## Progress
 - Total sessions: 4
-- Completed: 0
+- Completed: 1
 - Blocked: 0
-- Remaining: 4
+- Remaining: 3
 
 ## Phases
 
@@ -21,7 +21,7 @@ Completes the UI layer with supporting screens for transaction history browsing,
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | screen-history | medium | pending | none |
+| 1 | screen-history | medium | completed | none |
 | 2 | screen-products | medium | pending | none |
 | 3 | screen-reports | medium | pending | none |
 | 4 | screen-settings | low | pending | none |

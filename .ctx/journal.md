@@ -517,3 +517,31 @@ Key Decision:
 
 Sessions: 7 done (Phase 3), 0 blocked, streak: 1
 **Phase 3 complete!** All audit remediation sessions finished.
+
+---
+
+### Session: phase-4/screen-history
+Status: completed
+Complexity: medium
+
+Objective: Enhance the existing History screen with filtering and search capabilities.
+
+Work Summary:
+- Created TransactionQueryBuilder for dynamic SQL filter construction
+- Created TransactionFilter domain model with DateRangePreset enum
+- Extended TransactionDao with RawQuery support for filtered queries
+- Updated TransactionRepository with getFilteredTransactions and getFilteredTransactionCount
+- Updated HistoryViewModel with filter state and filter management methods
+- Enhanced HistoryScreen with filter UI: search field, type chips, date/location dropdowns
+- Pagination works correctly with all filters applied
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(history): add filters and search to History screen` (35538b4)
+
+Features:
+- Filter by transaction type (purchase, sale, transfer in/out)
+- Filter by date range (today, this week, this month, all)
+- Filter by location
+- Search by product name (debounced)
+- Clear filters button when filters active
+
+Sessions: 1 done (Phase 4), 0 blocked, streak: 1
