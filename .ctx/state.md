@@ -10,7 +10,7 @@ none
 
 ## Git
 Branch: feature/phase-1-data-layer
-Uncommitted: 10 files
+Uncommitted: 0 files
 
 ## Stats
 Sessions: 6 done | 0 blocked
