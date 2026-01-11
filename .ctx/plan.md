@@ -1,39 +1,53 @@
-# Plan: Phase 0 - Project Setup
+# Plan: Phase 1 - Data Layer
 
 Created: 2026-01-11
 Status: active
 
 ## Overview
 
-Initialize repository structure, Android project with Hilt, and Supabase backend with schema.
+Implement the local data layer (Room) and Supabase sync infrastructure for offline-first operation.
 
 ## Progress
 
-- Total sessions: 3
-- Completed: 3
+- Total sessions: 4
+- Completed: 4
 - Blocked: 0
 - Remaining: 0
 
+## Historical Context
+
+**Relevant decisions from Phase 0:**
+- Conflict-free sync: UNIQUE constraint on `local_id` (UUID generated client-side)
+- Computed inventory: Database VIEW summing transactions
+- Hilt setup: `@HiltAndroidApp` on App class, `@AndroidEntryPoint` on Activity
+
+**Patterns to reuse:**
+- Gradle version catalog for dependency management
+
 ## Phases
 
-### Phase 0: Setup
-Status: completed
-
-Establish the project foundation: git repository, Android app skeleton, and Supabase database schema.
+### Phase 1: Data Layer
+Status: pending
+Implements the complete data layer: Room database for local storage, repositories for data access, Supabase client for remote operations, and WorkManager for background sync.
 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | init-repo | low | completed | none |
-| 2 | init-android | medium | completed | init-repo |
-| 3 | init-supabase | medium | completed | init-repo |
+| 1 | room-schema | medium | completed | none |
+| 2 | repository | medium | completed | room-schema |
+| 3 | supabase-sync | high | completed | room-schema |
+| 4 | sync-worker | medium | completed | repository, supabase-sync |
 
 ## Dependencies Graph
 
 ```
-init-repo -> init-android
-init-repo -> init-supabase
+room-schema -> repository
+room-schema -> supabase-sync
+repository -> sync-worker
+supabase-sync -> sync-worker
 ```
+
+Execution order: room-schema → (repository || supabase-sync) → sync-worker
 
 ## Open Questions
 
@@ -41,7 +55,7 @@ init-repo -> init-supabase
 
 ## Notes
 
-- `.ctx/` structure already exists from memory initialization
-- Session 1 focuses on git setup, .gitignore, README
+- Room entities must match Supabase schema exactly for sync to work
+- Repository provides single source of truth interface to UI
+- Supabase-sync is highest complexity due to bidirectional sync logic
 - Sessions 2 and 3 can run in parallel after session 1
-- No historical context (first plan)
