@@ -1,7 +1,9 @@
 # Plan: Phase 2 - Core UI
 
 Created: 2026-01-11
-Status: active
+Status: archived
+Archived: 2026-01-11
+Archive Path: .ctx/history/2026-01-11_phase-2-core-ui/
 
 ## Overview
 
@@ -10,9 +12,9 @@ Build the core user interface: navigation structure, PIN authentication, and the
 ## Progress
 
 - Total sessions: 5
-- Completed: 4
+- Completed: 5
 - Blocked: 0
-- Remaining: 1
+- Remaining: 0
 
 ## Historical Context
 
@@ -43,7 +45,7 @@ Sessions:
 |---|---------|------------|--------|------------|
 | 1 | navigation | medium | completed | none |
 | 2 | auth-pin | low | completed | navigation |
-| 3 | screen-purchase | high | pending | navigation |
+| 3 | screen-purchase | high | completed | navigation |
 | 4 | screen-sale | high | completed | navigation |
 | 5 | screen-inventory | medium | completed | navigation |
 

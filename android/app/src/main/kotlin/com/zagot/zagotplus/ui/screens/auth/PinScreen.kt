@@ -57,9 +57,9 @@ fun PinScreen(
                 modifier = Modifier.padding(bottom = 32.dp)
             )
 
-            if (uiState.errorMessage != null) {
+            uiState.errorMessage?.let { errorMessage ->
                 Text(
-                    text = uiState.errorMessage!!,
+                    text = errorMessage,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,

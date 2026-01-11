@@ -12,7 +12,7 @@ hilt = "2.48.1"
 
 # AndroidX versions
 activityCompose = "1.8.2"
-composeBom = "2024.01.00"
+composeBom = "2023.10.01"
 coreKtx = "1.12.0"
 lifecycleRuntimeKtx = "2.7.0"
 navigationCompose = "2.7.6"
@@ -69,6 +69,7 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
+hilt-work-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hiltWork" }
 
 # WorkManager
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }

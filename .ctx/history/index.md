@@ -8,6 +8,7 @@ Last updated: 2026-01-11
 |------|------|----------|--------|
 | Phase 0: Setup | 2026-01-11 | 3 | completed |
 | Phase 1: Data Layer | 2026-01-11 | 4 | completed |
+| Phase 2: Core UI | 2026-01-11 | 5 | completed |
 
 ## Decisions Log
 
@@ -32,6 +33,18 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 1 | KEEP policy for periodic work | Prevents duplicate schedule registration | sync-worker |
 | 2026-01-11 | Phase 1 | fallbackToDestructiveMigration | Dev mode convenience (will add migrations for prod) | room-schema |
 | 2026-01-11 | Phase 1 | OnConflictStrategy.REPLACE in DAOs | Enables sync upserts for duplicate handling | room-schema |
+| 2026-01-11 | Phase 2 | Bottom nav order: Purchase→Sale→Inventory→History | Matches typical workflow frequency | navigation |
+| 2026-01-11 | Phase 2 | Start destination: Purchase | Most common operation | navigation |
+| 2026-01-11 | Phase 2 | Sync icon states (4 variants) | CloudDone/Cloud/Sync/CloudOff for clear status | navigation |
+| 2026-01-11 | Phase 2 | SHA-256 for PIN hash | Simple deterrent, not security-critical | auth-pin |
+| 2026-01-11 | Phase 2 | SharedPreferences for PIN | Consistent with SyncPreferences pattern | auth-pin |
+| 2026-01-11 | Phase 2 | No biometrics | Minimal scope per requirements | auth-pin |
+| 2026-01-11 | Phase 2 | Large circular buttons | Tablet-friendly UI for PIN entry | auth-pin |
+| 2026-01-11 | Phase 2 | collectAsStateWithLifecycle | Lifecycle-aware state collection | screen-purchase |
+| 2026-01-11 | Phase 2 | BigDecimal for calculations | Financial precision | screen-purchase |
+| 2026-01-11 | Phase 2 | Negative inventory allowed | Business warning, not technical blocker | screen-sale |
+| 2026-01-11 | Phase 2 | Refresh button (not pull-to-refresh) | Compose BOM 2024.01.00 lacks PullToRefreshBox | screen-inventory |
+| 2026-01-11 | Phase 2 | Display all products even with 0 inventory | Completeness for stock tracking | screen-inventory |
 
 ## Lessons Learned
 
@@ -46,6 +59,11 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 1 | TypeConverters validate at compile time | Room KSP catches mapping errors early |
 | 2026-01-11 | Phase 1 | Extension functions clean entity mapping | Keep repository implementations concise |
 | 2026-01-11 | Phase 1 | WorkManager constraints require proper policy | KEEP prevents duplicate periodic schedules |
+| 2026-01-11 | Phase 2 | material-icons-extended increases APK size | Can optimize with R8 proguard rules if needed |
+| 2026-01-11 | Phase 2 | Android Context tests need Robolectric | Pure ViewModel tests work without it |
+| 2026-01-11 | Phase 2 | JVM memory crashes during test | Reduce Gradle heap to 1GB for constrained env |
+| 2026-01-11 | Phase 2 | BigDecimal.compareTo for test assertions | scale-independent equality checking |
+| 2026-01-11 | Phase 2 | lifecycle-runtime-compose needed | Required for collectAsStateWithLifecycle |
 
 ## Patterns & Solutions
 
@@ -68,7 +86,19 @@ Last updated: 2026-01-11
 | Pending sync tracking | syncedAt=null for unsynced transactions | repository, supabase-sync |
 | Periodic background work | WorkManager with ExistingPeriodicWorkPolicy.KEEP | sync-worker |
 | Network-aware sync | Constraints.Builder().setRequiredNetworkType(CONNECTED) | sync-worker |
+| Navigation with bottom bar | Sealed class Destinations + NavigationBar + NavHost | navigation |
+| Auth gate pattern | Check isAuthenticated before showing main content | auth-pin |
+| PIN lockout | Track failed attempts, show countdown timer | auth-pin |
+| SHA-256 hash storage | MessageDigest + hex encoding for simple deterrent | auth-pin |
+| Form validation | UiState computed property (canSave) | screen-purchase, screen-sale |
+| Price auto-fill | Set default price on product selection | screen-purchase, screen-sale |
+| Snackbar feedback | ScaffoldState.snackbarHostState for success/error | screen-purchase, screen-sale |
+| Inventory warning | Compare entered weight to available, show warning | screen-sale |
+| Location tabs | TabRow with selectedTabIndex for location switching | screen-inventory |
+| Negative inventory display | Red color + warning icon for negative values | screen-inventory |
+| Refresh button pattern | IconButton in TopAppBar when no pull-to-refresh | screen-inventory |
+| ViewModel test pattern | MockK for repositories, runTest for coroutines | screen-purchase, screen-sale |
 
 ## Tags
 
-#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync
+#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk

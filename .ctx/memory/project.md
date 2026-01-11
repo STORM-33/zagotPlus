@@ -108,15 +108,20 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 1 complete** - Data layer fully implemented. Ready for Phase 2 (Core UI).
+**Phase 2 complete** - Core UI implemented. Ready for Phase 3 (Supporting UI).
 
 ### Verified Working
-- Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 12MB APK)
+- Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
 - Hilt DI: Components generated correctly
 - Supabase migration: Schema SQL ready for deployment
 - Room database: Entities, DAOs, TypeConverters working
 - Repository layer: Offline-first data access with domain models
 - Sync infrastructure: Push/pull sync with WorkManager scheduling
+- Navigation: Bottom nav with 4 destinations
+- PIN auth: 4-digit entry with lockout
+- Purchase screen: Product selection, weight/price input, transaction creation
+- Sale screen: Inventory awareness, exceeding-stock warning
+- Inventory screen: Location tabs, negative inventory highlighting
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)
