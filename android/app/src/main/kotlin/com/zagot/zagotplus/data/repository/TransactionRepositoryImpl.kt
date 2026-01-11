@@ -2,6 +2,7 @@ package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
@@ -19,7 +20,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class TransactionRepositoryImpl @Inject constructor(
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val devicePreferences: DevicePreferences
 ) : TransactionRepository {
 
     override fun getAllTransactions(): Flow<List<Transaction>> =
@@ -51,7 +53,7 @@ class TransactionRepositoryImpl @Inject constructor(
             pricePerKg = pricePerKg,
             totalAmount = totalAmount,
             notes = notes?.ifBlank { null },
-            deviceId = null, // TODO: Set device ID from shared prefs
+            deviceId = devicePreferences.getDeviceId(),
             createdAt = Instant.now(),
             syncedAt = null
         )
@@ -78,7 +80,7 @@ class TransactionRepositoryImpl @Inject constructor(
             pricePerKg = pricePerKg,
             totalAmount = totalAmount,
             notes = notes?.ifBlank { null },
-            deviceId = null,
+            deviceId = devicePreferences.getDeviceId(),
             createdAt = Instant.now(),
             syncedAt = null
         )
@@ -94,6 +96,7 @@ class TransactionRepositoryImpl @Inject constructor(
     ): Pair<Transaction, Transaction> {
         val transferId = UUID.randomUUID().toString()
         val now = Instant.now()
+        val deviceId = devicePreferences.getDeviceId()
 
         val outEntity = TransactionEntity(
             id = UUID.randomUUID(),
@@ -106,7 +109,7 @@ class TransactionRepositoryImpl @Inject constructor(
             pricePerKg = null,
             totalAmount = null,
             notes = null,
-            deviceId = null,
+            deviceId = deviceId,
             createdAt = now,
             syncedAt = null
         )
@@ -122,7 +125,7 @@ class TransactionRepositoryImpl @Inject constructor(
             pricePerKg = null,
             totalAmount = null,
             notes = null,
-            deviceId = null,
+            deviceId = deviceId,
             createdAt = now,
             syncedAt = null
         )
