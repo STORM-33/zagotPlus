@@ -299,3 +299,28 @@ Issues:
 - Manual device testing recommended for full verification
 
 Sessions: 9 done, 0 blocked, streak: 2
+
+---
+
+### Session: phase-2/screen-purchase
+Status: completed
+Complexity: high
+
+Objective: Build purchase screen for buying goods from population with product selection, weight input, price calculation, and transaction creation.
+
+Work Summary:
+- Added lifecycle-runtime-compose dependency for collectAsStateWithLifecycle
+- PurchaseScreen already implemented with product dropdown, weight/price inputs
+- PurchaseViewModel with form state, validation, and transaction creation
+- Created 10 unit tests for ViewModel (all passing)
+- Tests cover: loading, selection, calculation, validation, save/error handling
+- Build and tests successful
+- Commit: `feat(purchase): implement purchase screen with ViewModel and tests` (2fca5b9)
+
+Key Decisions:
+- Used collectAsStateWithLifecycle for lifecycle-aware state collection
+- BigDecimal for all financial calculations (precision)
+- canSave computed property for clean form validation
+- compareTo for BigDecimal assertions in tests (scale independence)
+
+Sessions: 10 done, 0 blocked, streak: 3
