@@ -2,6 +2,7 @@ package com.zagot.zagotplus.domain.repository
 
 import com.zagot.zagotplus.domain.model.Product
 import kotlinx.coroutines.flow.Flow
+import java.math.BigDecimal
 import java.util.UUID
 
 /**
@@ -23,4 +24,23 @@ interface ProductRepository {
      * Get product by ID (one-time read).
      */
     suspend fun getProductById(id: UUID): Product?
+
+    /**
+     * Create a new product.
+     */
+    suspend fun createProduct(
+        name: String,
+        defaultBuyPrice: BigDecimal?,
+        defaultSellPrice: BigDecimal?
+    ): Product
+
+    /**
+     * Update an existing product.
+     */
+    suspend fun updateProduct(product: Product)
+
+    /**
+     * Toggle product active status.
+     */
+    suspend fun toggleProductActive(productId: UUID)
 }

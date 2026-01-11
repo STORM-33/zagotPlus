@@ -35,8 +35,25 @@ class DevicePreferences @Inject constructor(
         return newId
     }
 
+    /**
+     * Get the selected location ID for this device.
+     * Returns null if no location is selected.
+     */
+    fun getSelectedLocationId(): UUID? {
+        val existing = prefs.getString(KEY_SELECTED_LOCATION, null)
+        return existing?.let { UUID.fromString(it) }
+    }
+
+    /**
+     * Set the selected location ID for this device.
+     */
+    fun setSelectedLocationId(locationId: UUID) {
+        prefs.edit().putString(KEY_SELECTED_LOCATION, locationId.toString()).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "zagot_device_prefs"
         private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_SELECTED_LOCATION = "selected_location"
     }
 }

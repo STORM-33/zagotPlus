@@ -6,6 +6,8 @@ import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.math.BigDecimal
+import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +32,41 @@ class ProductRepositoryImpl @Inject constructor(
 
     override suspend fun getProductById(id: UUID): Product? =
         productDao.getById(id)?.toDomain()
+
+    override suspend fun createProduct(
+        name: String,
+        defaultBuyPrice: BigDecimal?,
+        defaultSellPrice: BigDecimal?
+    ): Product {
+        val entity = ProductEntity(
+            id = UUID.randomUUID(),
+            name = name,
+            defaultBuyPrice = defaultBuyPrice,
+            defaultSellPrice = defaultSellPrice,
+            isActive = true,
+            createdAt = Instant.now()
+        )
+        productDao.insert(entity)
+        return entity.toDomain()
+    }
+
+    override suspend fun updateProduct(product: Product) {
+        val entity = ProductEntity(
+            id = product.id,
+            name = product.name,
+            defaultBuyPrice = product.defaultBuyPrice,
+            defaultSellPrice = product.defaultSellPrice,
+            isActive = product.isActive,
+            createdAt = product.createdAt
+        )
+        productDao.update(entity)
+    }
+
+    override suspend fun toggleProductActive(productId: UUID) {
+        val existing = productDao.getById(productId) ?: return
+        val updated = existing.copy(isActive = !existing.isActive)
+        productDao.update(updated)
+    }
 
     private fun ProductEntity.toDomain() = Product(
         id = id,

@@ -517,3 +517,125 @@ Key Decision:
 
 Sessions: 7 done (Phase 3), 0 blocked, streak: 1
 **Phase 3 complete!** All audit remediation sessions finished.
+
+---
+
+### Session: phase-4/screen-history
+Status: completed
+Complexity: medium
+
+Objective: Enhance the existing History screen with filtering and search capabilities.
+
+Work Summary:
+- Created TransactionQueryBuilder for dynamic SQL filter construction
+- Created TransactionFilter domain model with DateRangePreset enum
+- Extended TransactionDao with RawQuery support for filtered queries
+- Updated TransactionRepository with getFilteredTransactions and getFilteredTransactionCount
+- Updated HistoryViewModel with filter state and filter management methods
+- Enhanced HistoryScreen with filter UI: search field, type chips, date/location dropdowns
+- Pagination works correctly with all filters applied
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(history): add filters and search to History screen` (35538b4)
+
+Features:
+- Filter by transaction type (purchase, sale, transfer in/out)
+- Filter by date range (today, this week, this month, all)
+- Filter by location
+- Search by product name (debounced)
+- Clear filters button when filters active
+
+Sessions: 1 done (Phase 4), 0 blocked, streak: 1
+
+---
+
+### Session: phase-4/screen-products
+Status: completed
+Complexity: medium
+
+Objective: Create a Product management screen with CRUD operations.
+
+Work Summary:
+- Extended ProductRepository with createProduct, updateProduct, toggleProductActive methods
+- Implemented CRUD operations in ProductRepositoryImpl
+- Created ProductsViewModel with dialog state, validation, and operations
+- Created ProductsScreen with LazyColumn, FAB, and product cards
+- Created AddEditProductDialog for add/edit operations
+- Added Products destination with overflow menu navigation
+- Conditionally hide main TopAppBar/BottomBar on secondary screens
+- Created ProductsViewModelTest with 16 tests
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Tests successful: 16/16 pass
+- Commit: `feat(products): add product management screen with CRUD operations` (897f311)
+
+Features:
+- List all products (active first, then inactive)
+- Add new product with validation
+- Edit existing product
+- Toggle active/inactive status (no delete - referential integrity)
+- Inactive products shown greyed with "Неактивний" label
+- Name validation (required), price validation (positive numbers)
+
+Sessions: 2 done (Phase 4), 0 blocked, streak: 2
+
+---
+
+### Session: phase-4/screen-reports
+Status: completed
+Complexity: medium
+
+Objective: Create a Reports screen showing daily transaction summaries with export capability.
+
+Work Summary:
+- Created ReportsViewModel with date selection and summary computation
+- Created ReportsScreen with Material3 DatePickerDialog
+- Summary cards for purchases and sales (kg, UAH totals)
+- Product breakdown showing per-product purchases and sales
+- Location breakdown showing per-location purchases and sales
+- Transfer summary listing all movements between locations
+- Copy to clipboard via ClipboardManager
+- Share intent via Intent.ACTION_SEND
+- Added Reports destination with Assessment icon
+- Added Reports to overflow menu in NavGraph
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(ui): add Reports screen with daily summaries` (2d0081b)
+
+Features:
+- Date picker defaults to today
+- Summary cards with color-coded containers
+- "Немає даних за цей день" for empty days
+- Report text format for copy/share
+
+Sessions: 3 done (Phase 4), 0 blocked, streak: 3
+
+---
+
+### Session: phase-4/screen-settings
+Status: completed
+Complexity: low
+
+Objective: Create a Settings screen showing sync status and device configuration.
+
+Work Summary:
+- Created SettingsViewModel with sync status, pending count, location selection
+- Created SettingsScreen with sections: Sync, Device, Data, About
+- Added getSelectedLocationId/setSelectedLocationId to DevicePreferences
+- Added Settings destination with Settings icon
+- Added Settings to overflow menu in NavGraph
+- Sync status from SyncStatusRepository, pending count from TransactionDao
+- Device ID with copy-to-clipboard functionality
+- Location selector with RadioButton list
+- Products navigation from Settings → ProductsScreen
+- App version from BuildConfig.VERSION_NAME
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(settings): add Settings screen with sync status and device config` (f4d4896)
+
+Features:
+- Sync status: Synced / Pending: N / Error with last sync time
+- Manual "Синхронізувати зараз" button
+- Device ID truncated display with copy on tap
+- Location selection persisted in DevicePreferences
+- Products navigation link
+- Version display
+
+Sessions: 4 done (Phase 4), 0 blocked, streak: 4
+**Phase 4 complete!** All supporting UI sessions finished.

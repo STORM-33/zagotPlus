@@ -10,6 +10,7 @@ Last updated: 2026-01-11
 | Phase 1: Data Layer | 2026-01-11 | 4 | completed | history/phase-1-data-layer |
 | Phase 2: Core UI | 2026-01-11 | 5 | completed | history/phase-2-core-ui |
 | Phase 3: Audit Remediation | 2026-01-11 | 7 | completed | history/phase-3-audit-remediation |
+| Phase 4: Supporting UI | 2026-01-11 | 4 | completed | history/phase-4-supporting-ui |
 
 ## Decisions Log
 
@@ -54,6 +55,14 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 3 | Salt + PBKDF2 for PIN hashing | Security hardening over simple SHA-256 | fix-pin-security |
 | 2026-01-11 | Phase 3 | Persisted lockout with timestamp | Survives app restart, uses monotonic time | fix-pin-security |
 | 2026-01-11 | Phase 3 | String type for decimal DTOs | Preserves exact precision in JSON serialization | fix-decimal-precision |
+| 2026-01-11 | Phase 4 | RawQuery for dynamic filtering | Flexible WHERE clauses vs multiple fixed queries | screen-history |
+| 2026-01-11 | Phase 4 | 300ms debounce for search | Avoid excessive queries while typing | screen-history |
+| 2026-01-11 | Phase 4 | Navigation via overflow menu | Products, Reports, Settings are secondary screens | screen-products |
+| 2026-01-11 | Phase 4 | No delete, only deactivate | Referential integrity for products | screen-products |
+| 2026-01-11 | Phase 4 | Active products sorted first | Better UX for product list | screen-products |
+| 2026-01-11 | Phase 4 | DatePickerDialog defaults to today | Most common use case for reports | screen-reports |
+| 2026-01-11 | Phase 4 | BigDecimal.sumOf for aggregation | Accurate decimal summation | screen-reports |
+| 2026-01-11 | Phase 4 | Location selection in DevicePreferences | Persist default location across sessions | screen-settings |
 
 ## Lessons Learned
 
@@ -76,6 +85,9 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 3 | Supabase client cannot be unit-tested directly | Library starts internal coroutines, causes hangs | test-sync-service |
 | 2026-01-11 | Phase 3 | Extract interface for testability | Wrap Supabase calls in interface for mocking | test-sync-service |
 | 2026-01-11 | Phase 3 | SharedPreferences for device UUID | Same pattern as SyncPreferences | implement-device-id |
+| 2026-01-11 | Phase 4 | TransactionQueryBuilder for SQL | Cleaner than string concatenation | screen-history |
+| 2026-01-11 | Phase 4 | Filter state resets on app restart | Not persisted - per session only | screen-history |
+| 2026-01-11 | Phase 4 | Summary computation in ViewModel | Flexibility over DAO aggregation | screen-reports |
 
 ## Patterns & Solutions
 
@@ -118,7 +130,18 @@ Last updated: 2026-01-11
 | Lockout persistence | Store failed attempts + timestamp in SharedPreferences | fix-pin-security |
 | Monotonic lockout timing | SystemClock.elapsedRealtime() for tamper-resistant countdown | fix-pin-security |
 | Decimal DTO serialization | Use String instead of Double for BigDecimal in DTOs | fix-decimal-precision |
+| Dynamic SQL filters | TransactionQueryBuilder with @RawQuery for flexible WHERE | screen-history |
+| Debounced search input | 300ms delay before executing search query | screen-history |
+| Secondary screen navigation | Overflow menu for Products/Reports/Settings | screen-products |
+| Soft delete pattern | Toggle active status instead of delete for referential integrity | screen-products |
+| Sorted list display | Active items first, then inactive (greyed) | screen-products |
+| Dialog-based CRUD | AddEditProductDialog for inline editing | screen-products |
+| Daily summary reports | Filter transactions by date, aggregate by product/location | screen-reports |
+| Clipboard + Share export | ClipboardManager for copy, Intent.ACTION_SEND for share | screen-reports |
+| Settings sections | Group settings by category (Sync, Device, Data, About) | screen-settings |
+| Device ID display | Truncated UUID with tap-to-copy functionality | screen-settings |
+| Location selector | RadioButton list with persisted selection | screen-settings |
 
 ## Tags
 
-#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk
+#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk #filtering #crud #reports #settings

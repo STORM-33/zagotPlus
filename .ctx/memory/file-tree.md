@@ -1,12 +1,13 @@
 # File Tree
 
-Updated: 2026-01-11 (Post-Phase 3 Reflect)
+Updated: 2026-01-11 (Post-Phase 4 Reflect)
 
 ## Overview
 
 Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, sync, and UI layers.
-**Core UI + audit remediation complete** - Phase 3 done. Data, sync, and UI layers hardened.
+**Phases 0-4 complete** - Data layer, core UI, audit remediation, and supporting UI all implemented.
+**Next**: Phase 5 (Hardware integration - scales, printer)
 
 ## Root (/)
 
@@ -36,22 +37,16 @@ plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status
 ### templates/ (4 session templates)
 feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/phase-3.1/ (audit remediation - completed, pending archive)
-- fix-sync-partial-failure/ - Sealed class for Success/Partial/Failure
-- test-sync-service/ - SyncService tests (@Ignored - needs interface extraction)
-
-### sessions/phase-3.2/ (audit remediation - completed, pending archive)
-- fix-database-migrations/ - Remove destructive fallback
-- implement-device-id/ - DevicePreferences for transaction tracking
-- test-inventory-computation/ - 9 unit tests for computeInventory
-
-### sessions/phase-3.3/ (audit remediation - completed, pending archive)
-- fix-decimal-precision/ - String DTOs for BigDecimal precision
-- fix-pin-security-brief.md, fix-pin-security-report.md - Salt + persistent lockout
+### sessions/phase-4-supporting-ui/ (completed, pending archive)
+- screen-history/ - Filter/search UI with RawQuery builder
+- screen-products/ - CRUD operations with validation
+- screen-reports/ - Daily summaries with export
+- screen-settings/ - Sync status, device config
 
 ### history/phase-0/ (archived)
 ### history/phase-1/ (archived)
 ### history/phase-2/ (pending archive)
+### history/phase-3-audit-remediation/ (archived)
 
 ### history/
 - index.md - Decisions, patterns, lessons learned
@@ -136,8 +131,8 @@ feature.md, bugfix.md, refactor.md, research.md
 - Type.kt - Typography configuration
 
 *navigation/*
-- Destinations.kt - Sealed class with route definitions and bottom nav items
-- NavGraph.kt - Scaffold with TopAppBar, NavigationBar, and NavHost
+- Destinations.kt - Sealed class with route definitions, bottom nav items, and secondary destinations (Products, Reports, Settings)
+- NavGraph.kt - Scaffold with TopAppBar (overflow menu), NavigationBar, and NavHost
 
 *components/*
 - SyncStatusIcon.kt - Animated sync status indicator
@@ -160,11 +155,25 @@ feature.md, bugfix.md, refactor.md, research.md
 - InventoryViewModel.kt - Location selection, sync integration
 
 *screens/history/*
-- HistoryScreen.kt - Placeholder (Phase 3)
+- HistoryScreen.kt - Transaction list with filters (type, date, location, product search)
+- HistoryViewModel.kt - Filter state management, pagination
+
+*screens/products/*
+- ProductsScreen.kt - Product list with CRUD operations, FAB, dialogs
+- ProductsViewModel.kt - Add/edit/toggle operations, validation
+
+*screens/reports/*
+- ReportsScreen.kt - Daily summaries with date picker, copy/share export
+- ReportsViewModel.kt - Summary computation, product/location breakdowns
+
+*screens/settings/*
+- SettingsScreen.kt - Sync status, device ID, location selector, app info
+- SettingsViewModel.kt - Sync status, pending count, location selection
 
 ### Test Source (app/src/test/kotlin/com/zagot/zagotplus/)
 - ui/screens/purchase/PurchaseViewModelTest.kt - 10 unit tests
 - ui/screens/sale/SaleViewModelTest.kt - 10 unit tests
+- ui/screens/products/ProductsViewModelTest.kt - 16 unit tests
 - ui/screens/auth/AuthPreferencesTest.kt - 9 unit tests (salt, lockout, persistence)
 - ui/screens/auth/PinViewModelTest.kt - Unit tests (needs Robolectric)
 - data/repository/TransactionRepositoryImplTest.kt - 9 unit tests (computeInventory)

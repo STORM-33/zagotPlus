@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.sqlite.db.SupportSQLiteQuery
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -129,4 +131,18 @@ interface TransactionDao {
      */
     @Query("DELETE FROM transactions")
     suspend fun deleteAll()
+
+    /**
+     * Get filtered transactions with dynamic query.
+     * Use TransactionQueryBuilder to construct the query.
+     */
+    @RawQuery
+    suspend fun getFiltered(query: SupportSQLiteQuery): List<TransactionEntity>
+
+    /**
+     * Get filtered transaction count with dynamic query.
+     * Use TransactionQueryBuilder to construct the count query.
+     */
+    @RawQuery
+    suspend fun getFilteredCount(query: SupportSQLiteQuery): Int
 }
