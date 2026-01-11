@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T01:35:00Z
+Mode: working
+Active: phase-2/screen-inventory
+Since: 2026-01-11T01:32:00Z
 
 ## Blockers
 none
