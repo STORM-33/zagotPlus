@@ -4,6 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,8 +17,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,12 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -51,6 +49,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.ui.components.EmptyState
+import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -63,7 +63,6 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
     val listState = rememberLazyListState()
@@ -83,117 +82,83 @@ fun HistoryScreen(
         }
     }
 
-    LaunchedEffect(uiState.error) {
-        uiState.error?.let { error ->
-            snackbarHostState.showSnackbar(error)
-            viewModel.dismissError()
-        }
-    }
+    Column(
+        modifier = modifier.fillMaxSize()
+    ) {
+        // Filter section
+        FilterSection(
+            searchQuery = uiState.searchQuery,
+            onSearchQueryChange = viewModel::setSearchQuery,
+            selectedTypes = uiState.selectedTypes,
+            onTypeToggle = viewModel::toggleTypeFilter,
+            dateRangePreset = uiState.dateRangePreset,
+            onDateRangePresetChange = viewModel::setDateRangePreset,
+            selectedLocationId = uiState.selectedLocationId,
+            locations = uiState.locations,
+            onLocationChange = viewModel::setLocationFilter,
+            hasActiveFilters = uiState.hasActiveFilters,
+            onClearFilters = viewModel::clearFilters
+        )
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Історія")
-                        if (uiState.totalCount > 0) {
-                            Text(
-                                text = "Всього: ${uiState.totalCount}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { viewModel.refresh() },
-                        enabled = !uiState.isLoading
+        Divider()
+
+        // Content
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Оновити"
+                        CircularProgressIndicator()
+                    }
+                }
+                uiState.transactions.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EmptyState(
+                            icon = EmptyStateIcons.History,
+                            title = if (uiState.hasActiveFilters) {
+                                "Немає результатів"
+                            } else {
+                                "Немає транзакцій"
+                            },
+                            description = if (uiState.hasActiveFilters) {
+                                "Спробуйте змінити фільтри"
+                            } else {
+                                "Транзакції з'являться тут після закупівель або продажів"
+                            },
+                            actionLabel = if (uiState.hasActiveFilters) "Скинути фільтри" else null,
+                            onAction = if (uiState.hasActiveFilters) viewModel::clearFilters else null
                         )
                     }
                 }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Filter section
-            FilterSection(
-                searchQuery = uiState.searchQuery,
-                onSearchQueryChange = viewModel::setSearchQuery,
-                selectedTypes = uiState.selectedTypes,
-                onTypeToggle = viewModel::toggleTypeFilter,
-                dateRangePreset = uiState.dateRangePreset,
-                onDateRangePresetChange = viewModel::setDateRangePreset,
-                selectedLocationId = uiState.selectedLocationId,
-                locations = uiState.locations,
-                onLocationChange = viewModel::setLocationFilter,
-                hasActiveFilters = uiState.hasActiveFilters,
-                onClearFilters = viewModel::clearFilters
-            )
-
-            Divider()
-
-            // Content
-            Box(modifier = Modifier.fillMaxSize()) {
-                when {
-                    uiState.isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                    uiState.transactions.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (uiState.hasActiveFilters) {
-                                    "Немає транзакцій за фільтрами"
-                                } else {
-                                    "Немає транзакцій"
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(uiState.transactions, key = { it.id }) { item ->
+                            HistoryItemCard(
+                                item = item,
+                                decimalFormat = decimalFormat,
+                                dateFormatter = dateFormatter
                             )
                         }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            state = listState
-                        ) {
-                            items(uiState.transactions, key = { it.id }) { item ->
-                                HistoryItemRow(
-                                    item = item,
-                                    decimalFormat = decimalFormat,
-                                    dateFormatter = dateFormatter
-                                )
-                                Divider()
-                            }
 
-                            if (uiState.isLoadingMore) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                    }
+                        if (uiState.isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 }
                             }
                         }
@@ -410,7 +375,7 @@ private fun LocationDropdown(
 }
 
 @Composable
-private fun HistoryItemRow(
+private fun HistoryItemCard(
     item: HistoryDisplayItem,
     decimalFormat: DecimalFormat,
     dateFormatter: DateTimeFormatter,
@@ -423,6 +388,12 @@ private fun HistoryItemRow(
         TransactionType.TRANSFER_IN -> "Переміщення (вх.)"
     }
 
+    val containerColor = when (item.type) {
+        TransactionType.PURCHASE -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        TransactionType.SALE -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+        TransactionType.TRANSFER_OUT, TransactionType.TRANSFER_IN -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+    }
+
     val typeColor = when (item.type) {
         TransactionType.PURCHASE -> MaterialTheme.colorScheme.primary
         TransactionType.SALE -> MaterialTheme.colorScheme.error
@@ -432,78 +403,84 @@ private fun HistoryItemRow(
 
     val localTime = item.createdAt.atZone(ZoneId.systemDefault())
     val weightText = "${decimalFormat.format(item.weightKg.abs())} кг"
-    val amountText = item.totalAmount?.let { "${decimalFormat.format(it)} грн" }
+    val amountText = item.totalAmount?.let { "₴${decimalFormat.format(it)}" }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.productName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = item.locationName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = weightText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                if (amountText != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = amountText,
+                        text = item.productName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = item.locationName,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-        }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = typeText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = typeColor
-                )
-                if (item.isSynced) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Синхронізовано",
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = weightText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
+                    if (amountText != null) {
+                        Text(
+                            text = amountText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
-            Text(
-                text = dateFormatter.format(localTime),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = typeText,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = typeColor
+                    )
+                    if (item.isSynced) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Синхронізовано",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Text(
+                    text = dateFormatter.format(localTime),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
