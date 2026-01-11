@@ -10,9 +10,9 @@ Build the core user interface: navigation structure, PIN authentication, and the
 ## Progress
 
 - Total sessions: 5
-- Completed: 3
+- Completed: 4
 - Blocked: 0
-- Remaining: 2
+- Remaining: 1
 
 ## Historical Context
 
@@ -45,7 +45,7 @@ Sessions:
 | 2 | auth-pin | low | completed | navigation |
 | 3 | screen-purchase | high | pending | navigation |
 | 4 | screen-sale | high | completed | navigation |
-| 5 | screen-inventory | medium | pending | navigation |
+| 5 | screen-inventory | medium | completed | navigation |
 
 ## Dependencies Graph
 

@@ -324,3 +324,48 @@ Key Decisions:
 - compareTo for BigDecimal assertions in tests (scale independence)
 
 Sessions: 10 done, 0 blocked, streak: 3
+
+---
+
+### Session: phase-2/screen-sale
+Status: completed
+Complexity: high
+
+Objective: Build sale screen for wholesale sales with product selection, weight/price inputs, inventory display, and transaction creation.
+
+Work Summary:
+- SaleScreen already implemented with product dropdown showing available inventory
+- SaleViewModel with inventory tracking, form validation, and sale transaction creation
+- Shows "В наявності" (available) weight for selected product
+- Displays "Перевищує залишок!" warning when weight exceeds inventory
+- Price auto-fills from product's defaultSellPrice
+- Build successful
+- Commit: `feat(sale): implement sale screen` (previous session)
+
+Sessions: 11 done, 0 blocked, streak: 4
+
+---
+
+### Session: phase-2/screen-inventory
+Status: completed
+Complexity: medium
+
+Objective: Build inventory screen showing current stock levels per location with location switching.
+
+Work Summary:
+- Created InventoryViewModel with location selection and sync integration
+- Implemented InventoryScreen with location tabs (TabRow)
+- Display all products with computed inventory from TransactionRepository
+- 0 kg shown in gray for products with no inventory
+- Negative inventory highlighted in red with warning icon
+- Refresh button in toolbar to reload data and trigger sync
+- Sync status icon showing current state
+- Last sync timestamp displayed in footer
+- Build successful
+- Commit: `feat(inventory): implement inventory screen with location tabs` (351e35b)
+
+Key Decisions:
+- Refresh button instead of pull-to-refresh: BOM 2024.01.00 lacks PullToRefreshBox
+- All products displayed even with 0 inventory for completeness
+
+Sessions: 12 done, 0 blocked, streak: 5
