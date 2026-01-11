@@ -10,9 +10,9 @@ Address critical issues from code audit. Priority: stability first (sync, tests,
 ## Progress
 
 - Total sessions: 7
-- Completed: 2
+- Completed: 3
 - Blocked: 0
-- Remaining: 5
+- Remaining: 4
 
 ## Historical Context
 
@@ -51,7 +51,7 @@ Fix migrations, device ID, and add inventory tests.
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 3 | fix-database-migrations | medium | pending | none |
+| 3 | fix-database-migrations | medium | completed | none |
 | 4 | implement-device-id | low | pending | none |
 | 5 | test-inventory-computation | medium | pending | none |
 

@@ -438,3 +438,25 @@ Key Decision:
 - Partial treated as success in WorkManager - data is safe, pull retries automatically
 
 Sessions: 1 done (Phase 3), 0 blocked, streak: 1
+
+---
+
+### Session: phase-3.2/fix-database-migrations
+Status: completed
+Complexity: medium
+
+Objective: Remove destructive migration fallback and implement proper Room migration strategy.
+
+Work Summary:
+- Removed `.fallbackToDestructiveMigration()` from DatabaseModule
+- Added `MIGRATIONS` array for future schema migrations
+- Using `.addMigrations(*MIGRATIONS)` instead
+- Added documentation warning against destructive migrations
+- Database version unchanged (remains 1)
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `fix(db): remove destructive migration fallback` (91def2d)
+
+Key Decision:
+- Infrastructure-only fix - no actual migrations needed yet since schema is still at version 1
+
+Sessions: 3 done (Phase 3), 0 blocked, streak: 3
