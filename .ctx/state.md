@@ -3,13 +3,13 @@
 ## Current
 Mode: ready
 Active: none
-Since: 2026-01-11T19:57:00Z
+Since: 2026-01-11T20:25:00Z
 
 ## Blockers
 none
 
 ## Git
-Branch: master
+Branch: feature/purchase-flow-redesign
 Uncommitted: none
 
 ## Stats
@@ -22,4 +22,4 @@ Scratchpad: 0 items
 none
 
 ## Next
-**Phase 4 archived!** Run `plan` for Phase 5 (Hardware Integration).
+Run `work` to start session 1: db-batches (database support for purchase batches).
