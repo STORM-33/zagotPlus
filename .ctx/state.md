@@ -9,7 +9,7 @@ Since: 2026-01-11
 none
 
 ## Git
-Branch: master
+Branch: feature/phase-1-data-layer
 Uncommitted: 0 files
 
 ## Stats
@@ -22,4 +22,4 @@ Scratchpad: 0 items
 none
 
 ## Next
-Phase 0 complete! Run `plan` to create Phase 1: Data Layer
+Run `work` to start session room-schema (Phase 1, Session 1)
