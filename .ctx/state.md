@@ -1,9 +1,9 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T11:00:00Z
+Mode: working
+Active: phase-3.1/test-sync-service
+Since: 2026-01-11T13:00:00Z
 
 ## Blockers
 none
