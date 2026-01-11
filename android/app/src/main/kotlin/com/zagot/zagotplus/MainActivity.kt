@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.sync.SyncManager
 import com.zagot.zagotplus.sync.SyncStatusRepository
 import com.zagot.zagotplus.ui.navigation.NavGraph
@@ -20,17 +21,24 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
     @Inject
     lateinit var syncStatusRepository: SyncStatusRepository
-    
+
     @Inject
     lateinit var syncManager: SyncManager
-    
+
+    @Inject
+    lateinit var authPreferences: AuthPreferences
+
     private var isAuthenticated by mutableStateOf(false)
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Restore auth state from persistent storage (survives process death)
+        isAuthenticated = authPreferences.isAuthenticated()
+
         setContent {
             ZagotPlusTheme {
                 Surface(
@@ -44,7 +52,10 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         PinScreen(
-                            onAuthenticated = { isAuthenticated = true }
+                            onAuthenticated = {
+                                authPreferences.setAuthenticated(true)
+                                isAuthenticated = true
+                            }
                         )
                     }
                 }

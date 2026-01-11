@@ -29,6 +29,14 @@ class TransactionRepositoryImpl @Inject constructor(
             entities.map { it.toDomain() }
         }
 
+    override fun getPaginatedTransactions(limit: Int, offset: Int): Flow<List<Transaction>> =
+        transactionDao.getAllPaginatedFlow(limit, offset).map { entities ->
+            entities.map { it.toDomain() }
+        }
+
+    override fun getTotalTransactionCount(): Flow<Int> =
+        transactionDao.getTotalCountFlow()
+
     override fun getTransactionsByLocation(locationId: UUID): Flow<List<Transaction>> =
         transactionDao.getByLocationFlow(locationId).map { entities ->
             entities.map { it.toDomain() }

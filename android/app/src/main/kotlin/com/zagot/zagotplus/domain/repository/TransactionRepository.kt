@@ -13,8 +13,21 @@ interface TransactionRepository {
 
     /**
      * Get all transactions as reactive Flow.
+     * WARNING: Loads all transactions into memory. Use getPaginatedTransactions for large datasets.
      */
     fun getAllTransactions(): Flow<List<Transaction>>
+
+    /**
+     * Get paginated transactions as reactive Flow.
+     * @param limit Number of transactions per page
+     * @param offset Number of transactions to skip
+     */
+    fun getPaginatedTransactions(limit: Int, offset: Int): Flow<List<Transaction>>
+
+    /**
+     * Get total transaction count.
+     */
+    fun getTotalTransactionCount(): Flow<Int>
 
     /**
      * Get transactions for a specific location.

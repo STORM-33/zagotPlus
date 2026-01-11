@@ -49,6 +49,7 @@ fun InventoryScreen(
     viewModel: InventoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val displayItems by viewModel.displayItems.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
@@ -124,8 +125,6 @@ fun InventoryScreen(
                         }
                     }
                     else -> {
-                        val displayItems = viewModel.getDisplayItems()
-                        
                         if (displayItems.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),

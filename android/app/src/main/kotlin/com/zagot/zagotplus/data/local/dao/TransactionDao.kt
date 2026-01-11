@@ -37,15 +37,44 @@ interface TransactionDao {
 
     /**
      * Get all transactions as Flow (reactive for UI).
+     * WARNING: Loads all transactions into memory. Use getAllPaginatedFlow for large datasets.
      */
     @Query("SELECT * FROM transactions ORDER BY created_at DESC")
     fun getAllFlow(): Flow<List<TransactionEntity>>
+
+    /**
+     * Get paginated transactions as Flow (memory-efficient for UI).
+     * @param limit Number of transactions to load per page
+     * @param offset Number of transactions to skip
+     */
+    @Query("SELECT * FROM transactions ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    fun getAllPaginatedFlow(limit: Int, offset: Int): Flow<List<TransactionEntity>>
 
     /**
      * Get all transactions (one-time read).
      */
     @Query("SELECT * FROM transactions ORDER BY created_at DESC")
     suspend fun getAll(): List<TransactionEntity>
+
+    /**
+     * Get paginated transactions (one-time read).
+     * @param limit Number of transactions to load per page
+     * @param offset Number of transactions to skip
+     */
+    @Query("SELECT * FROM transactions ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    suspend fun getAllPaginated(limit: Int, offset: Int): List<TransactionEntity>
+
+    /**
+     * Get total transaction count (for pagination UI).
+     */
+    @Query("SELECT COUNT(*) FROM transactions")
+    fun getTotalCountFlow(): Flow<Int>
+
+    /**
+     * Get total transaction count (one-time read).
+     */
+    @Query("SELECT COUNT(*) FROM transactions")
+    suspend fun getTotalCount(): Int
 
     /**
      * Get transaction by ID.

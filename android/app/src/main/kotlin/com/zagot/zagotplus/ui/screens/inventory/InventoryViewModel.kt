@@ -14,9 +14,12 @@ import com.zagot.zagotplus.sync.SyncStatusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -55,6 +58,29 @@ class InventoryViewModel @Inject constructor(
     val uiState: StateFlow<InventoryUiState> = _uiState.asStateFlow()
 
     val syncStatus: Flow<SyncStatus> = syncStatusRepository.syncStatus
+
+    /**
+     * Derived StateFlow that computes display items only when state changes.
+     * Avoids creating new lists on every recomposition.
+     */
+    val displayItems: StateFlow<List<InventoryDisplayItem>> = _uiState
+        .map { state ->
+            val inventoryMap = state.inventory.associateBy { it.productId }
+            state.products.map { product ->
+                val weight = inventoryMap[product.id]?.totalWeightKg ?: BigDecimal.ZERO
+                InventoryDisplayItem(
+                    productId = product.id,
+                    productName = product.name,
+                    weightKg = weight,
+                    isNegative = weight < BigDecimal.ZERO
+                )
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     init {
         loadInitialData()
@@ -157,21 +183,5 @@ class InventoryViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    fun getDisplayItems(): List<InventoryDisplayItem> {
-        val state = _uiState.value
-        val products = state.products
-        val inventoryMap = state.inventory.associateBy { it.productId }
-
-        return products.map { product ->
-            val weight = inventoryMap[product.id]?.totalWeightKg ?: BigDecimal.ZERO
-            InventoryDisplayItem(
-                productId = product.id,
-                productName = product.name,
-                weightKg = weight,
-                isNegative = weight < BigDecimal.ZERO
-            )
-        }
     }
 }

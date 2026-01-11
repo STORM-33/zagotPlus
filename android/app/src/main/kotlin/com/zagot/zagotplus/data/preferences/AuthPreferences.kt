@@ -129,13 +129,31 @@ class AuthPreferences @Inject constructor(
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    // === Session Management ===
+
+    /**
+     * Mark user as authenticated for current session.
+     * Persists across process death.
+     */
+    fun setAuthenticated(authenticated: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTHENTICATED, authenticated).apply()
+    }
+
+    /**
+     * Check if user is authenticated in current session.
+     */
+    fun isAuthenticated(): Boolean {
+        return prefs.getBoolean(KEY_AUTHENTICATED, false)
+    }
+
     companion object {
         private const val PREFS_NAME = "zagot_auth_prefs"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
-        
+        private const val KEY_AUTHENTICATED = "is_authenticated"
+
         private const val MAX_ATTEMPTS = 3
         private const val LOCKOUT_DURATION_MS = 30_000L
     }
