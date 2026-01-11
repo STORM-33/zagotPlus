@@ -670,3 +670,32 @@ Key Decisions:
 - batch_id FK with SET_NULL on delete (preserve transactions if batch deleted)
 
 Sessions: 1 done (Phase 5), 0 blocked, streak: 1
+
+---
+
+### Session: phase-5/product-images
+Status: completed
+Complexity: medium
+Duration: ~15 minutes
+
+Objective: Add image support to products for display in purchase flow product grid.
+
+Work Summary:
+- Created Supabase migration for image_uri column on products table
+- Added image_uri column to ProductEntity with Room MIGRATION_2_3
+- Updated Product domain model, ProductDto with imageUri property
+- Updated ProductRepositoryImpl with imageUri in entity mapping
+- Added Coil dependency (v2.5.0) for async image loading
+- Updated ProductCard to show 48dp product image or placeholder
+- Added image picker to AddEditProductDialog using ActivityResultContracts
+- Updated ProductsViewModel with dialogImageUri state management
+- Fixed ProductsViewModelTest for new createProduct signature
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(products): add image support to products` (f092025)
+
+Key Decisions:
+- Store content:// URI directly (no file copying to app storage)
+- Coil handles caching and async loading automatically
+- Placeholder icon (Icons.Filled.Image) for products without images
+
+Sessions: 2 done (Phase 5), 0 blocked, streak: 2
