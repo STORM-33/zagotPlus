@@ -30,6 +30,8 @@ class PinViewModelTest {
     @Test
     fun `initial state is SET_PIN when no PIN set`() {
         every { authPreferences.isPinSet() } returns false
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         
         viewModel = PinViewModel(authPreferences)
         
@@ -39,6 +41,8 @@ class PinViewModelTest {
     @Test
     fun `initial state is VERIFY_PIN when PIN exists`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         
         viewModel = PinViewModel(authPreferences)
         
@@ -48,6 +52,8 @@ class PinViewModelTest {
     @Test
     fun `entering 4 digits in SET_PIN switches to CONFIRM_PIN`() {
         every { authPreferences.isPinSet() } returns false
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         viewModel = PinViewModel(authPreferences)
         
         viewModel.onDigitPressed(1)
@@ -63,6 +69,8 @@ class PinViewModelTest {
     @Test
     fun `matching confirmation PIN authenticates user`() {
         every { authPreferences.isPinSet() } returns false
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         viewModel = PinViewModel(authPreferences)
         
         // Set PIN
@@ -84,6 +92,8 @@ class PinViewModelTest {
     @Test
     fun `non-matching confirmation PIN resets to SET_PIN`() {
         every { authPreferences.isPinSet() } returns false
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         viewModel = PinViewModel(authPreferences)
         
         // Set PIN
@@ -106,6 +116,8 @@ class PinViewModelTest {
     @Test
     fun `correct PIN verification authenticates user`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         every { authPreferences.verifyPin("1234") } returns true
         viewModel = PinViewModel(authPreferences)
         
@@ -114,12 +126,15 @@ class PinViewModelTest {
         viewModel.onDigitPressed(3)
         viewModel.onDigitPressed(4)
         
+        verify { authPreferences.clearLockout() }
         assertTrue(viewModel.uiState.value.isAuthenticated)
     }
 
     @Test
     fun `incorrect PIN verification shows error`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1)
         every { authPreferences.verifyPin(any()) } returns false
         viewModel = PinViewModel(authPreferences)
         
@@ -128,6 +143,7 @@ class PinViewModelTest {
         viewModel.onDigitPressed(9)
         viewModel.onDigitPressed(9)
         
+        verify { authPreferences.recordFailedAttempt() }
         assertFalse(viewModel.uiState.value.isAuthenticated)
         assertNotNull(viewModel.uiState.value.errorMessage)
         assertEquals(1, viewModel.uiState.value.failedAttempts)
@@ -136,6 +152,8 @@ class PinViewModelTest {
     @Test
     fun `3 failed attempts triggers lockout`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returnsMany listOf(false, false, false, true)
+        every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1, 2, 3)
         every { authPreferences.verifyPin(any()) } returns false
         viewModel = PinViewModel(authPreferences)
         
@@ -153,6 +171,8 @@ class PinViewModelTest {
     @Test
     fun `lockout clears after 30 seconds`() = runTest {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returnsMany listOf(false, false, false, true, true, false)
+        every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1, 2, 3)
         every { authPreferences.verifyPin(any()) } returns false
         viewModel = PinViewModel(authPreferences)
         
@@ -173,6 +193,8 @@ class PinViewModelTest {
     @Test
     fun `backspace removes last digit`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isLockedOut() } returns false
+        every { authPreferences.getFailedAttempts() } returns 0
         viewModel = PinViewModel(authPreferences)
         
         viewModel.onDigitPressed(1)

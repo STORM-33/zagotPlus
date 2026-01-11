@@ -168,7 +168,7 @@ fun SaleScreen(
             )
 
             // Total display
-            val formattedTotal = uiState.total?.let { total -> "${decimalFormat.format(total.toDouble())} грн" } ?: "—"
+            val formattedTotal = uiState.total?.let { total -> "${decimalFormat.format(total)} грн" } ?: "—"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

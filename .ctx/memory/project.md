@@ -108,7 +108,7 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Phase 2 complete** - Core UI implemented. Ready for Phase 3 (Supporting UI).
+**Phase 3 complete** - Audit remediation. 7 of 7 sessions complete.
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
@@ -117,11 +117,15 @@ Physical goods movement creates two linked transactions atomically:
 - Room database: Entities, DAOs, TypeConverters working
 - Repository layer: Offline-first data access with domain models
 - Sync infrastructure: Push/pull sync with WorkManager scheduling
+- Sync partial failure handling: Success/Partial/Failure states
+- Database migrations: No more destructive fallback
+- Device ID: Persistent UUID per device for transaction tracking
 - Navigation: Bottom nav with 4 destinations
-- PIN auth: 4-digit entry with lockout
+- PIN auth: 4-digit entry with PBKDF2 hashing and persistent lockout
 - Purchase screen: Product selection, weight/price input, transaction creation
 - Sale screen: Inventory awareness, exceeding-stock warning
 - Inventory screen: Location tabs, negative inventory highlighting
+- Inventory computation: Unit tested (9 tests)
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)

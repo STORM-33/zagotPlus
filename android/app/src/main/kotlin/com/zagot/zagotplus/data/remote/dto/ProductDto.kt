@@ -19,10 +19,10 @@ data class ProductDto(
     val name: String,
 
     @SerialName("default_buy_price")
-    val defaultBuyPrice: Double?,
+    val defaultBuyPrice: String?,
 
     @SerialName("default_sell_price")
-    val defaultSellPrice: Double?,
+    val defaultSellPrice: String?,
 
     @SerialName("is_active")
     val isActive: Boolean,
@@ -36,8 +36,8 @@ data class ProductDto(
     fun toEntity(): ProductEntity = ProductEntity(
         id = UUID.fromString(id),
         name = name,
-        defaultBuyPrice = defaultBuyPrice?.let { BigDecimal.valueOf(it) },
-        defaultSellPrice = defaultSellPrice?.let { BigDecimal.valueOf(it) },
+        defaultBuyPrice = defaultBuyPrice?.let { BigDecimal(it) },
+        defaultSellPrice = defaultSellPrice?.let { BigDecimal(it) },
         isActive = isActive,
         createdAt = Instant.parse(createdAt)
     )
@@ -49,8 +49,8 @@ data class ProductDto(
         fun fromEntity(entity: ProductEntity): ProductDto = ProductDto(
             id = entity.id.toString(),
             name = entity.name,
-            defaultBuyPrice = entity.defaultBuyPrice?.toDouble(),
-            defaultSellPrice = entity.defaultSellPrice?.toDouble(),
+            defaultBuyPrice = entity.defaultBuyPrice?.toPlainString(),
+            defaultSellPrice = entity.defaultSellPrice?.toPlainString(),
             isActive = entity.isActive,
             createdAt = entity.createdAt.toString()
         )

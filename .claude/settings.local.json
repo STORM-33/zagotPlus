@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\vovod\\\\Documents\\\\zagotPlus\\\\android && gradlew.bat test --no-daemon 2>&1\":*)",
+      "Bash(ls:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nchore: update state after fix-sync-partial-failure\n\nSession: phase-3.1/fix-sync-partial-failure completed\nEOF\n\\)\")",
+      "Bash(./gradlew :app:testDebugUnitTest:*)",
+      "Bash(cmd.exe /c \"gradlew.bat :app:testDebugUnitTest\")",
+      "Bash(bash -c:*)"
+    ]
+  }
+}

@@ -21,23 +21,32 @@ class PinViewModel @Inject constructor(
 
     init {
         val isSettingPin = !authPreferences.isPinSet()
+        val isLockedOut = authPreferences.isLockedOut()
+        val failedAttempts = authPreferences.getFailedAttempts()
+        
         _uiState.value = _uiState.value.copy(
-            mode = if (isSettingPin) PinMode.SET_PIN else PinMode.VERIFY_PIN
+            mode = if (isSettingPin) PinMode.SET_PIN else PinMode.VERIFY_PIN,
+            isLockedOut = isLockedOut,
+            failedAttempts = failedAttempts
         )
+        
+        if (isLockedOut) {
+            startLockoutCountdown()
+        }
     }
 
     fun onDigitPressed(digit: Int) {
-        val currentPin = _uiState.value.currentPin
-        if (currentPin.length >= 4) return
+        val currentState = _uiState.value
+        if (currentState.currentPin.length >= 4 || currentState.isLockedOut) return
 
-        val newPin = currentPin + digit.toString()
-        _uiState.value = _uiState.value.copy(
+        val newPin = currentState.currentPin + digit.toString()
+        _uiState.value = currentState.copy(
             currentPin = newPin,
             errorMessage = null
         )
 
         if (newPin.length == 4) {
-            when (_uiState.value.mode) {
+            when (currentState.mode) {
                 PinMode.SET_PIN -> handleSetPinComplete(newPin)
                 PinMode.CONFIRM_PIN -> handleConfirmPinComplete(newPin)
                 PinMode.VERIFY_PIN -> handleVerifyPinComplete(newPin)
@@ -47,7 +56,7 @@ class PinViewModel @Inject constructor(
 
     fun onBackspacePressed() {
         val currentPin = _uiState.value.currentPin
-        if (currentPin.isEmpty()) return
+        if (currentPin.isEmpty() || _uiState.value.isLockedOut) return
 
         _uiState.value = _uiState.value.copy(
             currentPin = currentPin.dropLast(1),
@@ -80,31 +89,40 @@ class PinViewModel @Inject constructor(
 
     private fun handleVerifyPinComplete(pin: String) {
         if (authPreferences.verifyPin(pin)) {
-            _uiState.value = _uiState.value.copy(isAuthenticated = true)
+            authPreferences.clearLockout()
+            _uiState.value = _uiState.value.copy(
+                isAuthenticated = true,
+                failedAttempts = 0
+            )
         } else {
-            val newFailedAttempts = _uiState.value.failedAttempts + 1
+            authPreferences.recordFailedAttempt()
+            val failedAttempts = authPreferences.getFailedAttempts()
+            val isLockedOut = authPreferences.isLockedOut()
             
-            if (newFailedAttempts >= 3) {
+            if (isLockedOut) {
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
                     errorMessage = "Забагато невдалих спроб. Зачекайте 30 секунд.",
-                    failedAttempts = newFailedAttempts,
+                    failedAttempts = failedAttempts,
                     isLockedOut = true
                 )
-                startLockoutTimer()
+                startLockoutCountdown()
             } else {
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
-                    errorMessage = "Неправильний PIN. Спроб залишилось: ${3 - newFailedAttempts}",
-                    failedAttempts = newFailedAttempts
+                    errorMessage = "Неправильний PIN. Спроб залишилось: ${3 - failedAttempts}",
+                    failedAttempts = failedAttempts
                 )
             }
         }
     }
 
-    private fun startLockoutTimer() {
+    private fun startLockoutCountdown() {
         viewModelScope.launch {
-            delay(30_000) // 30 seconds
+            while (authPreferences.isLockedOut()) {
+                delay(1000)
+            }
+            authPreferences.clearLockout()
             _uiState.value = _uiState.value.copy(
                 isLockedOut = false,
                 failedAttempts = 0,

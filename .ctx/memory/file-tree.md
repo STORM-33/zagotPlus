@@ -1,12 +1,12 @@
 # File Tree
 
-Updated: 2026-01-11 (Post-Phase 2 Reflect)
+Updated: 2026-01-11 (Post-Phase 3 Reflect)
 
 ## Overview
 
 Zagot+ is organized as a monorepo with Android app, Supabase backend, and Claude Auto OS workspace.
 Android follows Clean Architecture with clear separation: data, domain, sync, and UI layers.
-**Core UI is fully implemented** - Phase 2 complete. Data + UI layers working.
+**Core UI + audit remediation complete** - Phase 3 done. Data, sync, and UI layers hardened.
 
 ## Root (/)
 
@@ -36,16 +36,22 @@ plan.md, work.md, do.md, reflect.md, validate.md, archive.md, blocked.md, status
 ### templates/ (4 session templates)
 feature.md, bugfix.md, refactor.md, research.md
 
-### sessions/phase-2/ (Phase 2 - completed, pending archive)
-- _overview.md - Phase summary
-- navigation/ - brief.md, report.md (NavHost, bottom bar, routing)
-- auth-pin/ - brief.md, report.md (PIN entry, lockout, hashing)
-- screen-purchase/ - brief.md, report.md (purchase form, ViewModel, tests)
-- screen-sale/ - brief.md, report.md (sale form, inventory warnings)
-- screen-inventory/ - brief.md, report.md (location tabs, stock display)
+### sessions/phase-3.1/ (audit remediation - completed, pending archive)
+- fix-sync-partial-failure/ - Sealed class for Success/Partial/Failure
+- test-sync-service/ - SyncService tests (@Ignored - needs interface extraction)
+
+### sessions/phase-3.2/ (audit remediation - completed, pending archive)
+- fix-database-migrations/ - Remove destructive fallback
+- implement-device-id/ - DevicePreferences for transaction tracking
+- test-inventory-computation/ - 9 unit tests for computeInventory
+
+### sessions/phase-3.3/ (audit remediation - completed, pending archive)
+- fix-decimal-precision/ - String DTOs for BigDecimal precision
+- fix-pin-security-brief.md, fix-pin-security-report.md - Salt + persistent lockout
 
 ### history/phase-0/ (archived)
 ### history/phase-1/ (archived)
+### history/phase-2/ (pending archive)
 
 ### history/
 - index.md - Decisions, patterns, lessons learned
@@ -95,8 +101,11 @@ feature.md, bugfix.md, refactor.md, research.md
 *repository/* - Repository implementations
 - LocationRepositoryImpl.kt - Location repository with entity-domain mapping
 - ProductRepositoryImpl.kt - Product repository with entity-domain mapping
-- TransactionRepositoryImpl.kt - Transaction repository with inventory computation
+- TransactionRepositoryImpl.kt - Transaction repository with inventory computation + device ID
 - RepositoryModule.kt - Hilt bindings for repositories
+
+*preferences/* - SharedPreferences wrappers
+- DevicePreferences.kt - Persistent UUID per device for transaction tracking
 
 **Domain Layer (domain/) - FULLY IMPLEMENTED**
 
@@ -115,6 +124,7 @@ feature.md, bugfix.md, refactor.md, research.md
 - SyncWorker.kt - CoroutineWorker with @HiltWorker for background sync
 - SyncManager.kt - Periodic (15min) and manual sync scheduling
 - SyncService.kt - Push/pull sync logic with deduplication
+- SyncResult.kt - Sealed class: Success/Partial/Failure with phase tracking
 - SyncPreferences.kt - SharedPreferences for last sync timestamp
 - SyncStatus.kt - Sync state model (IDLE, SYNCING, ERROR)
 - SyncStatusRepository.kt - StateFlow for reactive sync status
@@ -133,9 +143,9 @@ feature.md, bugfix.md, refactor.md, research.md
 - SyncStatusIcon.kt - Animated sync status indicator
 
 *screens/auth/*
-- AuthPreferences.kt - SHA-256 PIN hash storage (SharedPreferences)
+- AuthPreferences.kt - Salted SHA-256 PIN hash storage with persistent lockout
 - PinScreen.kt - Large numeric keypad UI with PIN dots
-- PinViewModel.kt - PIN set/verify/lockout logic
+- PinViewModel.kt - PIN set/verify/lockout logic (survives app restart)
 
 *screens/purchase/*
 - PurchaseScreen.kt - Product dropdown, weight/price inputs, total calculation
@@ -155,8 +165,10 @@ feature.md, bugfix.md, refactor.md, research.md
 ### Test Source (app/src/test/kotlin/com/zagot/zagotplus/)
 - ui/screens/purchase/PurchaseViewModelTest.kt - 10 unit tests
 - ui/screens/sale/SaleViewModelTest.kt - 10 unit tests
-- ui/screens/auth/AuthPreferencesTest.kt - Unit tests (needs Robolectric)
+- ui/screens/auth/AuthPreferencesTest.kt - 9 unit tests (salt, lockout, persistence)
 - ui/screens/auth/PinViewModelTest.kt - Unit tests (needs Robolectric)
+- data/repository/TransactionRepositoryImplTest.kt - 9 unit tests (computeInventory)
+- sync/SyncServiceTest.kt - @Ignored (needs interface extraction for Supabase mocking)
 
 ### Resources (app/src/main/res/)
 - values/strings.xml - String resources

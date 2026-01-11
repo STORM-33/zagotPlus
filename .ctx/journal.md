@@ -460,3 +460,60 @@ Key Decision:
 - Infrastructure-only fix - no actual migrations needed yet since schema is still at version 1
 
 Sessions: 3 done (Phase 3), 0 blocked, streak: 3
+
+---
+
+### Session: phase-3.2/implement-device-id
+Status: completed
+Complexity: low
+
+Objective: Implement persistent device ID for transaction tracking.
+
+Work Summary:
+- Created DevicePreferences class for UUID generation/storage
+- Injected into TransactionRepositoryImpl
+- Updated all transaction creation methods to use deviceId
+- Build successful
+- Commit: `feat(data): implement device ID for transaction tracking` (ac62800)
+
+Sessions: 4 done (Phase 3), 0 blocked, streak: 1
+
+---
+
+### Session: phase-3.2/test-inventory-computation
+Status: completed
+Complexity: medium
+
+Objective: Add unit tests for computeInventory function in TransactionRepositoryImpl.
+
+Work Summary:
+- Created TransactionRepositoryImplTest with 9 test cases
+- Tests cover: empty transactions, single purchase, net calculation, grouping, transfers, null filtering
+- Used MockK for mocking TransactionDao and DevicePreferences
+- All 9 tests pass: `testDebugUnitTest > 9 tests completed`
+- Commit: `test(inventory): add unit tests for computeInventory` (cc2f63f)
+
+Sessions: 5 done (Phase 3), 0 blocked, streak: 2
+
+---
+
+### Session: phase-3.3/fix-decimal-precision
+Status: completed
+Complexity: medium
+
+Objective: Fix BigDecimal→Double conversion that loses precision in DTOs and UI.
+
+Work Summary:
+- Changed ProductDto to use String for defaultBuyPrice/defaultSellPrice
+- Changed TransactionDto to use String for weightKg/pricePerKg/totalAmount
+- Updated DTO conversion: BigDecimal(string) and toPlainString()
+- Removed .toDouble() from PurchaseScreen and SaleScreen formatting
+- Build successful
+- Commit: `fix(sync): use String instead of Double for decimal values in DTOs` (455bd5e)
+
+Key Decision:
+- String type in DTOs preserves exact decimal representation in JSON
+- No floating-point errors during Supabase sync
+
+Sessions: 7 done (Phase 3), 0 blocked, streak: 1
+**Phase 3 complete!** All audit remediation sessions finished.
