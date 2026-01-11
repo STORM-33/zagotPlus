@@ -10,9 +10,9 @@ Build the core user interface: navigation structure, PIN authentication, and the
 ## Progress
 
 - Total sessions: 5
-- Completed: 0
+- Completed: 1
 - Blocked: 0
-- Remaining: 5
+- Remaining: 4
 
 ## Historical Context
 
@@ -41,7 +41,7 @@ Implements navigation, PIN auth, and the three core screens: purchase (buy from 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | navigation | medium | pending | none |
+| 1 | navigation | medium | completed | none |
 | 2 | auth-pin | low | pending | navigation |
 | 3 | screen-purchase | high | pending | navigation |
 | 4 | screen-sale | high | pending | navigation |

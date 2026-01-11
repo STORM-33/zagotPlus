@@ -242,3 +242,28 @@ Notes:
 - Active sessions workspace cleaned
 - Ready for Phase 2: Core UI
 
+---
+
+### Session: phase-2/navigation
+Status: completed
+Duration: ~15 minutes
+
+Objective: Create navigation structure with NavHost, bottom bar, and screen scaffolds.
+
+Work Summary:
+- Created Destinations sealed class with route definitions and bottom nav items
+- Implemented NavGraph with Scaffold, TopAppBar, NavigationBar, and NavHost
+- Added SyncStatusIcon component (animates during sync, shows error state)
+- Created 4 placeholder screens: Purchase, Sale, Inventory, History
+- Updated MainActivity to use NavGraph with injected dependencies
+- Added material-icons-extended dependency for cloud/sync icons
+- Build successful: BUILD SUCCESSFUL (APK: 19MB)
+- Commit: `feat(ui): add navigation structure with bottom bar` (ea9168b)
+
+Key Decisions:
+- Bottom nav order: Purchase → Sale → Inventory → History (matches workflow)
+- Start destination: Purchase screen (most common operation)
+- Sync icon variants: CloudDone (synced), Cloud (never synced), Sync (syncing), CloudOff (error)
+
+Sessions: 8 done, 0 blocked, streak: 1
+
