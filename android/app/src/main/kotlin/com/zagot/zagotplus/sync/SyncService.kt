@@ -3,9 +3,11 @@ package com.zagot.zagotplus.sync
 import android.util.Log
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
+import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
+import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -17,8 +19,8 @@ import javax.inject.Singleton
 /**
  * Service responsible for bidirectional sync between Room and Supabase.
  *
- * Push: Local unsynced transactions → Supabase (upsert by local_id)
- * Pull: New remote transactions → Room (since last sync timestamp)
+ * Push: Local unsynced transactions and batches → Supabase (upsert by local_id)
+ * Pull: New remote transactions and batches → Room (since last sync timestamp)
  *
  * Deduplication is handled by UNIQUE constraint on local_id in Supabase.
  */
@@ -26,6 +28,7 @@ import javax.inject.Singleton
 class SyncService @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val transactionDao: TransactionDao,
+    private val purchaseBatchDao: PurchaseBatchDao,
     private val locationDao: LocationDao,
     private val productDao: ProductDao,
     private val syncPreferences: SyncPreferences
@@ -33,6 +36,7 @@ class SyncService @Inject constructor(
     companion object {
         private const val TAG = "SyncService"
         private const val TABLE_TRANSACTIONS = "transactions"
+        private const val TABLE_PURCHASE_BATCHES = "purchase_batches"
         private const val TABLE_LOCATIONS = "locations"
         private const val TABLE_PRODUCTS = "products"
     }
@@ -51,7 +55,19 @@ class SyncService @Inject constructor(
         // Step 1: Pull reference data (non-critical, log and continue on failure)
         pullReferenceData()
 
-        // Step 2: Push pending transactions
+        // Step 2: Push pending batches (before transactions due to FK)
+        val batchPushResult = try {
+            pushPendingBatches()
+        } catch (e: Exception) {
+            Log.e(TAG, "Batch push failed", e)
+            return SyncResult.Failure(
+                error = e.message ?: "Batch push failed",
+                phase = SyncPhase.PUSH
+            )
+        }
+        Log.d(TAG, "Pushed ${batchPushResult.successCount} batches (${batchPushResult.failedCount} failed)")
+
+        // Step 3: Push pending transactions
         val pushResult = try {
             pushPendingTransactions()
         } catch (e: Exception) {
@@ -63,22 +79,32 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${pushResult.successCount} transactions (${pushResult.failedCount} failed)")
 
-        // Step 3: Pull new transactions
+        // Step 4: Pull new batches
+        val batchPullResult = try {
+            pullNewBatches()
+        } catch (e: Exception) {
+            Log.e(TAG, "Batch pull failed after successful push", e)
+            // Continue to transaction pull
+            0
+        }
+        Log.d(TAG, "Pulled $batchPullResult batches")
+
+        // Step 5: Pull new transactions
         val pullResult = try {
             pullNewTransactions()
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
             return SyncResult.Partial(
-                pushed = pushResult.successCount,
+                pushed = pushResult.successCount + batchPushResult.successCount,
                 pullError = e.message ?: "Pull failed"
             )
         }
         Log.d(TAG, "Pulled $pullResult transactions")
 
         return SyncResult.Success(
-            pushed = pushResult.successCount,
-            pulled = pullResult
+            pushed = pushResult.successCount + batchPushResult.successCount,
+            pulled = pullResult + batchPullResult
         )
     }
 
@@ -166,6 +192,86 @@ class SyncService @Inject constructor(
         }
 
         syncPreferences.setLastSyncTimestamp(Instant.now())
+        return insertCount
+    }
+
+    /**
+     * Push all unsynced local batches to Supabase.
+     * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * @throws Exception if network or critical error occurs
+     */
+    private suspend fun pushPendingBatches(): PushResult {
+        val pending = purchaseBatchDao.getUnsynced()
+        if (pending.isEmpty()) {
+            Log.d(TAG, "No pending batches to push")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${pending.size} pending batches")
+
+        var successCount = 0
+        var failedCount = 0
+
+        for (entity in pending) {
+            try {
+                val dto = PurchaseBatchDto.fromEntity(entity)
+                supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
+                // Mark as synced locally
+                purchaseBatchDao.markSynced(entity.id, Instant.now())
+                successCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push batch ${entity.localId}", e)
+                failedCount++
+                // Continue with next batch - individual failures don't stop sync
+            }
+        }
+
+        return PushResult(successCount, failedCount)
+    }
+
+    /**
+     * Pull new batches from Supabase that were created after last sync.
+     * Inserts or updates local Room database.
+     *
+     * @throws Exception if network error occurs
+     */
+    private suspend fun pullNewBatches(): Int {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        Log.d(TAG, "Pulling batches created after $lastSync")
+
+        val remoteDtos = supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", lastSync.toString())
+                }
+            }
+            .decodeList<PurchaseBatchDto>()
+
+        if (remoteDtos.isEmpty()) {
+            Log.d(TAG, "No new remote batches")
+            return 0
+        }
+
+        Log.d(TAG, "Found ${remoteDtos.size} new remote batches")
+
+        var insertCount = 0
+        for (dto in remoteDtos) {
+            try {
+                // Check if we already have this batch
+                val existing = purchaseBatchDao.getByLocalId(dto.localId)
+                if (existing == null) {
+                    // New batch from another device
+                    val entity = dto.toEntity()
+                    purchaseBatchDao.insert(entity)
+                    insertCount++
+                }
+                // If exists, it's our own batch - skip
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to insert remote batch ${dto.localId}", e)
+            }
+        }
+
         return insertCount
     }
 

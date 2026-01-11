@@ -34,19 +34,25 @@ interface PurchaseBatchDao {
     @Query("SELECT * FROM purchase_batches ORDER BY created_at DESC")
     fun observeAll(): Flow<List<PurchaseBatchEntity>>
 
+    /**
+     * Observe batches created within a date range (index-friendly).
+     */
     @Query("""
         SELECT * FROM purchase_batches 
-        WHERE date(created_at / 1000, 'unixepoch', 'localtime') = date('now', 'localtime')
+        WHERE created_at >= :startMillis AND created_at < :endMillis
         ORDER BY created_at DESC
     """)
-    fun observeTodaysBatches(): Flow<List<PurchaseBatchEntity>>
+    fun observeBatchesInRange(startMillis: Long, endMillis: Long): Flow<List<PurchaseBatchEntity>>
 
+    /**
+     * Get batches created within a date range (index-friendly).
+     */
     @Query("""
         SELECT * FROM purchase_batches 
-        WHERE date(created_at / 1000, 'unixepoch', 'localtime') = date('now', 'localtime')
+        WHERE created_at >= :startMillis AND created_at < :endMillis
         ORDER BY created_at DESC
     """)
-    suspend fun getTodaysBatches(): List<PurchaseBatchEntity>
+    suspend fun getBatchesInRange(startMillis: Long, endMillis: Long): List<PurchaseBatchEntity>
 
     @Query("SELECT * FROM purchase_batches WHERE synced_at IS NULL")
     suspend fun getUnsynced(): List<PurchaseBatchEntity>

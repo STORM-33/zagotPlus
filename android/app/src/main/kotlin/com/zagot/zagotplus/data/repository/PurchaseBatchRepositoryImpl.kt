@@ -12,6 +12,8 @@ import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,13 +33,29 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
             entities.map { it.toDomain() }
         }
 
-    override fun observeTodaysBatches(): Flow<List<PurchaseBatch>> =
-        purchaseBatchDao.observeTodaysBatches().map { entities ->
+    override fun observeTodaysBatches(): Flow<List<PurchaseBatch>> {
+        val (startMillis, endMillis) = getTodayRange()
+        return purchaseBatchDao.observeBatchesInRange(startMillis, endMillis).map { entities ->
             entities.map { it.toDomain() }
         }
+    }
 
-    override suspend fun getTodaysBatches(): List<PurchaseBatch> =
-        purchaseBatchDao.getTodaysBatches().map { it.toDomain() }
+    override suspend fun getTodaysBatches(): List<PurchaseBatch> {
+        val (startMillis, endMillis) = getTodayRange()
+        return purchaseBatchDao.getBatchesInRange(startMillis, endMillis).map { it.toDomain() }
+    }
+    
+    /**
+     * Get start and end timestamps for today in device timezone.
+     * Returns pair of (startOfDay, startOfTomorrow) in epoch milliseconds.
+     */
+    private fun getTodayRange(): Pair<Long, Long> {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val startOfDay = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val startOfTomorrow = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return Pair(startOfDay, startOfTomorrow)
+    }
 
     override suspend fun getById(id: UUID): PurchaseBatch? =
         purchaseBatchDao.getById(id)?.toDomain()

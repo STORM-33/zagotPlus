@@ -38,7 +38,8 @@ import java.util.UUID
     indices = [
         Index(value = ["local_id"], unique = true),
         Index(value = ["location_id"]),
-        Index(value = ["synced_at"])
+        Index(value = ["synced_at"]),
+        Index(value = ["created_at"])
     ]
 )
 data class PurchaseBatchEntity(
