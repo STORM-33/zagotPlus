@@ -576,3 +576,33 @@ Features:
 - Name validation (required), price validation (positive numbers)
 
 Sessions: 2 done (Phase 4), 0 blocked, streak: 2
+
+---
+
+### Session: phase-4/screen-reports
+Status: completed
+Complexity: medium
+
+Objective: Create a Reports screen showing daily transaction summaries with export capability.
+
+Work Summary:
+- Created ReportsViewModel with date selection and summary computation
+- Created ReportsScreen with Material3 DatePickerDialog
+- Summary cards for purchases and sales (kg, UAH totals)
+- Product breakdown showing per-product purchases and sales
+- Location breakdown showing per-location purchases and sales
+- Transfer summary listing all movements between locations
+- Copy to clipboard via ClipboardManager
+- Share intent via Intent.ACTION_SEND
+- Added Reports destination with Assessment icon
+- Added Reports to overflow menu in NavGraph
+- Build successful: `assembleDebug` BUILD SUCCESSFUL
+- Commit: `feat(ui): add Reports screen with daily summaries` (2d0081b)
+
+Features:
+- Date picker defaults to today
+- Summary cards with color-coded containers
+- "Немає даних за цей день" for empty days
+- Report text format for copy/share
+
+Sessions: 3 done (Phase 4), 0 blocked, streak: 3
