@@ -2,6 +2,7 @@ package com.zagot.zagotplus.domain.repository
 
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Transaction
+import com.zagot.zagotplus.domain.model.TransactionFilter
 import kotlinx.coroutines.flow.Flow
 import java.math.BigDecimal
 import java.util.UUID
@@ -96,4 +97,21 @@ interface TransactionRepository {
      * Get computed inventory for a specific location.
      */
     fun getInventoryByLocation(locationId: UUID): Flow<List<InventoryItem>>
+
+    /**
+     * Get filtered and paginated transactions.
+     * @param filter Filter criteria
+     * @param limit Number of transactions per page
+     * @param offset Number of transactions to skip
+     */
+    suspend fun getFilteredTransactions(
+        filter: TransactionFilter,
+        limit: Int,
+        offset: Int
+    ): List<Transaction>
+
+    /**
+     * Get count of transactions matching filter criteria.
+     */
+    suspend fun getFilteredTransactionCount(filter: TransactionFilter): Int
 }

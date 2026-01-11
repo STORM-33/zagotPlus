@@ -1,10 +1,12 @@
 package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.local.dao.TransactionQueryBuilder
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Transaction
+import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
@@ -165,6 +167,33 @@ class TransactionRepositoryImpl @Inject constructor(
                     totalWeightKg = totalWeight
                 )
             }
+    }
+
+    override suspend fun getFilteredTransactions(
+        filter: TransactionFilter,
+        limit: Int,
+        offset: Int
+    ): List<Transaction> {
+        val query = TransactionQueryBuilder()
+            .withTypes(filter.types.map { it.toDbValue() })
+            .withLocation(filter.locationId)
+            .withDateRange(filter.startDate, filter.endDate)
+            .withProductNameSearch(filter.productNameSearch)
+            .withPagination(limit, offset)
+            .build()
+
+        return transactionDao.getFiltered(query).map { it.toDomain() }
+    }
+
+    override suspend fun getFilteredTransactionCount(filter: TransactionFilter): Int {
+        val query = TransactionQueryBuilder()
+            .withTypes(filter.types.map { it.toDbValue() })
+            .withLocation(filter.locationId)
+            .withDateRange(filter.startDate, filter.endDate)
+            .withProductNameSearch(filter.productNameSearch)
+            .buildCount()
+
+        return transactionDao.getFilteredCount(query)
     }
 
     private fun TransactionEntity.toDomain() = Transaction(
