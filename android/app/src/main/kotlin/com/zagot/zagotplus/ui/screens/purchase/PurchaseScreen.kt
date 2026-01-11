@@ -130,7 +130,7 @@ fun PurchaseScreen(
 
             // Total display
             val totalFormat = remember { DecimalFormat("#,##0.00") }
-            val formattedTotal = uiState.total?.let { total -> "${totalFormat.format(total.toDouble())} грн" } ?: "—"
+            val formattedTotal = uiState.total?.let { total -> "${totalFormat.format(total)} грн" } ?: "—"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
