@@ -598,7 +598,7 @@ private fun PositionReviewScreen(
         OutlinedTextField(
             value = tareWeightPerUnit,
             onValueChange = onTareWeightChange,
-            label = { Text("Вага одного мішка (кг)") },
+            label = { Text("Вага тари (кг)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
             singleLine = true,
             modifier = Modifier.fillMaxWidth()

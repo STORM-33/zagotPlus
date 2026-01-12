@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -20,13 +21,13 @@ sealed class Destination(
 ) {
     data object Purchase : Destination(
         route = "purchase",
-        title = "Закупівля",
+        title = "Закупка",
         icon = Icons.Filled.ShoppingCart
     )
     
     data object PurchaseEntry : Destination(
         route = "purchase_entry",
-        title = "Нова закупівля",
+        title = "Нова закупка",
         icon = Icons.Filled.ShoppingCart
     )
     
@@ -70,6 +71,12 @@ sealed class Destination(
         route = "settings",
         title = "Налаштування",
         icon = Icons.Filled.Settings
+    )
+    
+    data object Transfer : Destination(
+        route = "transfer",
+        title = "Переміщення",
+        icon = Icons.Filled.SwapHoriz
     )
     
     companion object {

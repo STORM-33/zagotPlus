@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -36,6 +37,7 @@ object EmptyStateIcons {
     val History = Icons.Outlined.History
     val Products = Icons.Outlined.Category
     val Transactions = Icons.Outlined.Receipt
+    val Location = Icons.Outlined.Place
     val Generic = Icons.Outlined.Inbox
 }
 

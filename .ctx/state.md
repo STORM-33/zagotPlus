@@ -1,15 +1,15 @@
 # State
 
 ## Current
-Mode: ready
-Active: none
-Since: 2026-01-11T21:40:00Z
+Mode: working
+Active: phase-test-coverage/repository-tests
+Since: 2026-01-12T16:33:00Z
 
 ## Blockers
 none
 
 ## Git
-Branch: master
+Branch: feature/increase-test-coverage
 Uncommitted: none
 
 ## Stats
@@ -22,4 +22,4 @@ Scratchpad: 1 items
 none
 
 ## Next
-Phase 5 merged. Post-merge cleanup completed (3 sessions). Ready for Phase 6 planning or reflect.
+Plan created: "Increase Test Coverage" with 2 sessions (repository-tests, viewmodel-tests). Run `work` to start.
