@@ -5,13 +5,8 @@ import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
-import com.zagot.zagotplus.data.remote.dto.LocationDto
-import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.Columns
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,7 +21,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SyncService @Inject constructor(
-    private val supabaseClient: SupabaseClient,
+    private val syncDataSource: SyncDataSource,
     private val transactionDao: TransactionDao,
     private val purchaseBatchDao: PurchaseBatchDao,
     private val locationDao: LocationDao,
@@ -35,10 +30,6 @@ class SyncService @Inject constructor(
 ) {
     companion object {
         private const val TAG = "SyncService"
-        private const val TABLE_TRANSACTIONS = "transactions"
-        private const val TABLE_PURCHASE_BATCHES = "purchase_batches"
-        private const val TABLE_LOCATIONS = "locations"
-        private const val TABLE_PRODUCTS = "products"
     }
 
     /**
@@ -134,7 +125,7 @@ class SyncService @Inject constructor(
         for (entity in pending) {
             try {
                 val dto = TransactionDto.fromEntity(entity)
-                supabaseClient.postgrest[TABLE_TRANSACTIONS].upsert(dto, onConflict = "local_id")
+                syncDataSource.pushTransaction(dto)
                 // Mark as synced locally
                 transactionDao.markAsSynced(entity.localId, Instant.now())
                 successCount++
@@ -164,13 +155,7 @@ class SyncService @Inject constructor(
         val lastSync = syncPreferences.getLastSyncTimestamp()
         Log.d(TAG, "Pulling transactions created after $lastSync")
 
-        val remoteDtos = supabaseClient.postgrest[TABLE_TRANSACTIONS]
-            .select(Columns.ALL) {
-                filter {
-                    gt("created_at", lastSync.toString())
-                }
-            }
-            .decodeList<TransactionDto>()
+        val remoteDtos = syncDataSource.pullTransactions(lastSync)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote transactions")
@@ -222,7 +207,7 @@ class SyncService @Inject constructor(
         for (entity in pending) {
             try {
                 val dto = PurchaseBatchDto.fromEntity(entity)
-                supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
+                syncDataSource.pushBatch(dto)
                 // Mark as synced locally
                 purchaseBatchDao.markSynced(entity.id, Instant.now())
                 successCount++
@@ -246,13 +231,7 @@ class SyncService @Inject constructor(
         val lastSync = syncPreferences.getLastSyncTimestamp()
         Log.d(TAG, "Pulling batches created after $lastSync")
 
-        val remoteDtos = supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
-            .select(Columns.ALL) {
-                filter {
-                    gt("created_at", lastSync.toString())
-                }
-            }
-            .decodeList<PurchaseBatchDto>()
+        val remoteDtos = syncDataSource.pullBatches(lastSync)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote batches")
@@ -289,9 +268,7 @@ class SyncService @Inject constructor(
     private suspend fun pullReferenceData() {
         try {
             // Pull locations
-            val locations = supabaseClient.postgrest[TABLE_LOCATIONS]
-                .select(Columns.ALL)
-                .decodeList<LocationDto>()
+            val locations = syncDataSource.pullLocations()
 
             locations.forEach { dto ->
                 val entity = dto.toEntity()
@@ -305,9 +282,7 @@ class SyncService @Inject constructor(
             Log.d(TAG, "Pulled ${locations.size} locations")
 
             // Pull products
-            val products = supabaseClient.postgrest[TABLE_PRODUCTS]
-                .select(Columns.ALL)
-                .decodeList<ProductDto>()
+            val products = syncDataSource.pullProducts()
 
             products.forEach { dto ->
                 val entity = dto.toEntity()

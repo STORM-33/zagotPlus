@@ -17,12 +17,16 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -40,7 +44,16 @@ class InventoryViewModelTest {
     private lateinit var syncManager: SyncManager
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var viewModel: InventoryViewModel
-    private val testDispatcher = StandardTestDispatcher()
+    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testScope = TestScope(testDispatcher)
+    private val syncStatusFlow = MutableStateFlow(
+        SyncStatus(
+            state = SyncStatus.State.IDLE,
+            lastSyncTime = null,
+            errorMessage = null
+        )
+    )
+    private val inventoryFlow = MutableStateFlow(listOf<InventoryItem>())
 
     private val testLocation1 = Location(
         id = UUID.randomUUID(),
@@ -96,17 +109,20 @@ class InventoryViewModelTest {
         syncManager = mockk(relaxed = true)
         devicePreferences = mockk()
 
+        // Reset the flows
+        inventoryFlow.value = listOf(inventoryItem1, inventoryItem2)
+        
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation1, testLocation2))
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct, testProduct2))
-        every { transactionRepository.getInventoryByLocation(any()) } returns flowOf(listOf(inventoryItem1, inventoryItem2))
-        every { syncStatusRepository.syncStatus } returns flowOf(
-            SyncStatus(
-                state = SyncStatus.State.IDLE,
-                lastSyncTime = null,
-                errorMessage = null
-            )
-        )
+        every { transactionRepository.getInventoryByLocation(any()) } returns inventoryFlow
+        every { syncStatusRepository.syncStatus } returns syncStatusFlow
         every { devicePreferences.getSelectedLocationId() } returns testLocation1.id
+    }
+
+    @After
+    fun tearDown() {
+        testScope.cancel()
+        Dispatchers.resetMain()
     }
 
     private fun createViewModel(): InventoryViewModel {
@@ -121,9 +137,9 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `loads locations and products on init`() = runTest {
+    fun `loads locations and products on init`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(2, state.locations.size)
@@ -132,25 +148,25 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `selects location from device preferences on init`() = runTest {
+    fun `selects location from device preferences on init`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(testLocation1, state.selectedLocation)
     }
 
     @Test
-    fun `loads inventory for selected location`() = runTest {
+    fun `loads inventory for selected location`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(2, state.inventory.size)
     }
 
     @Test
-    fun `selectLocation changes selected location and reloads inventory`() = runTest {
+    fun `selectLocation changes selected location and reloads inventory`() = testScope.runTest {
         val location2Inventory = listOf(
             InventoryItem(
                 locationId = testLocation2.id,
@@ -161,11 +177,11 @@ class InventoryViewModelTest {
         every { transactionRepository.getInventoryByLocation(testLocation2.id) } returns flowOf(location2Inventory)
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
         assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
 
         viewModel.selectLocation(testLocation2)
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(testLocation2, state.selectedLocation)
@@ -173,9 +189,9 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `displayItems computes correctly from state`() = runTest {
+    fun `displayItems computes correctly from state`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         // Check via uiState since displayItems StateFlow needs proper scope subscription
         val state = viewModel.uiState.value
@@ -191,9 +207,9 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `negative inventory flagged correctly in displayItems`() = runTest {
+    fun `negative inventory flagged correctly in displayItems`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         // Check via uiState - negative inventory is product2 with -5.00 weight
         val state = viewModel.uiState.value
@@ -202,12 +218,12 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `products without inventory show zero weight`() = runTest {
+    fun `products without inventory show zero weight`() = testScope.runTest {
         // Only one inventory item exists
         every { transactionRepository.getInventoryByLocation(any()) } returns flowOf(listOf(inventoryItem1))
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         // Verify only 1 inventory item is loaded
         val state = viewModel.uiState.value
@@ -219,22 +235,22 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `refresh triggers sync`() = runTest {
+    fun `refresh triggers sync`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.refresh()
-        advanceUntilIdle()
+        
 
         verify { syncManager.triggerManualSync() }
     }
 
     @Test
-    fun `dismissError clears error`() = runTest {
+    fun `dismissError clears error`() = testScope.runTest {
         every { locationRepository.getAllLocations() } throws RuntimeException("Test error")
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         assertNotNull(viewModel.uiState.value.error)
 
@@ -243,14 +259,14 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun `selectLocation same location does nothing`() = runTest {
+    fun `selectLocation same location does nothing`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
         assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
 
         // Select same location - should be a no-op
         viewModel.selectLocation(testLocation1)
-        advanceUntilIdle()
+        
 
         // State should be unchanged
         assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)

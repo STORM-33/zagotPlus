@@ -11,17 +11,20 @@ import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -36,7 +39,9 @@ class HistoryViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var viewModel: HistoryViewModel
-    private val testDispatcher = StandardTestDispatcher()
+    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testScope = TestScope(testDispatcher)
+    private val transactionCountFlow = MutableStateFlow(2)
 
     private val testProduct = Product(
         id = UUID.randomUUID(),
@@ -86,9 +91,16 @@ class HistoryViewModelTest {
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
-        every { transactionRepository.getTotalTransactionCount() } returns flowOf(2)
+        every { transactionRepository.getTotalTransactionCount() } returns transactionCountFlow
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 2
         coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns listOf(testTransaction, saleTransaction)
+    }
+
+    @After
+    fun tearDown() {
+        // Cancel any running coroutines in the test scope (including ViewModel's viewModelScope)
+        testScope.cancel()
+        Dispatchers.resetMain()
     }
 
     private fun createViewModel(): HistoryViewModel {
@@ -96,9 +108,9 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `initial state loads all transactions`() = runTest {
+    fun `initial state loads all transactions`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(2, state.transactions.size)
@@ -108,9 +120,9 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `transactions are mapped to display items correctly`() = runTest {
+    fun `transactions are mapped to display items correctly`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         val firstItem = state.transactions.first()
@@ -121,16 +133,16 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `toggleTypeFilter adds type to filter`() = runTest {
+    fun `toggleTypeFilter adds type to filter`() = testScope.runTest {
         val filterSlot = slot<TransactionFilter>()
         coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.toggleTypeFilter(TransactionType.PURCHASE)
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertTrue(state.selectedTypes.contains(TransactionType.PURCHASE))
@@ -139,26 +151,26 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `toggleTypeFilter removes type when already selected`() = runTest {
+    fun `toggleTypeFilter removes type when already selected`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.toggleTypeFilter(TransactionType.PURCHASE)
-        advanceUntilIdle()
+        
         assertTrue(viewModel.uiState.value.selectedTypes.contains(TransactionType.PURCHASE))
 
         viewModel.toggleTypeFilter(TransactionType.PURCHASE)
-        advanceUntilIdle()
+        
         assertFalse(viewModel.uiState.value.selectedTypes.contains(TransactionType.PURCHASE))
     }
 
     @Test
-    fun `setDateRangePreset updates filter`() = runTest {
+    fun `setDateRangePreset updates filter`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.setDateRangePreset(DateRangePreset.TODAY)
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(DateRangePreset.TODAY, state.dateRangePreset)
@@ -166,16 +178,16 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `setLocationFilter filters by location`() = runTest {
+    fun `setLocationFilter filters by location`() = testScope.runTest {
         val filterSlot = slot<TransactionFilter>()
         coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.setLocationFilter(testLocation.id)
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertEquals(testLocation.id, state.selectedLocationId)
@@ -184,16 +196,16 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `setSearchQuery filters by product name`() = runTest {
+    fun `setSearchQuery filters by product name`() = testScope.runTest {
         val filterSlot = slot<TransactionFilter>()
         coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         viewModel.setSearchQuery("Горіх")
-        advanceUntilIdle()
+        testDispatcher.scheduler.advanceTimeBy(301) // Advance past debounce delay
 
         val state = viewModel.uiState.value
         assertEquals("Горіх", state.searchQuery)
@@ -202,20 +214,20 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `clearFilters resets all filters`() = runTest {
+    fun `clearFilters resets all filters`() = testScope.runTest {
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         // Set some filters
         viewModel.toggleTypeFilter(TransactionType.PURCHASE)
         viewModel.setLocationFilter(testLocation.id)
         viewModel.setSearchQuery("test")
-        advanceUntilIdle()
+        
         assertTrue(viewModel.uiState.value.hasActiveFilters)
 
         // Clear all
         viewModel.clearFilters()
-        advanceUntilIdle()
+        
 
         val state = viewModel.uiState.value
         assertFalse(state.hasActiveFilters)
@@ -226,12 +238,12 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `dismissError clears error`() = runTest {
+    fun `dismissError clears error`() = testScope.runTest {
         coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } throws RuntimeException("Test error")
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } throws RuntimeException("Test error")
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
 
         assertNotNull(viewModel.uiState.value.error)
 
@@ -240,7 +252,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `loadMoreTransactions appends to existing list when hasMorePages is true`() = runTest {
+    fun `loadMoreTransactions appends to existing list when hasMorePages is true`() = testScope.runTest {
         // Create enough transactions to simulate pagination
         val transactions = (1..50).map { 
             testTransaction.copy(id = UUID.randomUUID(), localId = "tx-$it")
@@ -255,12 +267,12 @@ class HistoryViewModelTest {
         coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 51
 
         viewModel = createViewModel()
-        advanceUntilIdle()
+        
         assertEquals(50, viewModel.uiState.value.transactions.size)
         assertTrue(viewModel.uiState.value.hasMorePages)
 
         viewModel.loadMoreTransactions()
-        advanceUntilIdle()
+        
 
         assertEquals(51, viewModel.uiState.value.transactions.size)
     }

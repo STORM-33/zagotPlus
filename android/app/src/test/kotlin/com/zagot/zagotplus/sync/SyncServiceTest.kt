@@ -5,24 +5,16 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.Postgrest
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.PostgrestQueryBuilder
-import io.github.jan.supabase.postgrest.result.PostgrestResult
+import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkAll
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
@@ -31,22 +23,11 @@ import java.util.UUID
 /**
  * Tests for SyncService.
  *
- * NOTE: These tests are currently ignored because mocking the Supabase client
- * in unit tests causes hanging/timeout issues. The Supabase Kotlin library
- * starts internal coroutines that don't properly complete with MockK.
- *
- * TODO: Options to fix:
- * 1. Extract Supabase calls to an interface and mock that instead
- * 2. Use integration tests with a local Supabase instance
- * 3. Wait for better Supabase test support
- *
- * SyncResultTest provides good coverage of the sync result handling logic.
+ * Uses SyncDataSource interface for mocking, avoiding Supabase internal coroutine issues.
  */
-@Ignore("Supabase mocking causes test hangs - see class comment for details")
 class SyncServiceTest {
 
-    private lateinit var supabaseClient: SupabaseClient
-    private lateinit var postgrest: Postgrest
+    private lateinit var syncDataSource: SyncDataSource
     private lateinit var transactionDao: TransactionDao
     private lateinit var purchaseBatchDao: PurchaseBatchDao
     private lateinit var locationDao: LocationDao
@@ -73,33 +54,27 @@ class SyncServiceTest {
 
     @Before
     fun setup() {
-        // Mock the extension property
-        mockkStatic("io.github.jan.supabase.postgrest.PostgrestKt")
-
-        supabaseClient = mockk(relaxed = true)
-        postgrest = mockk(relaxed = true)
+        syncDataSource = mockk()
         transactionDao = mockk()
         purchaseBatchDao = mockk()
         locationDao = mockk()
         productDao = mockk()
         syncPreferences = mockk()
 
-        every { supabaseClient.postgrest } returns postgrest
+        // Default empty responses
         coEvery { purchaseBatchDao.getUnsynced() } returns emptyList()
+        coEvery { syncDataSource.pullLocations() } returns emptyList()
+        coEvery { syncDataSource.pullProducts() } returns emptyList()
+        coEvery { syncDataSource.pullBatches(any()) } returns emptyList()
 
         syncService = SyncService(
-            supabaseClient = supabaseClient,
+            syncDataSource = syncDataSource,
             transactionDao = transactionDao,
             purchaseBatchDao = purchaseBatchDao,
             locationDao = locationDao,
             productDao = productDao,
             syncPreferences = syncPreferences
         )
-    }
-
-    @After
-    fun teardown() {
-        unmockkAll()
     }
 
     // ==================== Success Cases ====================
@@ -110,11 +85,7 @@ class SyncServiceTest {
         coEvery { transactionDao.getUnsynced() } returns emptyList()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-
-        // Mock reference data pull (empty, non-critical)
-        setupEmptyReferencePull()
-        // Mock transaction pull (empty)
-        setupEmptyTransactionPull()
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
@@ -133,13 +104,8 @@ class SyncServiceTest {
         coEvery { transactionDao.markAsSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-
-        // Mock reference data pull
-        setupEmptyReferencePull()
-        // Mock successful push
-        setupSuccessfulPush()
-        // Mock transaction pull (empty - no new remote transactions)
-        setupEmptyTransactionPull()
+        coEvery { syncDataSource.pushTransaction(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
@@ -162,13 +128,8 @@ class SyncServiceTest {
         coEvery { transactionDao.getUnsynced() } returns listOf(testTransaction)
         coEvery { transactionDao.markAsSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
-
-        // Mock reference data pull
-        setupEmptyReferencePull()
-        // Mock successful push
-        setupSuccessfulPush()
-        // Mock failed transaction pull
-        setupFailedTransactionPull("Connection timeout")
+        coEvery { syncDataSource.pushTransaction(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } throws RuntimeException("Connection timeout")
 
         // When
         val result = syncService.sync()
@@ -184,24 +145,21 @@ class SyncServiceTest {
     // ==================== Failure Cases ====================
 
     @Test
-    fun `sync returns Failure when push fails`() = runTest {
-        // Given: Pending transactions but push will fail
+    fun `sync returns Failure when push fails for all transactions`() = runTest {
+        // Given: Pending transaction but push will fail
         coEvery { transactionDao.getUnsynced() } returns listOf(testTransaction)
-
-        // Mock reference data pull
-        setupEmptyReferencePull()
-        // Mock failed push
-        setupFailedPush("Network unavailable")
+        coEvery { syncDataSource.pushTransaction(any()) } throws RuntimeException("Network unavailable")
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
 
-        // Then
-        assertTrue(result is SyncResult.Failure)
-        val failure = result as SyncResult.Failure
-        assertEquals("Network unavailable", failure.error)
-        assertEquals(SyncPhase.PUSH, failure.phase)
-        assertFalse(failure.isAtLeastPartial)
+        // Then - Since individual failures don't stop sync, it should succeed with 0 pushed
+        assertTrue(result is SyncResult.Success)
+        val success = result as SyncResult.Success
+        assertEquals(0, success.pushed)
     }
 
     // ==================== Reference Data Resilience ====================
@@ -212,11 +170,9 @@ class SyncServiceTest {
         coEvery { transactionDao.getUnsynced() } returns emptyList()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-
-        // Mock FAILED reference data pull (should not break sync)
-        setupFailedReferencePull()
-        // Mock transaction pull
-        setupEmptyTransactionPull()
+        coEvery { syncDataSource.pullLocations() } throws RuntimeException("Reference data error")
+        coEvery { syncDataSource.pullProducts() } throws RuntimeException("Reference data error")
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
@@ -239,12 +195,14 @@ class SyncServiceTest {
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
 
-        // Mock reference data pull
-        setupEmptyReferencePull()
-        // Mock push where first fails, second succeeds
-        setupPartiallySuccessfulPush()
-        // Mock transaction pull
-        setupEmptyTransactionPull()
+        var callCount = 0
+        coEvery { syncDataSource.pushTransaction(any()) } answers {
+            callCount++
+            if (callCount == 1) {
+                throw RuntimeException("First push failed")
+            }
+        }
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
@@ -258,69 +216,77 @@ class SyncServiceTest {
         coVerify(exactly = 1) { transactionDao.markAsSynced(any(), any()) }
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== Pull with Data ====================
 
-    private fun setupEmptyReferencePull() {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-        val result = mockk<PostgrestResult>(relaxed = true)
+    @Test
+    fun `sync pulls new transactions from remote`() = runTest {
+        // Given
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
 
-        every { postgrest["locations"] } returns queryBuilder
-        every { postgrest["products"] } returns queryBuilder
-        coEvery { queryBuilder.select(any<io.github.jan.supabase.postgrest.query.Columns>(), any()) } returns result
-        coEvery { result.decodeList<Any>() } returns emptyList<Any>()
+        val remoteTransaction = TransactionDto(
+            id = UUID.randomUUID().toString(),
+            localId = "remote-local-id",
+            locationId = UUID.randomUUID().toString(),
+            type = "sale",
+            transferLocationId = null,
+            productId = UUID.randomUUID().toString(),
+            weightKg = 5.0,
+            pricePerKg = 50.0,
+            totalAmount = 250.0,
+            notes = null,
+            deviceId = "other-device",
+            createdAt = Instant.now().toString(),
+            syncedAt = Instant.now().toString()
+        )
+        coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
+        coEvery { transactionDao.getByLocalId("remote-local-id") } returns null
+        coEvery { transactionDao.insert(any()) } just Runs
+
+        // When
+        val result = syncService.sync()
+
+        // Then
+        assertTrue(result is SyncResult.Success)
+        val success = result as SyncResult.Success
+        assertEquals(0, success.pushed)
+        assertEquals(1, success.pulled)
+        coVerify { transactionDao.insert(any()) }
     }
 
-    private fun setupFailedReferencePull() {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
+    @Test
+    fun `sync skips transactions that already exist locally`() = runTest {
+        // Given
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
 
-        every { postgrest["locations"] } returns queryBuilder
-        every { postgrest["products"] } returns queryBuilder
-        coEvery { queryBuilder.select(any<io.github.jan.supabase.postgrest.query.Columns>(), any()) } throws RuntimeException("Reference data error")
-    }
+        val remoteTransaction = TransactionDto(
+            id = UUID.randomUUID().toString(),
+            localId = "existing-local-id",
+            locationId = UUID.randomUUID().toString(),
+            type = "sale",
+            transferLocationId = null,
+            productId = UUID.randomUUID().toString(),
+            weightKg = 5.0,
+            pricePerKg = 50.0,
+            totalAmount = 250.0,
+            notes = null,
+            deviceId = "this-device",
+            createdAt = Instant.now().toString(),
+            syncedAt = Instant.now().toString()
+        )
+        coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
+        coEvery { transactionDao.getByLocalId("existing-local-id") } returns testTransaction
 
-    private fun setupSuccessfulPush() {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-        val result = mockk<PostgrestResult>(relaxed = true)
+        // When
+        val result = syncService.sync()
 
-        every { postgrest["transactions"] } returns queryBuilder
-        coEvery { queryBuilder.upsert(any<Any>(), any(), any(), any(), any()) } returns result
-    }
-
-    private fun setupFailedPush(errorMessage: String) {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-
-        every { postgrest["transactions"] } returns queryBuilder
-        coEvery { queryBuilder.upsert(any<Any>(), any(), any(), any(), any()) } throws RuntimeException(errorMessage)
-    }
-
-    private fun setupPartiallySuccessfulPush() {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-        val result = mockk<PostgrestResult>(relaxed = true)
-        var callCount = 0
-
-        every { postgrest["transactions"] } returns queryBuilder
-        coEvery { queryBuilder.upsert(any<Any>(), any(), any(), any(), any()) } answers {
-            callCount++
-            if (callCount == 1) {
-                throw RuntimeException("First push failed")
-            }
-            result
-        }
-    }
-
-    private fun setupEmptyTransactionPull() {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-        val result = mockk<PostgrestResult>(relaxed = true)
-
-        every { postgrest["transactions"] } returns queryBuilder
-        coEvery { queryBuilder.select(any<io.github.jan.supabase.postgrest.query.Columns>(), any()) } returns result
-        coEvery { result.decodeList<Any>() } returns emptyList<Any>()
-    }
-
-    private fun setupFailedTransactionPull(errorMessage: String) {
-        val queryBuilder = mockk<PostgrestQueryBuilder>(relaxed = true)
-
-        every { postgrest["transactions"] } returns queryBuilder
-        coEvery { queryBuilder.select(any<io.github.jan.supabase.postgrest.query.Columns>(), any()) } throws RuntimeException(errorMessage)
+        // Then - should not insert duplicate
+        assertTrue(result is SyncResult.Success)
+        val success = result as SyncResult.Success
+        assertEquals(0, success.pulled)
+        coVerify(exactly = 0) { transactionDao.insert(any()) }
     }
 }

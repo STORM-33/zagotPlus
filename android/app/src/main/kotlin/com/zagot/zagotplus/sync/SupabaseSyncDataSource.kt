@@ -1,0 +1,69 @@
+package com.zagot.zagotplus.sync
+
+import com.zagot.zagotplus.data.remote.dto.LocationDto
+import com.zagot.zagotplus.data.remote.dto.ProductDto
+import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
+import com.zagot.zagotplus.data.remote.dto.TransactionDto
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
+import java.time.Instant
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Supabase implementation of SyncDataSource.
+ * Handles all remote API calls for sync operations.
+ */
+@Singleton
+class SupabaseSyncDataSource @Inject constructor(
+    private val supabaseClient: SupabaseClient
+) : SyncDataSource {
+
+    companion object {
+        private const val TABLE_TRANSACTIONS = "transactions"
+        private const val TABLE_PURCHASE_BATCHES = "purchase_batches"
+        private const val TABLE_LOCATIONS = "locations"
+        private const val TABLE_PRODUCTS = "products"
+    }
+
+    override suspend fun pushTransaction(dto: TransactionDto) {
+        supabaseClient.postgrest[TABLE_TRANSACTIONS].upsert(dto, onConflict = "local_id")
+    }
+
+    override suspend fun pushBatch(dto: PurchaseBatchDto) {
+        supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
+    }
+
+    override suspend fun pullTransactions(since: Instant): List<TransactionDto> {
+        return supabaseClient.postgrest[TABLE_TRANSACTIONS]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", since.toString())
+                }
+            }
+            .decodeList()
+    }
+
+    override suspend fun pullBatches(since: Instant): List<PurchaseBatchDto> {
+        return supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", since.toString())
+                }
+            }
+            .decodeList()
+    }
+
+    override suspend fun pullLocations(): List<LocationDto> {
+        return supabaseClient.postgrest[TABLE_LOCATIONS]
+            .select(Columns.ALL)
+            .decodeList()
+    }
+
+    override suspend fun pullProducts(): List<ProductDto> {
+        return supabaseClient.postgrest[TABLE_PRODUCTS]
+            .select(Columns.ALL)
+            .decodeList()
+    }
+}

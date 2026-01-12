@@ -81,6 +81,17 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests.all {
+            it.jvmArgs(
+                "-Xmx2g",
+                "-XX:+UseG1GC",
+                "-XX:MaxGCPauseMillis=100"
+            )
+        }
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
