@@ -264,10 +264,11 @@ class SyncService @Inject constructor(
      * Pull reference data (locations and products) from Supabase.
      * These are master data managed on server, pulled to local DB.
      * Uses upsert logic to handle existing records with child FK references.
+     * Each type is pulled independently so one failure doesn't block the other.
      */
     private suspend fun pullReferenceData() {
+        // Pull locations
         try {
-            // Pull locations
             val locations = syncDataSource.pullLocations()
 
             locations.forEach { dto ->
@@ -280,8 +281,12 @@ class SyncService @Inject constructor(
                 }
             }
             Log.d(TAG, "Pulled ${locations.size} locations")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull locations", e)
+        }
 
-            // Pull products
+        // Pull products (independent of locations)
+        try {
             val products = syncDataSource.pullProducts()
 
             products.forEach { dto ->
@@ -294,10 +299,8 @@ class SyncService @Inject constructor(
                 }
             }
             Log.d(TAG, "Pulled ${products.size} products")
-
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to pull reference data", e)
-            // Don't fail sync - reference data is less critical
+            Log.e(TAG, "Failed to pull products", e)
         }
     }
 }

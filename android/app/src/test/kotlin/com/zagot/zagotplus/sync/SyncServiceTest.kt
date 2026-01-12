@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.mockk.Runs
 import io.mockk.coEvery
@@ -179,6 +180,35 @@ class SyncServiceTest {
 
         // Then - sync should still succeed
         assertTrue(result is SyncResult.Success)
+    }
+
+    @Test
+    fun `products sync independently when locations pull fails`() = runTest {
+        // Given: locations fail but products succeed
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
+        coEvery { syncDataSource.pullLocations() } throws RuntimeException("Location error")
+        
+        val productDto = ProductDto(
+            id = UUID.randomUUID().toString(),
+            name = "Test Product",
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = Instant.now().toString()
+        )
+        coEvery { syncDataSource.pullProducts() } returns listOf(productDto)
+        coEvery { productDao.getById(any()) } returns null
+        coEvery { productDao.insert(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
+
+        // When
+        val result = syncService.sync()
+
+        // Then - products should still be synced despite location failure
+        assertTrue(result is SyncResult.Success)
+        coVerify { productDao.insert(any()) }
     }
 
     // ==================== Push Edge Cases ====================
