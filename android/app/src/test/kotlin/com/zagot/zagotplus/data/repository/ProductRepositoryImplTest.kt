@@ -2,6 +2,7 @@ package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.entity.ProductEntity
+import com.zagot.zagotplus.sync.SyncManager
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -23,6 +24,7 @@ import java.util.UUID
 class ProductRepositoryImplTest {
 
     private lateinit var productDao: ProductDao
+    private lateinit var syncManager: SyncManager
     private lateinit var repository: ProductRepositoryImpl
 
     private val productId1 = UUID.randomUUID()
@@ -32,7 +34,8 @@ class ProductRepositoryImplTest {
     @Before
     fun setup() {
         productDao = mockk()
-        repository = ProductRepositoryImpl(productDao)
+        syncManager = mockk(relaxed = true)
+        repository = ProductRepositoryImpl(productDao, syncManager)
     }
 
     private fun createProductEntity(

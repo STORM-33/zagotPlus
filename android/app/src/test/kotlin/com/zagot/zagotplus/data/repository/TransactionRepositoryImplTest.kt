@@ -4,6 +4,7 @@ import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.InventoryAggregateResult
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.sync.SyncManager
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
@@ -21,6 +22,7 @@ class TransactionRepositoryImplTest {
     private lateinit var database: ZagotDatabase
     private lateinit var transactionDao: TransactionDao
     private lateinit var devicePreferences: DevicePreferences
+    private lateinit var syncManager: SyncManager
     private lateinit var repository: TransactionRepositoryImpl
 
     private val locationA = UUID.randomUUID()
@@ -33,9 +35,10 @@ class TransactionRepositoryImplTest {
         database = mockk(relaxed = true)
         transactionDao = mockk()
         devicePreferences = mockk()
+        syncManager = mockk(relaxed = true)
         every { devicePreferences.getDeviceId() } returns "test-device-id"
         
-        repository = TransactionRepositoryImpl(database, transactionDao, devicePreferences)
+        repository = TransactionRepositoryImpl(database, transactionDao, devicePreferences, syncManager)
     }
 
     @Test

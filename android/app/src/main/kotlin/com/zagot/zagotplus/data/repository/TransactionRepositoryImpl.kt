@@ -13,6 +13,7 @@ import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.SaleInput
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
@@ -34,7 +35,8 @@ import javax.inject.Singleton
 class TransactionRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
     private val transactionDao: TransactionDao,
-    private val devicePreferences: DevicePreferences
+    private val devicePreferences: DevicePreferences,
+    private val syncManager: SyncManager
 ) : TransactionRepository {
 
     override fun getAllTransactions(): Flow<List<Transaction>> =
@@ -82,6 +84,7 @@ class TransactionRepositoryImpl @Inject constructor(
             syncedAt = null
         )
         transactionDao.insert(entity)
+        syncManager.triggerManualSync()
         return entity.toDomain()
     }
 
@@ -112,6 +115,7 @@ class TransactionRepositoryImpl @Inject constructor(
             syncedAt = null
         )
         transactionDao.insert(entity)
+        syncManager.triggerManualSync()
         return entity.toDomain()
     }
 
@@ -165,10 +169,11 @@ class TransactionRepositoryImpl @Inject constructor(
             transactionDao.insert(outEntity)
             transactionDao.insert(inEntity)
         }
+        syncManager.triggerManualSync()
         return outEntity.toDomain() to inEntity.toDomain()
     }
 
-    override fun getInventory(): Flow<List<InventoryItem>> =
+    override fun getInventory():Flow<List<InventoryItem>> =
         transactionDao.getInventoryAggregatedFlow().map { results ->
             results.map { it.toInventoryItem() }
         }
@@ -248,11 +253,12 @@ class TransactionRepositoryImpl @Inject constructor(
                 transactionDao.insert(entity)
             }
         }
+        syncManager.triggerManualSync()
 
         return entities.map { it.toDomain() }
     }
 
-    private fun TransactionEntity.toDomain() = Transaction(
+    private fun TransactionEntity.toDomain()= Transaction(
         id = id,
         localId = localId,
         locationId = locationId,

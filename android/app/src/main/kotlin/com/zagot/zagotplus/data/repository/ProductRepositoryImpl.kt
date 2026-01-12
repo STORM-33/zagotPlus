@@ -4,6 +4,7 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
+import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
@@ -17,7 +18,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class ProductRepositoryImpl @Inject constructor(
-    private val productDao: ProductDao
+    private val productDao: ProductDao,
+    private val syncManager: SyncManager
 ) : ProductRepository {
 
     override fun getAllProducts(): Flow<List<Product>> =
@@ -52,6 +54,7 @@ class ProductRepositoryImpl @Inject constructor(
             imageUri = imageUri
         )
         productDao.insert(entity)
+        syncManager.triggerManualSync()
         return entity.toDomain()
     }
 
@@ -66,6 +69,7 @@ class ProductRepositoryImpl @Inject constructor(
             syncedAt = null // Mark as unsynced after update
         )
         productDao.update(entity)
+        syncManager.triggerManualSync()
     }
 
     override suspend fun toggleProductActive(productId: UUID) {
@@ -75,6 +79,7 @@ class ProductRepositoryImpl @Inject constructor(
             syncedAt = null // Mark as unsynced after toggle
         )
         productDao.update(updated)
+        syncManager.triggerManualSync()
     }
 
     override suspend fun deleteProduct(productId: UUID) {

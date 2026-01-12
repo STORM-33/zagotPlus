@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.sync.SyncManager
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -25,6 +26,7 @@ class PurchaseBatchRepositoryImplTest {
     private lateinit var database: ZagotDatabase
     private lateinit var purchaseBatchDao: PurchaseBatchDao
     private lateinit var transactionDao: TransactionDao
+    private lateinit var syncManager: SyncManager
     private lateinit var repository: PurchaseBatchRepositoryImpl
 
     private val batchId1 = UUID.randomUUID()
@@ -37,7 +39,8 @@ class PurchaseBatchRepositoryImplTest {
         database = mockk()
         purchaseBatchDao = mockk()
         transactionDao = mockk()
-        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao)
+        syncManager = mockk(relaxed = true)
+        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao, syncManager)
     }
 
     private fun createBatchEntity(

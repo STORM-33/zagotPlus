@@ -9,6 +9,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -25,7 +26,8 @@ import javax.inject.Singleton
 class PurchaseBatchRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
     private val purchaseBatchDao: PurchaseBatchDao,
-    private val transactionDao: TransactionDao
+    private val transactionDao: TransactionDao,
+    private val syncManager: SyncManager
 ) : PurchaseBatchRepository {
 
     override fun observeAll(): Flow<List<PurchaseBatch>> =
@@ -75,6 +77,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
             val transactionEntities = transactions.map { it.toEntity(batch.id) }
             transactionDao.insertAll(transactionEntities)
         }
+        syncManager.triggerManualSync()
     }
 
     override suspend fun getUnsynced(): List<PurchaseBatch> =
