@@ -9,6 +9,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * Interface for authentication preferences.
+ * Extracted for testability.
+ */
+interface AuthPreferences {
+    fun isPinSet(): Boolean
+    fun setPin(pin: String)
+    fun verifyPin(pin: String): Boolean
+    fun clearPin()
+    fun recordFailedAttempt()
+    fun isLockedOut(): Boolean
+    fun getLockoutRemainingSeconds(): Int
+    fun getFailedAttempts(): Int
+    fun clearLockout()
+    fun setAuthenticated(authenticated: Boolean)
+    fun isAuthenticated(): Boolean
+}
+
+/**
  * Manages authentication preferences using SharedPreferences.
  * Stores salted PIN hash for access control with lockout protection.
  *
@@ -18,9 +36,9 @@ import javax.inject.Singleton
  * - Session expires on app process death (in-memory flag)
  */
 @Singleton
-class AuthPreferences @Inject constructor(
+class AuthPreferencesImpl @Inject constructor(
     @ApplicationContext context: Context
-) {
+) : AuthPreferences {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         PREFS_NAME,
         Context.MODE_PRIVATE
@@ -30,18 +48,11 @@ class AuthPreferences @Inject constructor(
     @Volatile
     private var sessionAuthenticated: Boolean = false
 
-    /**
-     * Check if PIN has been set.
-     */
-    fun isPinSet(): Boolean {
+    override fun isPinSet(): Boolean {
         return prefs.contains(KEY_PIN_HASH)
     }
 
-    /**
-     * Set new PIN (stores salted hash, not plain text).
-     * Clears any existing lockout.
-     */
-    fun setPin(pin: String) {
+    override fun setPin(pin: String) {
         val salt = generateSalt()
         val hash = hashPinWithSalt(pin, salt)
         prefs.edit()
@@ -51,32 +62,21 @@ class AuthPreferences @Inject constructor(
         clearLockout()
     }
 
-    /**
-     * Verify PIN against stored hash.
-     */
-    fun verifyPin(pin: String): Boolean {
+    override fun verifyPin(pin: String): Boolean {
         val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
         val storedSalt = prefs.getString(KEY_PIN_SALT, null) ?: return false
         val inputHash = hashPinWithSalt(pin, storedSalt)
         return storedHash == inputHash
     }
 
-    /**
-     * Clear PIN (for testing or reset).
-     */
-    fun clearPin() {
+    override fun clearPin() {
         prefs.edit()
             .remove(KEY_PIN_HASH)
             .remove(KEY_PIN_SALT)
             .apply()
     }
 
-    // === Lockout Management ===
-
-    /**
-     * Record a failed PIN attempt. Sets lockout after MAX_ATTEMPTS.
-     */
-    fun recordFailedAttempt() {
+    override fun recordFailedAttempt() {
         val currentAttempts = getFailedAttempts()
         val newAttempts = currentAttempts + 1
         
@@ -90,34 +90,22 @@ class AuthPreferences @Inject constructor(
         editor.apply()
     }
 
-    /**
-     * Check if currently locked out.
-     */
-    fun isLockedOut(): Boolean {
+    override fun isLockedOut(): Boolean {
         val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0)
         return lockoutUntil > System.currentTimeMillis()
     }
 
-    /**
-     * Get remaining lockout time in seconds.
-     */
-    fun getLockoutRemainingSeconds(): Int {
+    override fun getLockoutRemainingSeconds(): Int {
         val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0)
         val remaining = lockoutUntil - System.currentTimeMillis()
         return if (remaining > 0) (remaining / 1000).toInt() else 0
     }
 
-    /**
-     * Get current failed attempt count.
-     */
-    fun getFailedAttempts(): Int {
+    override fun getFailedAttempts(): Int {
         return prefs.getInt(KEY_FAILED_ATTEMPTS, 0)
     }
 
-    /**
-     * Clear lockout state (after successful login or manual reset).
-     */
-    fun clearLockout() {
+    override fun clearLockout() {
         prefs.edit()
             .putInt(KEY_FAILED_ATTEMPTS, 0)
             .putLong(KEY_LOCKOUT_UNTIL, 0)
@@ -140,19 +128,11 @@ class AuthPreferences @Inject constructor(
 
     // === Session Management ===
 
-    /**
-     * Mark user as authenticated for current session.
-     * Session expires on app process death (in-memory flag).
-     */
-    fun setAuthenticated(authenticated: Boolean) {
+    override fun setAuthenticated(authenticated: Boolean) {
         sessionAuthenticated = authenticated
     }
 
-    /**
-     * Check if user is authenticated in current session.
-     * Returns false after app restart (session-based, not persistent).
-     */
-    fun isAuthenticated(): Boolean {
+    override fun isAuthenticated(): Boolean {
         return sessionAuthenticated
     }
 

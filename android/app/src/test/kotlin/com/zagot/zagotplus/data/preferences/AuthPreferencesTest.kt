@@ -14,7 +14,7 @@ class AuthPreferencesTest {
     private lateinit var context: Context
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var editor: SharedPreferences.Editor
-    private lateinit var authPreferences: AuthPreferences
+    private lateinit var authPreferences: AuthPreferencesImpl
 
     @Before
     fun setup() {
@@ -30,7 +30,7 @@ class AuthPreferencesTest {
         every { editor.remove(any()) } returns editor
         every { editor.apply() } returns Unit
 
-        authPreferences = AuthPreferences(context)
+        authPreferences = AuthPreferencesImpl(context)
     }
 
     @Test
