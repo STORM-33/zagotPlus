@@ -834,3 +834,89 @@ Branch: master (clean)
 Ready for Phase 6 planning
 
 ---
+
+### Session: post-merge/fix-ui-headers
+Status: completed (retroactive)
+Complexity: low
+Duration: ~5 minutes
+Date: 2026-01-11T23:30:49+0100
+Commit: ed1e0b7
+
+Objective: Remove duplicate headers from Inventory and History screens.
+
+Work Summary:
+- Removed local Scaffold from HistoryScreen (NavGraph already provides TopAppBar)
+- Removed local Scaffold from InventoryScreen (same reason)
+- Cleaned up unnecessary imports
+- 2 files modified: 251 deletions, 243 insertions
+
+Notes:
+- Refactoring work done directly on master after Phase 5 merge
+- Not tracked in .ctx at the time
+
+---
+
+### Session: post-merge/add-empty-state
+Status: completed (retroactive)
+Complexity: medium
+Duration: ~20 minutes
+Date: 2026-01-11T23:51:58+0100
+Commit: a63dbfa
+
+Objective: Add EmptyState component and update UI theme.
+
+Work Summary:
+- Created EmptyState.kt reusable component for empty states
+- Created Color.kt with theme color definitions
+- Updated Theme.kt with extended color scheme
+- Updated Type.kt with Material3 typography
+- Updated multiple screens to use EmptyState: PinScreen, Products, Purchase, Reports, Sale, Inventory, History
+- Updated multiple ViewModels: SaleViewModel, ReportsViewModel, HistoryViewModel, InventoryViewModel, SettingsViewModel
+- Updated data layer: DatabaseModule, ZagotDatabase, DevicePreferences, TransactionDto
+- Updated SaleViewModelTest
+- 22 files modified: 824 insertions, 227 deletions
+
+Key Decisions:
+- EmptyState component with icon, title, subtitle, optional action button
+- Material3 color scheme extensions for consistency
+- Typography definitions for Material3
+
+Notes:
+- Major UI polish work done directly on master
+- .ctx/journal.md and .ctx/state.md were partially updated in this commit
+- Not fully tracked in .ctx workflow at the time
+
+---
+
+### Session: post-merge/refactor-sale-screen
+Status: completed (retroactive)
+Complexity: high
+Duration: ~30 minutes
+Date: 2026-01-12T00:28:14+0100
+Commit: c07b00a
+
+Objective: Simplify SaleScreen and extract SaleEntryScreen for better separation of concerns.
+
+Work Summary:
+- Extracted SaleEntryScreen.kt (944 lines) - dedicated sale entry form
+- Created SaleEntryViewModel.kt (430 lines) - manages entry flow state
+- Simplified SaleScreen.kt (312 lines) - now just shows daily sale summary
+- Simplified SaleViewModel.kt (212 lines) - removed entry logic
+- Updated EmptyState component with additional parameter
+- Added SaleEntry destination to Destinations.kt
+- Updated NavGraph with navigation to sale entry flow
+- Updated SaleViewModelTest (182 lines)
+- 8 files modified: 1,633 insertions, 467 deletions
+
+Architecture Improvements:
+- Separation of concerns: main screen vs entry flow
+- SaleScreen now mirrors PurchaseScreen pattern (daily summary + entry button)
+- SaleEntryScreen provides dedicated workflow for sales
+- Cleaner ViewModels with focused responsibilities
+
+Notes:
+- Major refactoring aligning Sale flow with Purchase flow pattern
+- Significant architectural improvement
+- Not tracked in .ctx workflow at the time
+
+---
