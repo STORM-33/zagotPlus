@@ -2,7 +2,7 @@ package com.zagot.zagotplus.ui.screens.products
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.zagot.zagotplus.data.util.ImageStorageHelper
+import com.zagot.zagotplus.data.remote.SupabaseStorageHelper
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -49,7 +49,7 @@ data class ProductsUiState(
 @HiltViewModel
 class ProductsViewModel @Inject constructor(
     private val productRepository: ProductRepository,
-    private val imageStorageHelper: ImageStorageHelper
+    private val supabaseStorageHelper: SupabaseStorageHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProductsUiState())
@@ -188,10 +188,10 @@ class ProductsViewModel @Inject constructor(
                 val buyPrice = state.dialogBuyPrice.takeIf { it.isNotBlank() }?.let { BigDecimal(it) }
                 val sellPrice = state.dialogSellPrice.takeIf { it.isNotBlank() }?.let { BigDecimal(it) }
                 
-                // Persist image to internal storage if it's a temporary content:// URI
-                val persistedImageUri = state.dialogImageUri?.let { uri ->
-                    if (imageStorageHelper.isTemporaryUri(uri)) {
-                        imageStorageHelper.persistImage(uri)
+                // Upload image to Supabase Storage if it's a local URI
+                val uploadedImageUri = state.dialogImageUri?.let { uri ->
+                    if (supabaseStorageHelper.needsUpload(uri)) {
+                        supabaseStorageHelper.uploadImage(uri)
                     } else {
                         uri
                     }
@@ -202,7 +202,7 @@ class ProductsViewModel @Inject constructor(
                         name = state.dialogName.trim(),
                         defaultBuyPrice = buyPrice,
                         defaultSellPrice = sellPrice,
-                        imageUri = persistedImageUri
+                        imageUri = uploadedImageUri
                     )
                     productRepository.updateProduct(updated)
                     _uiState.update {
@@ -218,7 +218,7 @@ class ProductsViewModel @Inject constructor(
                         name = state.dialogName.trim(),
                         defaultBuyPrice = buyPrice,
                         defaultSellPrice = sellPrice,
-                        imageUri = persistedImageUri
+                        imageUri = uploadedImageUri
                     )
                     _uiState.update {
                         it.copy(

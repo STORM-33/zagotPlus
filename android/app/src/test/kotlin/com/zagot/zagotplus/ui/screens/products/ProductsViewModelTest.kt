@@ -1,6 +1,6 @@
 package com.zagot.zagotplus.ui.screens.products
 
-import com.zagot.zagotplus.data.util.ImageStorageHelper
+import com.zagot.zagotplus.data.remote.SupabaseStorageHelper
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import io.mockk.coEvery
@@ -25,7 +25,7 @@ import java.util.UUID
 class ProductsViewModelTest {
 
     private lateinit var productRepository: ProductRepository
-    private lateinit var imageStorageHelper: ImageStorageHelper
+    private lateinit var supabaseStorageHelper: SupabaseStorageHelper
     private lateinit var viewModel: ProductsViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -51,14 +51,14 @@ class ProductsViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         productRepository = mockk()
-        imageStorageHelper = mockk()
+        supabaseStorageHelper = mockk()
         every { productRepository.getAllProducts() } returns flowOf(listOf(testProduct, inactiveProduct))
-        every { imageStorageHelper.isTemporaryUri(any()) } returns false
-        every { imageStorageHelper.isTemporaryUri(null) } returns false
+        every { supabaseStorageHelper.needsUpload(any()) } returns false
+        every { supabaseStorageHelper.needsUpload(null) } returns false
     }
 
     private fun createViewModel(): ProductsViewModel {
-        return ProductsViewModel(productRepository, imageStorageHelper)
+        return ProductsViewModel(productRepository, supabaseStorageHelper)
     }
 
     @Test
