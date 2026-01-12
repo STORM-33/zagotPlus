@@ -1,5 +1,7 @@
 package com.zagot.zagotplus.sync
 
+import com.zagot.zagotplus.data.remote.dto.CashOperationDto
+import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
@@ -37,6 +39,18 @@ interface SyncDataSource {
     suspend fun deleteProduct(id: String)
 
     /**
+     * Push an expense category to the remote server.
+     * @throws Exception on network or server error
+     */
+    suspend fun pushExpenseCategory(dto: ExpenseCategoryDto)
+
+    /**
+     * Push a cash operation to the remote server.
+     * @throws Exception on network or server error
+     */
+    suspend fun pushCashOperation(dto: CashOperationDto)
+
+    /**
      * Pull transactions created after the given timestamp.
      */
     suspend fun pullTransactions(since: Instant): List<TransactionDto>
@@ -45,6 +59,16 @@ interface SyncDataSource {
      * Pull purchase batches created after the given timestamp.
      */
     suspend fun pullBatches(since: Instant): List<PurchaseBatchDto>
+
+    /**
+     * Pull expense categories created after the given timestamp.
+     */
+    suspend fun pullExpenseCategories(since: Instant): List<ExpenseCategoryDto>
+
+    /**
+     * Pull cash operations created after the given timestamp.
+     */
+    suspend fun pullCashOperations(since: Instant): List<CashOperationDto>
 
     /**
      * Pull all locations (reference data).

@@ -1,8 +1,10 @@
 package com.zagot.zagotplus.ui.screens.sale
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -44,11 +47,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,8 +71,11 @@ import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.PriceType
+import com.zagot.zagotplus.ui.components.ReorderableProductGrid
 import java.math.BigDecimal
 import java.text.DecimalFormat
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,6 +178,7 @@ fun SaleEntryScreen(
                                     inventory = uiState.inventory,
                                     positions = uiState.positions,
                                     onProductClick = viewModel::selectProduct,
+                                    onOrderChanged = viewModel::onProductOrderChanged,
                                     onProceedToPositions = { viewModel.finalize() },
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -219,6 +229,7 @@ fun SaleEntryScreen(
                                     canFinalize = uiState.canFinalize,
                                     onNotesChange = viewModel::onNotesChange,
                                     onRemovePosition = viewModel::removePosition,
+                                    onEditPosition = viewModel::startEditPosition,
                                     onAddAnother = viewModel::addAnotherProduct,
                                     onFinalize = viewModel::finalize,
                                     onCancel = viewModel::cancel,
@@ -233,6 +244,17 @@ fun SaleEntryScreen(
                 }
             }
         }
+
+        // Edit position dialog
+        uiState.editingPosition?.let { position ->
+            EditSalePositionDialog(
+                position = position,
+                onDismiss = viewModel::cancelEditPosition,
+                onConfirm = { tareWeight, price ->
+                    viewModel.updatePosition(position.id, tareWeight, price)
+                }
+            )
+        }
     }
 }
 
@@ -242,41 +264,24 @@ private fun SaleProductGrid(
     inventory: List<com.zagot.zagotplus.domain.model.InventoryItem>,
     positions: List<SalePosition>,
     onProductClick: (Product) -> Unit,
+    onOrderChanged: (List<UUID>) -> Unit,
     onProceedToPositions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val decimalFormat = remember { DecimalFormat("#,##0.0") }
+    // Create inventory map for the grid
+    val inventoryMap = remember(inventory) {
+        inventory.associate { it.productId to it.totalWeightKg }
+    }
     
     Column(modifier = modifier) {
-        if (products.isEmpty()) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                EmptyState(
-                    icon = EmptyStateIcons.Products,
-                    title = "Немає активних товарів",
-                    description = "Додайте товари в налаштуваннях"
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                items(products, key = { it.id }) { product ->
-                    val availableKg = inventory.find { it.productId == product.id }?.totalWeightKg ?: BigDecimal.ZERO
-                    SaleProductTile(
-                        product = product,
-                        availableKg = availableKg,
-                        onClick = { onProductClick(product) }
-                    )
-                }
-            }
-        }
+        ReorderableProductGrid(
+            products = products,
+            onProductClick = onProductClick,
+            onOrderChanged = onOrderChanged,
+            modifier = Modifier.weight(1f),
+            showPrice = false,
+            inventoryMap = inventoryMap
+        )
         
         // Show proceed button if there are already positions
         if (positions.isNotEmpty()) {
@@ -301,80 +306,6 @@ private fun SaleProductGrid(
                     Text("ПЕРЕЙТИ ДО ОФОРМЛЕННЯ", style = MaterialTheme.typography.labelLarge)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SaleProductTile(
-    product: Product,
-    availableKg: BigDecimal,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val decimalFormat = remember { DecimalFormat("#,##0.0") }
-    val isLowStock = availableKg <= BigDecimal.ZERO
-    
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isLowStock) 
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                if (product.imageUri != null) {
-                    AsyncImage(
-                        model = product.imageUri,
-                        contentDescription = product.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            Text(
-                text = "${decimalFormat.format(availableKg)} кг",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            )
         }
     }
 }
@@ -420,7 +351,7 @@ private fun WeighingScreen(
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    text = "${batches.size} партій (брутто)",
+                    text = "${batches.size} зважувань (брутто)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
@@ -433,7 +364,7 @@ private fun WeighingScreen(
         OutlinedTextField(
             value = currentWeight,
             onValueChange = onWeightChange,
-            label = { Text("Вага партії (кг)") },
+            label = { Text("Вага (кг)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
@@ -461,14 +392,14 @@ private fun WeighingScreen(
         ) {
             Icon(Icons.Filled.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Додати партію", style = MaterialTheme.typography.titleMedium)
+            Text("Додати зважування", style = MaterialTheme.typography.titleMedium)
         }
         
         Spacer(modifier = Modifier.height(16.dp))
         
         // Batches list
         if (batches.isNotEmpty()) {
-            Text(text = "Партії:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+            Text(text = "Зважування:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
             
             LazyColumn(
@@ -574,7 +505,7 @@ private fun PositionReviewScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Брутто (${batches.size} партій):")
+                    Text("Брутто (${batches.size} зважувань):")
                     Text("${decimalFormat.format(grossWeight)} кг", fontWeight = FontWeight.Medium)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -679,6 +610,7 @@ private fun PositionsListScreen(
     canFinalize: Boolean,
     onNotesChange: (String) -> Unit,
     onRemovePosition: (String) -> Unit,
+    onEditPosition: (SalePosition) -> Unit,
     onAddAnother: () -> Unit,
     onFinalize: () -> Unit,
     onCancel: () -> Unit,
@@ -694,7 +626,11 @@ private fun PositionsListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(positions, key = { it.id }) { position ->
-                PositionItem(position = position, onRemove = { onRemovePosition(position.id) })
+                SalePositionItem(
+                    position = position,
+                    onRemove = { onRemovePosition(position.id) },
+                    onLongClick = { onEditPosition(position) }
+                )
             }
             
             item {
@@ -766,16 +702,23 @@ private fun PositionsListScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PositionItem(
+private fun SalePositionItem(
     position: SalePosition,
     onRemove: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { },
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
@@ -813,6 +756,118 @@ private fun PositionItem(
             }
         }
     }
+}
+
+@Composable
+private fun EditSalePositionDialog(
+    position: SalePosition,
+    onDismiss: () -> Unit,
+    onConfirm: (BigDecimal, BigDecimal) -> Unit
+) {
+    var tareWeight by remember { mutableStateOf(position.tareWeightPerUnit.toPlainString()) }
+    var price by remember { mutableStateOf(position.pricePerKg.toPlainString()) }
+
+    val parsedTareWeight = tareWeight.toBigDecimalOrNull()
+    val parsedPrice = price.toBigDecimalOrNull()
+    val isValid = parsedTareWeight != null && parsedTareWeight >= BigDecimal.ZERO &&
+                  parsedPrice != null && parsedPrice > BigDecimal.ZERO
+
+    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    
+    // Calculate preview values
+    val previewTotalTareWeight = if (parsedTareWeight != null) {
+        parsedTareWeight.multiply(BigDecimal(position.totalTareCount))
+    } else BigDecimal.ZERO
+    val previewNetWeight = (position.grossWeight - previewTotalTareWeight).max(BigDecimal.ZERO)
+    val previewTotalAmount = if (parsedPrice != null) {
+        previewNetWeight.multiply(parsedPrice).setScale(2, java.math.RoundingMode.HALF_UP)
+    } else BigDecimal.ZERO
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Редагувати: ${position.product.name}",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Show gross weight and tare count (read-only)
+                Text(
+                    text = "Брутто: ${decimalFormat.format(position.grossWeight)} кг (${position.totalTareCount} шт тари)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = tareWeight,
+                    onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) tareWeight = it },
+                    label = { Text("Вага тари за шт (кг)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) price = it },
+                    label = { Text("Ціна за кг (₴)") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Divider()
+
+                // Preview calculations
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Тара:", style = MaterialTheme.typography.bodyMedium)
+                        Text("-${decimalFormat.format(previewTotalTareWeight)} кг", color = MaterialTheme.colorScheme.error)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Нетто:", style = MaterialTheme.typography.titleMedium)
+                        Text("${decimalFormat.format(previewNetWeight)} кг", fontWeight = FontWeight.Bold)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Сума:", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "₴${decimalFormat.format(previewTotalAmount)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (parsedTareWeight != null && parsedPrice != null) {
+                        onConfirm(parsedTareWeight, parsedPrice)
+                    }
+                },
+                enabled = isValid
+            ) {
+                Text("Зберегти")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Скасувати")
+            }
+        }
+    )
 }
 
 @Composable

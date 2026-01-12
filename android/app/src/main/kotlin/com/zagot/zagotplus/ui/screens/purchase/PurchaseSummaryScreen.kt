@@ -114,12 +114,12 @@ fun PurchaseSummaryOverlay(
                 ) {
                     Text(
                         text = "Сума:",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "₴${totalAmount.toPlainString()}",
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )

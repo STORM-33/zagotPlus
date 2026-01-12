@@ -142,6 +142,9 @@ dependencies {
     // Image Loading
     implementation(libs.coil.compose)
 
+    // Reorderable Grid
+    implementation(libs.reorderable)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

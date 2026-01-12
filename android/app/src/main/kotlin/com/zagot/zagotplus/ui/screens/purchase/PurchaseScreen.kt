@@ -66,43 +66,35 @@ fun PurchaseScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Weight placeholder - LARGE display for visibility
+            // Weight display - smaller, since scales show weight directly
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Вага",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = "Вага:",
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
                         text = uiState.weightPlaceholder,
-                        style = MaterialTheme.typography.displayLarge,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Section header
-            Text(
-                text = "Закупки сьогодні",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Divider(modifier = Modifier.padding(vertical = 12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Batches list or empty state
             if (uiState.isLoading) {

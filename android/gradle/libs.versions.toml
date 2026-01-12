@@ -40,6 +40,9 @@ kotlinxSerialization = "1.6.2"
 # Image Loading
 coil = "2.5.0"
 
+# Reorderable
+reorderable = "2.3.0"
+
 # Testing
 junit = "4.13.2"
 mockk = "1.13.8"
@@ -98,6 +101,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 # Image Loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Reorderable
+reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

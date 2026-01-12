@@ -2,6 +2,7 @@ package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.AuthPreferencesImpl
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
@@ -42,6 +43,12 @@ abstract class RepositoryModule {
     abstract fun bindPurchaseBatchRepository(
         impl: PurchaseBatchRepositoryImpl
     ): PurchaseBatchRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCashRepository(
+        impl: CashRepositoryImpl
+    ): CashRepository
 
     @Binds
     @Singleton

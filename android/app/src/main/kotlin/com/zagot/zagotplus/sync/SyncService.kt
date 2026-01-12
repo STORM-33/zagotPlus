@@ -1,10 +1,14 @@
 package com.zagot.zagotplus.sync
 
 import android.util.Log
+import com.zagot.zagotplus.data.local.dao.CashOperationDao
+import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.remote.dto.CashOperationDto
+import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
@@ -27,6 +31,8 @@ class SyncService @Inject constructor(
     private val purchaseBatchDao: PurchaseBatchDao,
     private val locationDao: LocationDao,
     private val productDao: ProductDao,
+    private val expenseCategoryDao: ExpenseCategoryDao,
+    private val cashOperationDao: CashOperationDao,
     private val syncPreferences: SyncPreferences
 ) {
     companion object {
@@ -59,7 +65,19 @@ class SyncService @Inject constructor(
         // Step 2: Pull reference data (non-critical, log and continue on failure)
         pullReferenceData()
 
-        // Step 3: Push pending batches (before transactions due to FK)
+        // Step 3: Push pending expense categories (before cash operations due to FK)
+        val categoryPushResult = try {
+            pushPendingExpenseCategories()
+        } catch (e: Exception) {
+            Log.e(TAG, "Expense category push failed", e)
+            return SyncResult.Failure(
+                error = e.message ?: "Expense category push failed",
+                phase = SyncPhase.PUSH
+            )
+        }
+        Log.d(TAG, "Pushed ${categoryPushResult.successCount} expense categories (${categoryPushResult.failedCount} failed)")
+
+        // Step 4: Push pending batches (before transactions due to FK)
         val batchPushResult = try {
             pushPendingBatches()
         } catch (e: Exception) {
@@ -71,7 +89,7 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${batchPushResult.successCount} batches (${batchPushResult.failedCount} failed)")
 
-        // Step 4: Push pending transactions
+        // Step 5: Push pending transactions
         val pushResult = try {
             pushPendingTransactions()
         } catch (e: Exception) {
@@ -83,7 +101,28 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${pushResult.successCount} transactions (${pushResult.failedCount} failed)")
 
-        // Step 5: Pull new batches
+        // Step 6: Push pending cash operations
+        val cashPushResult = try {
+            pushPendingCashOperations()
+        } catch (e: Exception) {
+            Log.e(TAG, "Cash operations push failed", e)
+            return SyncResult.Failure(
+                error = e.message ?: "Cash operations push failed",
+                phase = SyncPhase.PUSH
+            )
+        }
+        Log.d(TAG, "Pushed ${cashPushResult.successCount} cash operations (${cashPushResult.failedCount} failed)")
+
+        // Step 7: Pull new expense categories
+        val categoryPullResult = try {
+            pullNewExpenseCategories()
+        } catch (e: Exception) {
+            Log.e(TAG, "Expense category pull failed after successful push", e)
+            0
+        }
+        Log.d(TAG, "Pulled $categoryPullResult expense categories")
+
+        // Step 8: Pull new batches
         val batchPullResult = try {
             pullNewBatches()
         } catch (e: Exception) {
@@ -93,22 +132,31 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pulled $batchPullResult batches")
 
-        // Step 6: Pull new transactions
+        // Step 9: Pull new transactions
         val pullResult = try {
             pullNewTransactions()
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
             return SyncResult.Partial(
-                pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount,
+                pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
                 pullError = e.message ?: "Pull failed"
             )
         }
         Log.d(TAG, "Pulled $pullResult transactions")
 
+        // Step 10: Pull new cash operations
+        val cashPullResult = try {
+            pullNewCashOperations()
+        } catch (e: Exception) {
+            Log.e(TAG, "Cash operations pull failed after successful push", e)
+            0
+        }
+        Log.d(TAG, "Pulled $cashPullResult cash operations")
+
         return SyncResult.Success(
-            pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount,
-            pulled = pullResult + batchPullResult
+            pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
+            pulled = pullResult + batchPullResult + categoryPullResult + cashPullResult
         )
     }
 
@@ -350,5 +398,145 @@ class SyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull products", e)
         }
+    }
+
+    /**
+     * Push all unsynced local expense categories to Supabase.
+     * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * @throws Exception if network or critical error occurs
+     */
+    private suspend fun pushPendingExpenseCategories(): PushResult {
+        val pending = expenseCategoryDao.getUnsynced()
+        if (pending.isEmpty()) {
+            Log.d(TAG, "No pending expense categories to push")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${pending.size} pending expense categories")
+
+        var successCount = 0
+        var failedCount = 0
+
+        for (entity in pending) {
+            try {
+                val dto = ExpenseCategoryDto.fromEntity(entity)
+                syncDataSource.pushExpenseCategory(dto)
+                // Mark as synced locally
+                expenseCategoryDao.markSynced(entity.id, Instant.now())
+                successCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push expense category ${entity.localId}", e)
+                failedCount++
+            }
+        }
+
+        return PushResult(successCount, failedCount)
+    }
+
+    /**
+     * Push all unsynced local cash operations to Supabase.
+     * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * @throws Exception if network or critical error occurs
+     */
+    private suspend fun pushPendingCashOperations(): PushResult {
+        val pending = cashOperationDao.getUnsynced()
+        if (pending.isEmpty()) {
+            Log.d(TAG, "No pending cash operations to push")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${pending.size} pending cash operations")
+
+        var successCount = 0
+        var failedCount = 0
+
+        for (entity in pending) {
+            try {
+                val dto = CashOperationDto.fromEntity(entity)
+                syncDataSource.pushCashOperation(dto)
+                // Mark as synced locally
+                cashOperationDao.markSynced(entity.id, Instant.now())
+                successCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push cash operation ${entity.localId}", e)
+                failedCount++
+            }
+        }
+
+        return PushResult(successCount, failedCount)
+    }
+
+    /**
+     * Pull new expense categories from Supabase that were created after last sync.
+     * Inserts or updates local Room database.
+     *
+     * @throws Exception if network error occurs
+     */
+    private suspend fun pullNewExpenseCategories(): Int {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        Log.d(TAG, "Pulling expense categories created after $lastSync")
+
+        val remoteDtos = syncDataSource.pullExpenseCategories(lastSync)
+
+        if (remoteDtos.isEmpty()) {
+            Log.d(TAG, "No new remote expense categories")
+            return 0
+        }
+
+        Log.d(TAG, "Found ${remoteDtos.size} new remote expense categories")
+
+        var insertCount = 0
+        for (dto in remoteDtos) {
+            try {
+                val existing = expenseCategoryDao.getByLocalId(dto.localId)
+                if (existing == null) {
+                    val entity = dto.toEntity()
+                    expenseCategoryDao.insert(entity)
+                    insertCount++
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to insert remote expense category ${dto.localId}", e)
+            }
+        }
+
+        return insertCount
+    }
+
+    /**
+     * Pull new cash operations from Supabase that were created after last sync.
+     * Inserts or updates local Room database.
+     *
+     * @throws Exception if network error occurs
+     */
+    private suspend fun pullNewCashOperations(): Int {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        Log.d(TAG, "Pulling cash operations created after $lastSync")
+
+        val remoteDtos = syncDataSource.pullCashOperations(lastSync)
+
+        if (remoteDtos.isEmpty()) {
+            Log.d(TAG, "No new remote cash operations")
+            return 0
+        }
+
+        Log.d(TAG, "Found ${remoteDtos.size} new remote cash operations")
+
+        var insertCount = 0
+        for (dto in remoteDtos) {
+            try {
+                val existing = cashOperationDao.getByLocalId(dto.localId)
+                if (existing == null) {
+                    val entity = dto.toEntity()
+                    cashOperationDao.insert(entity)
+                    insertCount++
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to insert remote cash operation ${dto.localId}", e)
+            }
+        }
+
+        return insertCount
     }
 }

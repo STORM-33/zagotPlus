@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.History
@@ -53,6 +54,12 @@ sealed class Destination(
         route = "history",
         title = "Історія",
         icon = Icons.Filled.History
+    )
+    
+    data object Cash : Destination(
+        route = "cash",
+        title = "Каса",
+        icon = Icons.Filled.AccountBalanceWallet
     )
     
     data object Products : Destination(

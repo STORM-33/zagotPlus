@@ -1,6 +1,8 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.testutil.MainDispatcherRule
@@ -27,7 +29,9 @@ class PurchaseEntryViewModelTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
+    private lateinit var cashRepository: CashRepository
     private lateinit var devicePreferences: DevicePreferences
+    private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var viewModel: PurchaseEntryViewModel
 
     private val testProduct = TestData.PRODUCT_WHITE_WALNUT
@@ -37,18 +41,24 @@ class PurchaseEntryViewModelTest {
     fun setup() {
         productRepository = mockk()
         purchaseBatchRepository = mockk()
+        cashRepository = mockk()
         devicePreferences = mockk()
+        productOrderPreferences = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
+        every { productOrderPreferences.getProductOrder() } returns emptyList()
+        every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
     }
 
     private fun createViewModel(): PurchaseEntryViewModel {
         return PurchaseEntryViewModel(
             productRepository = productRepository,
             purchaseBatchRepository = purchaseBatchRepository,
-            devicePreferences = devicePreferences
+            cashRepository = cashRepository,
+            devicePreferences = devicePreferences,
+            productOrderPreferences = productOrderPreferences
         )
     }
 
@@ -353,6 +363,7 @@ class PurchaseEntryViewModelTest {
     @Test
     fun `confirmSave creates batch with transactions and navigates back`() = runTest {
         coEvery { purchaseBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
+        coEvery { cashRepository.recordPurchasePayment(any(), any(), any()) } returns Unit
 
         viewModel = createViewModel()
         advanceUntilIdle()

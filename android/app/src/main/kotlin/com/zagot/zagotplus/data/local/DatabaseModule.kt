@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.zagot.zagotplus.data.local.dao.CashOperationDao
+import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
@@ -32,7 +34,8 @@ object DatabaseModule {
         ZagotDatabase.MIGRATION_2_3,
         ZagotDatabase.MIGRATION_3_4,
         ZagotDatabase.MIGRATION_4_5,
-        ZagotDatabase.MIGRATION_5_6
+        ZagotDatabase.MIGRATION_5_6,
+        ZagotDatabase.MIGRATION_6_7
     )
 
     /**
@@ -87,5 +90,23 @@ object DatabaseModule {
     @Singleton
     fun providePurchaseBatchDao(database: ZagotDatabase): PurchaseBatchDao {
         return database.purchaseBatchDao()
+    }
+
+    /**
+     * Provides ExpenseCategoryDao from database.
+     */
+    @Provides
+    @Singleton
+    fun provideExpenseCategoryDao(database: ZagotDatabase): ExpenseCategoryDao {
+        return database.expenseCategoryDao()
+    }
+
+    /**
+     * Provides CashOperationDao from database.
+     */
+    @Provides
+    @Singleton
+    fun provideCashOperationDao(database: ZagotDatabase): CashOperationDao {
+        return database.cashOperationDao()
     }
 }

@@ -3,19 +3,18 @@ package com.zagot.zagotplus.ui.screens.products
 import com.zagot.zagotplus.data.remote.SupabaseStorageHelper
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
+import com.zagot.zagotplus.testutil.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
@@ -24,10 +23,12 @@ import java.util.UUID
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProductsViewModelTest {
 
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+
     private lateinit var productRepository: ProductRepository
     private lateinit var supabaseStorageHelper: SupabaseStorageHelper
     private lateinit var viewModel: ProductsViewModel
-    private val testDispatcher = StandardTestDispatcher()
 
     private val testProduct = Product(
         id = UUID.randomUUID(),
@@ -49,7 +50,6 @@ class ProductsViewModelTest {
 
     @Before
     fun setup() {
-        Dispatchers.setMain(testDispatcher)
         productRepository = mockk()
         supabaseStorageHelper = mockk()
         every { productRepository.getAllProducts() } returns flowOf(listOf(testProduct, inactiveProduct))
@@ -307,5 +307,193 @@ class ProductsViewModelTest {
 
         viewModel.dismissError()
         assertNull(viewModel.uiState.value.error)
+    }
+
+    // ==================== Image Upload Tests ====================
+
+    @Test
+    fun `saveProduct uploads local image before creating product`() = runTest {
+        val localUri = "content://media/images/123"
+        val uploadedUrl = "https://abc.supabase.co/storage/v1/object/public/product-images/uuid.jpg"
+        
+        every { supabaseStorageHelper.needsUpload(localUri) } returns true
+        coEvery { supabaseStorageHelper.uploadImage(localUri) } returns uploadedUrl
+        coEvery {
+            productRepository.createProduct(any(), any(), any(), any())
+        } returns testProduct.copy(imageUri = uploadedUrl)
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showAddDialog()
+        viewModel.setDialogName("Product with Image")
+        viewModel.setDialogBuyPrice("45.00")
+        viewModel.setDialogImageUri(localUri)
+        viewModel.saveProduct()
+        advanceUntilIdle()
+
+        coVerify { supabaseStorageHelper.uploadImage(localUri) }
+        coVerify {
+            productRepository.createProduct(
+                name = "Product with Image",
+                defaultBuyPrice = BigDecimal("45.00"),
+                defaultSellPrice = null,
+                imageUri = uploadedUrl
+            )
+        }
+    }
+
+    @Test
+    fun `saveProduct does not upload if URI is already Supabase URL`() = runTest {
+        val supabaseUrl = "https://abc.supabase.co/storage/v1/object/public/product-images/existing.jpg"
+        
+        every { supabaseStorageHelper.needsUpload(supabaseUrl) } returns false
+        coEvery {
+            productRepository.createProduct(any(), any(), any(), any())
+        } returns testProduct.copy(imageUri = supabaseUrl)
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showAddDialog()
+        viewModel.setDialogName("Product with existing image")
+        viewModel.setDialogImageUri(supabaseUrl)
+        viewModel.saveProduct()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { supabaseStorageHelper.uploadImage(any()) }
+        coVerify {
+            productRepository.createProduct(
+                name = "Product with existing image",
+                defaultBuyPrice = null,
+                defaultSellPrice = null,
+                imageUri = supabaseUrl
+            )
+        }
+    }
+
+    @Test
+    fun `saveProduct handles upload failure gracefully`() = runTest {
+        val localUri = "content://media/images/456"
+        
+        every { supabaseStorageHelper.needsUpload(localUri) } returns true
+        coEvery { supabaseStorageHelper.uploadImage(localUri) } returns null
+        coEvery {
+            productRepository.createProduct(any(), any(), any(), any())
+        } returns testProduct
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showAddDialog()
+        viewModel.setDialogName("Product with failed upload")
+        viewModel.setDialogImageUri(localUri)
+        viewModel.saveProduct()
+        advanceUntilIdle()
+
+        // Should still create product but with null imageUri
+        coVerify {
+            productRepository.createProduct(
+                name = "Product with failed upload",
+                defaultBuyPrice = null,
+                defaultSellPrice = null,
+                imageUri = null
+            )
+        }
+    }
+
+    @Test
+    fun `saveProduct uploads image when updating existing product`() = runTest {
+        val localUri = "content://media/images/789"
+        val uploadedUrl = "https://abc.supabase.co/storage/v1/object/public/product-images/new.jpg"
+        
+        every { supabaseStorageHelper.needsUpload(localUri) } returns true
+        coEvery { supabaseStorageHelper.uploadImage(localUri) } returns uploadedUrl
+        coEvery { productRepository.updateProduct(any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showEditDialog(testProduct)
+        viewModel.setDialogImageUri(localUri)
+        viewModel.saveProduct()
+        advanceUntilIdle()
+
+        coVerify { supabaseStorageHelper.uploadImage(localUri) }
+        coVerify {
+            productRepository.updateProduct(match {
+                it.id == testProduct.id && it.imageUri == uploadedUrl
+            })
+        }
+    }
+
+    @Test
+    fun `setDialogImageUri updates state`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showAddDialog()
+        assertNull(viewModel.uiState.value.dialogImageUri)
+
+        viewModel.setDialogImageUri("content://test/image")
+        assertEquals("content://test/image", viewModel.uiState.value.dialogImageUri)
+    }
+
+    @Test
+    fun `showEditDialog loads existing image URI`() = runTest {
+        val productWithImage = testProduct.copy(
+            imageUri = "https://abc.supabase.co/storage/v1/object/public/product-images/existing.jpg"
+        )
+        every { productRepository.getAllProducts() } returns flowOf(listOf(productWithImage))
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.showEditDialog(productWithImage)
+
+        assertEquals(productWithImage.imageUri, viewModel.uiState.value.dialogImageUri)
+    }
+
+    @Test
+    fun `deleteProduct calls repository and shows success`() = runTest {
+        coEvery { productRepository.deleteProduct(any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.deleteProduct(testProduct.id)
+        advanceUntilIdle()
+
+        coVerify { productRepository.deleteProduct(testProduct.id) }
+        assertTrue(viewModel.uiState.value.showSuccess)
+        assertEquals("Товар видалено", viewModel.uiState.value.successMessage)
+    }
+
+    @Test
+    fun `deleteProduct handles error`() = runTest {
+        coEvery { productRepository.deleteProduct(any()) } throws RuntimeException("Delete failed")
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.deleteProduct(testProduct.id)
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun `dismissSuccess clears success state`() = runTest {
+        coEvery { productRepository.deleteProduct(any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.deleteProduct(testProduct.id)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.showSuccess)
+
+        viewModel.dismissSuccess()
+        assertFalse(viewModel.uiState.value.showSuccess)
     }
 }

@@ -3,10 +3,12 @@ package com.zagot.zagotplus.ui.screens.purchase
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,7 +58,8 @@ data class PurchaseEntryUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
-    val navigateBack: Boolean = false
+    val navigateBack: Boolean = false,
+    val editingPosition: PurchasePosition? = null // Position being edited
 ) {
     val currentTotal: BigDecimal?
         get() {
@@ -86,7 +89,9 @@ data class PurchaseEntryUiState(
 class PurchaseEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val purchaseBatchRepository: PurchaseBatchRepository,
-    private val devicePreferences: DevicePreferences
+    private val cashRepository: CashRepository,
+    private val devicePreferences: DevicePreferences,
+    private val productOrderPreferences: ProductOrderPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PurchaseEntryUiState())
@@ -100,14 +105,23 @@ class PurchaseEntryViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             productRepository.getActiveProducts().collect { products ->
+                val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
                 _uiState.update { 
                     it.copy(
-                        products = products,
+                        products = orderedProducts,
                         isLoading = false
                     )
                 }
             }
         }
+    }
+
+    fun onProductOrderChanged(newOrder: List<UUID>) {
+        productOrderPreferences.setProductOrder(newOrder)
+        // Reorder the current products list
+        val currentProducts = _uiState.value.products
+        val orderedProducts = productOrderPreferences.applyOrder(currentProducts) { it.id }
+        _uiState.update { it.copy(products = orderedProducts) }
     }
 
     fun selectProduct(product: Product) {
@@ -175,6 +189,33 @@ class PurchaseEntryViewModel @Inject constructor(
                     PurchaseEntryScreenState.PRODUCT_GRID 
                 else 
                     state.screenState
+            )
+        }
+    }
+
+    fun startEditPosition(position: PurchasePosition) {
+        _uiState.update { it.copy(editingPosition = position) }
+    }
+
+    fun cancelEditPosition() {
+        _uiState.update { it.copy(editingPosition = null) }
+    }
+
+    fun updatePosition(positionId: String, newWeight: BigDecimal, newPrice: BigDecimal) {
+        _uiState.update { state ->
+            val newPositions = state.positions.map { pos ->
+                if (pos.id == positionId) {
+                    val newTotal = newWeight.multiply(newPrice).setScale(2, java.math.RoundingMode.HALF_UP)
+                    pos.copy(
+                        weightKg = newWeight,
+                        pricePerKg = newPrice,
+                        totalAmount = newTotal
+                    )
+                } else pos
+            }
+            state.copy(
+                positions = newPositions,
+                editingPosition = null
             )
         }
     }
@@ -255,6 +296,15 @@ class PurchaseEntryViewModel @Inject constructor(
                 }
 
                 purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
+
+                // Record cash payment for purchase
+                if (locationId != null) {
+                    cashRepository.recordPurchasePayment(
+                        locationId = locationId,
+                        amount = state.totalAmount,
+                        transactionId = batchId
+                    )
+                }
 
                 // TODO: Print receipt here (Phase 6 - hardware integration)
                 // printReceipt(batch, positions)

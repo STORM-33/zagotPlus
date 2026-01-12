@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.sale
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
@@ -79,7 +80,7 @@ data class SaleEntryUiState(
     
     // Current weighing input
     val currentWeight: String = "",
-    val currentTareCount: String = "1",
+    val currentTareCount: String = "0",
     
     // Batches for current product
     val currentBatches: List<SaleWeighingBatch> = emptyList(),
@@ -98,7 +99,8 @@ data class SaleEntryUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
-    val navigateBack: Boolean = false
+    val navigateBack: Boolean = false,
+    val editingPosition: SalePosition? = null // Position being edited
 ) {
     // Current product calculations
     val currentGrossWeight: BigDecimal
@@ -126,7 +128,7 @@ data class SaleEntryUiState(
     
     val canAddBatch: Boolean
         get() = currentWeight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
-                currentTareCount.toIntOrNull()?.let { it > 0 } == true
+                currentTareCount.toIntOrNull()?.let { it >= 0 } == true
     
     val canProceedToReview: Boolean
         get() = currentBatches.isNotEmpty()
@@ -154,7 +156,8 @@ data class SaleEntryUiState(
 class SaleEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val transactionRepository: TransactionRepository,
-    private val devicePreferences: DevicePreferences
+    private val devicePreferences: DevicePreferences,
+    private val productOrderPreferences: ProductOrderPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SaleEntryUiState())
@@ -169,6 +172,7 @@ class SaleEntryViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val products = productRepository.getActiveProducts().first()
+                val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
                 val locationId = devicePreferences.getSelectedLocationId()
                 val inventory = if (locationId != null) {
                     transactionRepository.getInventoryByLocation(locationId).first()
@@ -178,7 +182,7 @@ class SaleEntryViewModel @Inject constructor(
                 
                 _uiState.update {
                     it.copy(
-                        products = products,
+                        products = orderedProducts,
                         inventory = inventory,
                         isLoading = false
                     )
@@ -194,6 +198,14 @@ class SaleEntryViewModel @Inject constructor(
         }
     }
 
+    fun onProductOrderChanged(newOrder: List<UUID>) {
+        productOrderPreferences.setProductOrder(newOrder)
+        // Reorder the current products list
+        val currentProducts = _uiState.value.products
+        val orderedProducts = productOrderPreferences.applyOrder(currentProducts) { it.id }
+        _uiState.update { it.copy(products = orderedProducts) }
+    }
+
     fun selectProduct(product: Product) {
         val inventory = _uiState.value.inventory
         val availableWeight = inventory
@@ -207,7 +219,7 @@ class SaleEntryViewModel @Inject constructor(
                 pricePerKg = product.defaultSellPrice?.toPlainString() ?: "",
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "1",
+                currentTareCount = "0",
                 tareWeightPerUnit = "0.1",
                 screenState = SaleEntryScreenState.WEIGHING
             )
@@ -231,7 +243,7 @@ class SaleEntryViewModel @Inject constructor(
         val weight = state.currentWeight.toBigDecimalOrNull() ?: return
         val tareCount = state.currentTareCount.toIntOrNull() ?: return
 
-        if (weight <= BigDecimal.ZERO || tareCount <= 0) return
+        if (weight <= BigDecimal.ZERO || tareCount < 0) return
 
         val batch = SaleWeighingBatch(
             grossWeightKg = weight,
@@ -242,7 +254,7 @@ class SaleEntryViewModel @Inject constructor(
             it.copy(
                 currentBatches = it.currentBatches + batch,
                 currentWeight = "",
-                currentTareCount = "1"
+                currentTareCount = "0"
             )
         }
     }
@@ -298,7 +310,7 @@ class SaleEntryViewModel @Inject constructor(
                 selectedProduct = null,
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "1",
+                currentTareCount = "0",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
                 screenState = SaleEntryScreenState.POSITIONS_LIST
@@ -315,6 +327,31 @@ class SaleEntryViewModel @Inject constructor(
                     SaleEntryScreenState.PRODUCT_GRID
                 else
                     state.screenState
+            )
+        }
+    }
+
+    fun startEditPosition(position: SalePosition) {
+        _uiState.update { it.copy(editingPosition = position) }
+    }
+
+    fun cancelEditPosition() {
+        _uiState.update { it.copy(editingPosition = null) }
+    }
+
+    fun updatePosition(positionId: String, newTareWeight: BigDecimal, newPrice: BigDecimal) {
+        _uiState.update { state ->
+            val newPositions = state.positions.map { pos ->
+                if (pos.id == positionId) {
+                    pos.copy(
+                        tareWeightPerUnit = newTareWeight,
+                        pricePerKg = newPrice
+                    )
+                } else pos
+            }
+            state.copy(
+                positions = newPositions,
+                editingPosition = null
             )
         }
     }
@@ -337,7 +374,7 @@ class SaleEntryViewModel @Inject constructor(
                 selectedProduct = null,
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "1",
+                currentTareCount = "0",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
                 screenState = if (it.positions.isNotEmpty())

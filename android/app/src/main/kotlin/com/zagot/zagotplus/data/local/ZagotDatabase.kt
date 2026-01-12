@@ -6,10 +6,14 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.zagot.zagotplus.data.local.converter.Converters
+import com.zagot.zagotplus.data.local.dao.CashOperationDao
+import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.local.entity.CashOperationEntity
+import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.local.entity.LocationEntity
 import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
@@ -19,17 +23,19 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Room database for Zagot+ application.
  * Offline-first local storage with Supabase sync.
  *
- * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity
- * Version: 6 (added local_id and synced_at to products for sync support)
+ * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, ExpenseCategoryEntity, CashOperationEntity
+ * Version: 7 (added expense_categories and cash_operations tables)
  */
 @Database(
     entities = [
         LocationEntity::class,
         ProductEntity::class,
         TransactionEntity::class,
-        PurchaseBatchEntity::class
+        PurchaseBatchEntity::class,
+        ExpenseCategoryEntity::class,
+        CashOperationEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -54,6 +60,16 @@ abstract class ZagotDatabase : RoomDatabase() {
      * Provides access to purchase_batches table.
      */
     abstract fun purchaseBatchDao(): PurchaseBatchDao
+
+    /**
+     * Provides access to expense_categories table.
+     */
+    abstract fun expenseCategoryDao(): ExpenseCategoryDao
+
+    /**
+     * Provides access to cash_operations table.
+     */
+    abstract fun cashOperationDao(): CashOperationDao
 
     companion object {
         /**
@@ -181,6 +197,55 @@ abstract class ZagotDatabase : RoomDatabase() {
                 // Create indexes
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_products_local_id ON products(local_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_products_synced_at ON products(synced_at)")
+            }
+        }
+
+        /**
+         * Migration from version 6 to 7: Add expense_categories and cash_operations tables.
+         * Implements cash register functionality.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create expense_categories table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS expense_categories (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        local_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        created_at INTEGER NOT NULL,
+                        synced_at INTEGER
+                    )
+                """)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_expense_categories_local_id ON expense_categories(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_expense_categories_synced_at ON expense_categories(synced_at)")
+
+                // Create cash_operations table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS cash_operations (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        local_id TEXT NOT NULL,
+                        location_id TEXT,
+                        type TEXT NOT NULL,
+                        amount TEXT NOT NULL,
+                        category_id TEXT,
+                        transaction_id TEXT,
+                        notes TEXT,
+                        device_id TEXT,
+                        created_at INTEGER NOT NULL,
+                        synced_at INTEGER,
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                        FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+                        FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+                    )
+                """)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_transaction_id ON cash_operations(transaction_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
             }
         }
     }

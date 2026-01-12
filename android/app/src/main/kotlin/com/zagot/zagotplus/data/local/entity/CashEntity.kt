@@ -1,0 +1,132 @@
+package com.zagot.zagotplus.data.local.entity
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import java.math.BigDecimal
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * Room entity representing an expense category.
+ * User-defined categories for organizing cash payments.
+ */
+@Entity(
+    tableName = "expense_categories",
+    indices = [
+        Index(value = ["local_id"], unique = true),
+        Index(value = ["synced_at"])
+    ]
+)
+data class ExpenseCategoryEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id")
+    val id: UUID,
+
+    @ColumnInfo(name = "local_id")
+    val localId: String,
+
+    @ColumnInfo(name = "name")
+    val name: String,
+
+    @ColumnInfo(name = "is_active")
+    val isActive: Boolean = true,
+
+    @ColumnInfo(name = "created_at")
+    val createdAt: Instant,
+
+    @ColumnInfo(name = "synced_at")
+    val syncedAt: Instant? = null
+)
+
+/**
+ * Room entity representing a cash operation.
+ * Tracks all cash movements: deposits, withdrawals, and payments.
+ *
+ * Operation types:
+ * - "deposit": Cash added to register from external source
+ * - "withdrawal": Cash removed from register to external destination
+ * - "payment": Cash paid out for expenses (has category)
+ * - "purchase": Cash paid for product purchase (auto-generated, linked to transaction)
+ *
+ * @property id Primary key (UUID)
+ * @property localId Device-generated UUID for sync
+ * @property locationId Location where operation occurred
+ * @property type Operation type: "deposit", "withdrawal", "payment", "purchase"
+ * @property amount Amount in UAH (always positive)
+ * @property categoryId For payments: optional expense category
+ * @property transactionId For purchases: linked purchase transaction
+ * @property notes Optional description
+ * @property deviceId Which device created this operation
+ * @property createdAt When operation was created
+ * @property syncedAt When synced to Supabase (null = pending)
+ */
+@Entity(
+    tableName = "cash_operations",
+    foreignKeys = [
+        ForeignKey(
+            entity = LocationEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["location_id"],
+            onDelete = ForeignKey.RESTRICT
+        ),
+        ForeignKey(
+            entity = ExpenseCategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["category_id"],
+            onDelete = ForeignKey.SET_NULL
+        ),
+        ForeignKey(
+            entity = TransactionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["transaction_id"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["local_id"], unique = true),
+        Index(value = ["location_id"]),
+        Index(value = ["category_id"]),
+        Index(value = ["transaction_id"]),
+        Index(value = ["synced_at"]),
+        Index(value = ["created_at"]),
+        Index(value = ["type"])
+    ]
+)
+data class CashOperationEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id")
+    val id: UUID,
+
+    @ColumnInfo(name = "local_id")
+    val localId: String,
+
+    @ColumnInfo(name = "location_id")
+    val locationId: UUID?,
+
+    @ColumnInfo(name = "type")
+    val type: String, // "deposit" | "withdrawal" | "payment" | "purchase"
+
+    @ColumnInfo(name = "amount")
+    val amount: BigDecimal,
+
+    @ColumnInfo(name = "category_id")
+    val categoryId: UUID?,
+
+    @ColumnInfo(name = "transaction_id")
+    val transactionId: UUID?,
+
+    @ColumnInfo(name = "notes")
+    val notes: String?,
+
+    @ColumnInfo(name = "device_id")
+    val deviceId: String?,
+
+    @ColumnInfo(name = "created_at")
+    val createdAt: Instant,
+
+    @ColumnInfo(name = "synced_at")
+    val syncedAt: Instant? = null
+)

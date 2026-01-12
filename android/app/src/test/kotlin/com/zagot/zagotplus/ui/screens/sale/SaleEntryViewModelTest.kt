@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.sale
 
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.SaleInput
 import com.zagot.zagotplus.domain.repository.TransactionRepository
@@ -29,6 +30,7 @@ class SaleEntryViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var devicePreferences: DevicePreferences
+    private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var viewModel: SaleEntryViewModel
 
     private val testProduct = TestData.PRODUCT_WHITE_WALNUT
@@ -44,18 +46,22 @@ class SaleEntryViewModelTest {
         productRepository = mockk()
         transactionRepository = mockk()
         devicePreferences = mockk()
+        productOrderPreferences = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { transactionRepository.getInventoryByLocation(testLocation.id) } returns flowOf(listOf(testInventoryItem))
+        every { productOrderPreferences.getProductOrder() } returns emptyList()
+        every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
     }
 
     private fun createViewModel(): SaleEntryViewModel {
         return SaleEntryViewModel(
             productRepository = productRepository,
             transactionRepository = transactionRepository,
-            devicePreferences = devicePreferences
+            devicePreferences = devicePreferences,
+            productOrderPreferences = productOrderPreferences
         )
     }
 
@@ -171,7 +177,7 @@ class SaleEntryViewModelTest {
         assertEquals(BigDecimal("30"), state.currentBatches[0].grossWeightKg)
         assertEquals(3, state.currentBatches[0].tareCount)
         assertEquals("", state.currentWeight) // Reset after adding
-        assertEquals("1", state.currentTareCount) // Reset to default
+        assertEquals("0", state.currentTareCount) // Reset to default
     }
 
     @Test

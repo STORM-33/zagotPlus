@@ -1,5 +1,7 @@
 package com.zagot.zagotplus.sync
 
+import com.zagot.zagotplus.data.remote.dto.CashOperationDto
+import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
@@ -25,6 +27,8 @@ class SupabaseSyncDataSource @Inject constructor(
         private const val TABLE_PURCHASE_BATCHES = "purchase_batches"
         private const val TABLE_LOCATIONS = "locations"
         private const val TABLE_PRODUCTS = "products"
+        private const val TABLE_EXPENSE_CATEGORIES = "expense_categories"
+        private const val TABLE_CASH_OPERATIONS = "cash_operations"
     }
 
     override suspend fun pushTransaction(dto: TransactionDto) {
@@ -47,6 +51,14 @@ class SupabaseSyncDataSource @Inject constructor(
         }
     }
 
+    override suspend fun pushExpenseCategory(dto: ExpenseCategoryDto) {
+        supabaseClient.postgrest[TABLE_EXPENSE_CATEGORIES].upsert(dto, onConflict = "local_id")
+    }
+
+    override suspend fun pushCashOperation(dto: CashOperationDto) {
+        supabaseClient.postgrest[TABLE_CASH_OPERATIONS].upsert(dto, onConflict = "local_id")
+    }
+
     override suspend fun pullTransactions(since: Instant): List<TransactionDto> {
         return supabaseClient.postgrest[TABLE_TRANSACTIONS]
             .select(Columns.ALL) {
@@ -59,6 +71,26 @@ class SupabaseSyncDataSource @Inject constructor(
 
     override suspend fun pullBatches(since: Instant): List<PurchaseBatchDto> {
         return supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", since.toString())
+                }
+            }
+            .decodeList()
+    }
+
+    override suspend fun pullExpenseCategories(since: Instant): List<ExpenseCategoryDto> {
+        return supabaseClient.postgrest[TABLE_EXPENSE_CATEGORIES]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", since.toString())
+                }
+            }
+            .decodeList()
+    }
+
+    override suspend fun pullCashOperations(since: Instant): List<CashOperationDto> {
+        return supabaseClient.postgrest[TABLE_CASH_OPERATIONS]
             .select(Columns.ALL) {
                 filter {
                     gt("created_at", since.toString())
