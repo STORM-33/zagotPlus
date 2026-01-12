@@ -949,3 +949,6 @@ Test Coverage:
 Sessions: 4 done (Phase: Test Coverage), 0 blocked, streak: 4
 
 ---
+
+### 2026-01-12T17:51:30Z - completed: viewmodel-tests
+Added 33 unit tests for HistoryViewModel, InventoryViewModel, ReportsViewModel.

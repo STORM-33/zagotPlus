@@ -5,7 +5,7 @@ targetSdk = "34"
 compileSdk = "34"
 
 # Plugin versions
-agp = "8.3.1"
+agp = "8.5.0"
 kotlin = "1.9.21"
 ksp = "1.9.21-1.0.15"
 hilt = "2.48.1"
