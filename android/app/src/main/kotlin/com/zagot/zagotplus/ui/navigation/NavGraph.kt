@@ -36,6 +36,7 @@ import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleEntryScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
+import com.zagot.zagotplus.ui.screens.transfer.TransferScreen
 import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +86,16 @@ fun NavGraph(
                                 },
                                 leadingIcon = {
                                     Icon(Destination.Products.icon, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Переміщення") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(Destination.Transfer.route)
+                                },
+                                leadingIcon = {
+                                    Icon(Destination.Transfer.icon, contentDescription = null)
                                 }
                             )
                             DropdownMenuItem(
@@ -186,6 +197,11 @@ fun NavGraph(
                 SettingsScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToProducts = { navController.navigate(Destination.Products.route) }
+                )
+            }
+            composable(Destination.Transfer.route) {
+                TransferScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }

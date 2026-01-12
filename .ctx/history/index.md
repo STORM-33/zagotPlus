@@ -12,6 +12,7 @@ Last updated: 2026-01-11
 | Phase 3: Audit Remediation | 2026-01-11 | 7 | completed | history/phase-3-audit-remediation |
 | Phase 4: Supporting UI | 2026-01-11 | 4 | completed | history/2026-01-11_phase-4-supporting-ui |
 | Phase 5: Purchase Flow Redesign | 2026-01-11 | 5 | completed | history/2026-01-11_phase-5-purchase-flow |
+| Test Coverage | 2026-01-12 | 2 | completed | history/2026-01-12_test-coverage |
 
 ## Decisions Log
 
@@ -77,6 +78,9 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 5 | Overlay instead of separate navigation | Simpler flow for summary display | purchase-summary |
 | 2026-01-11 | Phase 5 | Tap to confirm (not button) | Matches brief specification for summary | purchase-summary |
 | 2026-01-11 | Phase 5 | isSaving flag prevents double-tap | UX protection during async save | purchase-summary |
+| 2026-01-12 | Test Coverage | MockK for repository mocking | Industry standard for Kotlin mocking | repository-tests |
+| 2026-01-12 | Test Coverage | runTest for coroutine tests | Kotlin coroutines test library | viewmodel-tests |
+| 2026-01-12 | Test Coverage | UnconfinedTestDispatcher for immediate execution | Synchronous test execution | viewmodel-tests |
 | 2026-01-11 | Phase 5 | database.withTransaction for atomic batch | Ensures batch + transactions created together | db-batches |
 | 2026-01-11 | Phase 5 | SQLite date functions for today query | localtime aware filtering for batches | db-batches |
 | 2026-01-11 | Phase 5 | SET_NULL on batch_id FK delete | Preserve transactions if batch deleted | db-batches |
@@ -123,6 +127,10 @@ Last updated: 2026-01-11
 | 2026-01-11 | Phase 5 | Overlay patterns reduce navigation depth | Full-screen overlay with tap-to-dismiss for simple confirmations | purchase-summary |
 | 2026-01-11 | Phase 5 | Content URIs simplify image handling | No need to copy files, system handles lifecycle | product-images |
 | 2026-01-11 | Phase 5 | Separate domain models from entities | PurchasePosition vs Transaction - different concerns | purchase-entry-flow |
+| 2026-01-12 | Test Coverage | MockK relaxed mode simplifies setup | Use for DAOs, strict for critical mocks | repository-tests |
+| 2026-01-12 | Test Coverage | every { dao.method() } returns flowOf() | Standard pattern for Flow-returning DAO mocks | repository-tests |
+| 2026-01-12 | Test Coverage | coVerify for suspend function verification | Coroutine-aware verification in tests | repository-tests |
+| 2026-01-12 | Test Coverage | Test complexity drives coverage depth | Low=smoke tests, Medium=full coverage, High=edge cases | viewmodel-tests |
 
 ## Patterns & Solutions
 
@@ -174,6 +182,21 @@ Last updated: 2026-01-11
 | Daily summary reports | Filter transactions by date, aggregate by product/location | screen-reports |
 | Clipboard + Share export | ClipboardManager for copy, Intent.ACTION_SEND for share | screen-reports |
 | Settings sections | Group settings by category (Sync, Device, Data, About) | screen-settings |
+| Batch-level transaction grouping | purchase_batches table with batch_id FK on transactions | db-batches |
+| Atomic batch creation | database.withTransaction for batch + transactions | db-batches |
+| Today's batches query | SQLite date('now', 'localtime') for timezone-aware filtering | db-batches |
+| Product image storage | Store content:// URI directly, no file copying | product-images |
+| Async image loading | Coil library with AsyncImage composable | product-images |
+| Image picker | ActivityResultContracts.GetContent for modern API | product-images |
+| Adaptive grid layout | GridCells.Adaptive(120.dp) for responsive columns | purchase-entry-flow |
+| Multi-step entry flow | Enum state machine (PRODUCT_GRID → WEIGHT_ENTRY → POSITIONS_LIST) | purchase-entry-flow |
+| Position line items | PurchasePosition data class with UUID for list management | purchase-entry-flow |
+| Summary overlay pattern | Full-screen scrim overlay with tap-to-confirm | purchase-summary |
+| Double-tap prevention | isSaving flag during async operations | purchase-summary |
+| Repository unit tests | MockK relaxed DAOs, flowOf() for Flow returns, coVerify for suspend | repository-tests |
+| ViewModel unit tests | UnconfinedTestDispatcher, MockK repositories, runTest coroutines | viewmodel-tests |
+| Filter testing | Test all combinations of filter states for ViewModel logic | viewmodel-tests |
+| Date range preset testing | Test each DateRangePreset enum value for correctness | viewmodel-tests |
 | Device ID display | Truncated UUID with tap-to-copy functionality | screen-settings |
 | Location selector | RadioButton list with persisted selection | screen-settings |
 | Atomic batch creation | database.withTransaction wraps batch + transactions insert | db-batches |

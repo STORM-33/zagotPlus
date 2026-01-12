@@ -97,7 +97,7 @@ fun PurchaseScreen(
 
             // Section header
             Text(
-                text = "Закупівлі сьогодні",
+                text = "Закупки сьогодні",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -123,8 +123,8 @@ fun PurchaseScreen(
                 ) {
                     EmptyState(
                         icon = EmptyStateIcons.Purchase,
-                        title = "Закупівель ще немає",
-                        description = "Натисніть кнопку нижче, щоб почати нову закупівлю"
+                        title = "Закупок ще немає",
+                        description = "Натисніть кнопку нижче, щоб почати нову закупку"
                     )
                 }
             } else {

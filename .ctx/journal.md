@@ -920,3 +920,35 @@ Notes:
 - Not tracked in .ctx workflow at the time
 
 ---
+
+---
+
+## 2026-01-12
+
+### Session: phase-test-coverage/repository-tests
+Status: completed
+Complexity: medium
+Duration: ~5 minutes
+
+Objective: Add unit tests for repository implementations to cover entity-domain mapping.
+
+Work Summary:
+- Created LocationRepositoryImplTest with 6 tests
+- Created ProductRepositoryImplTest with 12 tests
+- Created PurchaseBatchRepositoryImplTest with 12 tests
+- All 37 repository tests pass (30 new + 10 existing TransactionRepositoryImplTest)
+- Commit: `test(repository): add unit tests for Location, Product, PurchaseBatch repositories` (3b1f74d)
+
+Test Coverage:
+- Entity-to-domain mapping
+- Domain-to-entity mapping (Product create/update)
+- Flow emissions for list queries
+- Null field handling
+- CRUD operation verification
+
+Sessions: 4 done (Phase: Test Coverage), 0 blocked, streak: 4
+
+---
+
+### 2026-01-12T17:51:30Z - completed: viewmodel-tests
+Added 33 unit tests for HistoryViewModel, InventoryViewModel, ReportsViewModel.
