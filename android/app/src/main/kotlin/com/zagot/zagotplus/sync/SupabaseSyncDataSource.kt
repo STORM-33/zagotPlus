@@ -35,6 +35,18 @@ class SupabaseSyncDataSource @Inject constructor(
         supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
     }
 
+    override suspend fun pushProduct(dto: ProductDto) {
+        supabaseClient.postgrest[TABLE_PRODUCTS].upsert(dto, onConflict = "local_id")
+    }
+
+    override suspend fun deleteProduct(id: String) {
+        supabaseClient.postgrest[TABLE_PRODUCTS].delete {
+            filter {
+                eq("id", id)
+            }
+        }
+    }
+
     override suspend fun pullTransactions(since: Instant): List<TransactionDto> {
         return supabaseClient.postgrest[TABLE_TRANSACTIONS]
             .select(Columns.ALL) {

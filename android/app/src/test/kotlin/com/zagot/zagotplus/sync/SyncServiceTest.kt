@@ -63,6 +63,7 @@ class SyncServiceTest {
         syncPreferences = mockk()
 
         // Default empty responses
+        coEvery { productDao.getUnsynced() } returns emptyList()
         coEvery { purchaseBatchDao.getUnsynced() } returns emptyList()
         coEvery { syncDataSource.pullLocations() } returns emptyList()
         coEvery { syncDataSource.pullProducts() } returns emptyList()
@@ -192,6 +193,7 @@ class SyncServiceTest {
         
         val productDto = ProductDto(
             id = UUID.randomUUID().toString(),
+            localId = UUID.randomUUID().toString(),
             name = "Test Product",
             defaultBuyPrice = 10.0,
             defaultSellPrice = 15.0,

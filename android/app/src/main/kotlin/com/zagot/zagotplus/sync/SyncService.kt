@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import java.time.Instant
@@ -43,10 +44,22 @@ class SyncService @Inject constructor(
     suspend fun sync(): SyncResult {
         Log.d(TAG, "Starting sync...")
 
-        // Step 1: Pull reference data (non-critical, log and continue on failure)
+        // Step 1: Push pending products (before other entities due to FK)
+        val productPushResult = try {
+            pushPendingProducts()
+        } catch (e: Exception) {
+            Log.e(TAG, "Product push failed", e)
+            return SyncResult.Failure(
+                error = e.message ?: "Product push failed",
+                phase = SyncPhase.PUSH
+            )
+        }
+        Log.d(TAG, "Pushed ${productPushResult.successCount} products (${productPushResult.failedCount} failed)")
+
+        // Step 2: Pull reference data (non-critical, log and continue on failure)
         pullReferenceData()
 
-        // Step 2: Push pending batches (before transactions due to FK)
+        // Step 3: Push pending batches (before transactions due to FK)
         val batchPushResult = try {
             pushPendingBatches()
         } catch (e: Exception) {
@@ -58,7 +71,7 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${batchPushResult.successCount} batches (${batchPushResult.failedCount} failed)")
 
-        // Step 3: Push pending transactions
+        // Step 4: Push pending transactions
         val pushResult = try {
             pushPendingTransactions()
         } catch (e: Exception) {
@@ -70,7 +83,7 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${pushResult.successCount} transactions (${pushResult.failedCount} failed)")
 
-        // Step 4: Pull new batches
+        // Step 5: Pull new batches
         val batchPullResult = try {
             pullNewBatches()
         } catch (e: Exception) {
@@ -80,21 +93,21 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pulled $batchPullResult batches")
 
-        // Step 5: Pull new transactions
+        // Step 6: Pull new transactions
         val pullResult = try {
             pullNewTransactions()
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
             return SyncResult.Partial(
-                pushed = pushResult.successCount + batchPushResult.successCount,
+                pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount,
                 pullError = e.message ?: "Pull failed"
             )
         }
         Log.d(TAG, "Pulled $pullResult transactions")
 
         return SyncResult.Success(
-            pushed = pushResult.successCount + batchPushResult.successCount,
+            pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount,
             pulled = pullResult + batchPullResult
         )
     }
@@ -215,6 +228,41 @@ class SyncService @Inject constructor(
                 Log.e(TAG, "Failed to push batch ${entity.localId}", e)
                 failedCount++
                 // Continue with next batch - individual failures don't stop sync
+            }
+        }
+
+        return PushResult(successCount, failedCount)
+    }
+
+    /**
+     * Push all unsynced local products to Supabase.
+     * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * @throws Exception if network or critical error occurs
+     */
+    private suspend fun pushPendingProducts(): PushResult {
+        val pending = productDao.getUnsynced()
+        if (pending.isEmpty()) {
+            Log.d(TAG, "No pending products to push")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${pending.size} pending products")
+
+        var successCount = 0
+        var failedCount = 0
+
+        for (entity in pending) {
+            try {
+                val dto = ProductDto.fromEntity(entity)
+                syncDataSource.pushProduct(dto)
+                // Mark as synced locally
+                productDao.markSynced(entity.id, Instant.now())
+                successCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push product ${entity.localId}", e)
+                failedCount++
+                // Continue with next product - individual failures don't stop sync
             }
         }
 

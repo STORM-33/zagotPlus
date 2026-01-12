@@ -44,11 +44,13 @@ class ProductRepositoryImplTest {
         imageUri: String? = null
     ) = ProductEntity(
         id = id,
+        localId = id.toString(),
         name = name,
         defaultBuyPrice = buyPrice,
         defaultSellPrice = sellPrice,
         isActive = isActive,
         createdAt = now,
+        syncedAt = now,
         imageUri = imageUri
     )
 
@@ -147,7 +149,9 @@ class ProductRepositoryImplTest {
 
     @Test
     fun `updateProduct updates entity correctly`() = runTest {
+        val existingEntity = createProductEntity(productId1, "Original", isActive = true)
         val entitySlot = slot<ProductEntity>()
+        coEvery { productDao.getById(productId1) } returns existingEntity
         coEvery { productDao.update(capture(entitySlot)) } returns Unit
 
         val product = com.zagot.zagotplus.domain.model.Product(
@@ -167,6 +171,7 @@ class ProductRepositoryImplTest {
         assertEquals("Оновлений", entitySlot.captured.name)
         assertEquals(BigDecimal("60.00"), entitySlot.captured.defaultBuyPrice)
         assertFalse(entitySlot.captured.isActive)
+        assertNull(entitySlot.captured.syncedAt) // Should be null to mark as unsynced
     }
 
     @Test

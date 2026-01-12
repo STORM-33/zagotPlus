@@ -15,6 +15,9 @@ data class ProductDto(
     @SerialName("id")
     val id: String,
 
+    @SerialName("local_id")
+    val localId: String,
+
     @SerialName("name")
     val name: String,
 
@@ -38,11 +41,13 @@ data class ProductDto(
      */
     fun toEntity(): ProductEntity = ProductEntity(
         id = UUID.fromString(id),
+        localId = localId,
         name = name,
         defaultBuyPrice = defaultBuyPrice?.let { BigDecimal.valueOf(it) },
         defaultSellPrice = defaultSellPrice?.let { BigDecimal.valueOf(it) },
         isActive = isActive,
         createdAt = Instant.parse(createdAt),
+        syncedAt = Instant.now(),
         imageUri = imageUri
     )
 
@@ -52,6 +57,7 @@ data class ProductDto(
          */
         fun fromEntity(entity: ProductEntity): ProductDto = ProductDto(
             id = entity.id.toString(),
+            localId = entity.localId,
             name = entity.name,
             defaultBuyPrice = entity.defaultBuyPrice?.toDouble(),
             defaultSellPrice = entity.defaultSellPrice?.toDouble(),

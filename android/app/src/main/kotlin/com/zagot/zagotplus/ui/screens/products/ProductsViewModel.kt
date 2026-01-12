@@ -252,6 +252,24 @@ class ProductsViewModel @Inject constructor(
         }
     }
 
+    fun deleteProduct(productId: UUID) {
+        viewModelScope.launch {
+            try {
+                productRepository.deleteProduct(productId)
+                _uiState.update {
+                    it.copy(
+                        showSuccess = true,
+                        successMessage = "Товар видалено"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = e.message ?: "Помилка видалення")
+                }
+            }
+        }
+    }
+
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
     }

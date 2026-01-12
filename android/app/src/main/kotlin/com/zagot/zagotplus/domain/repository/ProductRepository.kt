@@ -44,4 +44,9 @@ interface ProductRepository {
      * Toggle product active status.
      */
     suspend fun toggleProductActive(productId: UUID)
+
+    /**
+     * Delete a product.
+     */
+    suspend fun deleteProduct(productId: UUID)
 }

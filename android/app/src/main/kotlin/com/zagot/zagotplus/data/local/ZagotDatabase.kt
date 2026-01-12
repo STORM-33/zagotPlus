@@ -20,7 +20,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity
- * Version: 5 (added created_at index on transactions)
+ * Version: 6 (added local_id and synced_at to products for sync support)
  */
 @Database(
     entities = [
@@ -29,7 +29,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         TransactionEntity::class,
         PurchaseBatchEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -163,6 +163,24 @@ abstract class ZagotDatabase : RoomDatabase() {
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_created_at ON transactions(created_at)")
+            }
+        }
+
+        /**
+         * Migration from version 5 to 6: Add local_id and synced_at to products for sync support.
+         * Products can now be created/updated locally and synced to Supabase.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add local_id column (use id as default value for existing rows)
+                db.execSQL("ALTER TABLE products ADD COLUMN local_id TEXT NOT NULL DEFAULT ''")
+                // Update existing rows to use id as local_id
+                db.execSQL("UPDATE products SET local_id = id WHERE local_id = ''")
+                // Add synced_at column
+                db.execSQL("ALTER TABLE products ADD COLUMN synced_at INTEGER")
+                // Create indexes
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_products_local_id ON products(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_products_synced_at ON products(synced_at)")
             }
         }
     }

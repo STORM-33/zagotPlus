@@ -39,13 +39,16 @@ class ProductRepositoryImpl @Inject constructor(
         defaultSellPrice: BigDecimal?,
         imageUri: String?
     ): Product {
+        val id = UUID.randomUUID()
         val entity = ProductEntity(
-            id = UUID.randomUUID(),
+            id = id,
+            localId = id.toString(),
             name = name,
             defaultBuyPrice = defaultBuyPrice,
             defaultSellPrice = defaultSellPrice,
             isActive = true,
             createdAt = Instant.now(),
+            syncedAt = null,
             imageUri = imageUri
         )
         productDao.insert(entity)
@@ -53,22 +56,29 @@ class ProductRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateProduct(product: Product) {
-        val entity = ProductEntity(
-            id = product.id,
+        val existing = productDao.getById(product.id) ?: return
+        val entity = existing.copy(
             name = product.name,
             defaultBuyPrice = product.defaultBuyPrice,
             defaultSellPrice = product.defaultSellPrice,
             isActive = product.isActive,
-            createdAt = product.createdAt,
-            imageUri = product.imageUri
+            imageUri = product.imageUri,
+            syncedAt = null // Mark as unsynced after update
         )
         productDao.update(entity)
     }
 
     override suspend fun toggleProductActive(productId: UUID) {
         val existing = productDao.getById(productId) ?: return
-        val updated = existing.copy(isActive = !existing.isActive)
+        val updated = existing.copy(
+            isActive = !existing.isActive,
+            syncedAt = null // Mark as unsynced after toggle
+        )
         productDao.update(updated)
+    }
+
+    override suspend fun deleteProduct(productId: UUID) {
+        productDao.deleteById(productId)
     }
 
     private fun ProductEntity.toDomain() = Product(

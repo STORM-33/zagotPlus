@@ -25,6 +25,18 @@ interface SyncDataSource {
     suspend fun pushBatch(dto: PurchaseBatchDto)
 
     /**
+     * Push a product to the remote server.
+     * @throws Exception on network or server error
+     */
+    suspend fun pushProduct(dto: ProductDto)
+
+    /**
+     * Delete a product from the remote server.
+     * @throws Exception on network or server error
+     */
+    suspend fun deleteProduct(id: String)
+
+    /**
      * Pull transactions created after the given timestamp.
      */
     suspend fun pullTransactions(since: Instant): List<TransactionDto>
