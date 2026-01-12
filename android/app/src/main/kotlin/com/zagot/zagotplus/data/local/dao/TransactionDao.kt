@@ -9,8 +9,19 @@ import androidx.room.Update
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
+
+/**
+ * Raw result from inventory aggregation query.
+ * Used internally by DAO; converted to InventoryItem in repository.
+ */
+data class InventoryAggregateResult(
+    val locationId: String,
+    val productId: String,
+    val totalWeightKg: String
+)
 
 /**
  * Data Access Object for transactions table.
@@ -145,4 +156,28 @@ interface TransactionDao {
      */
     @RawQuery
     suspend fun getFilteredCount(query: SupportSQLiteQuery): Int
+
+    /**
+     * Get aggregated inventory using SQL SUM.
+     * Memory-efficient: doesn't load all transactions into memory.
+     */
+    @Query("""
+        SELECT location_id AS locationId, product_id AS productId, SUM(weight_kg) AS totalWeightKg
+        FROM transactions
+        WHERE location_id IS NOT NULL AND product_id IS NOT NULL
+        GROUP BY location_id, product_id
+    """)
+    fun getInventoryAggregatedFlow(): Flow<List<InventoryAggregateResult>>
+
+    /**
+     * Get aggregated inventory for a specific location using SQL SUM.
+     * Memory-efficient: doesn't load all transactions into memory.
+     */
+    @Query("""
+        SELECT location_id AS locationId, product_id AS productId, SUM(weight_kg) AS totalWeightKg
+        FROM transactions
+        WHERE location_id = :locationId AND product_id IS NOT NULL
+        GROUP BY location_id, product_id
+    """)
+    fun getInventoryByLocationAggregatedFlow(locationId: UUID): Flow<List<InventoryAggregateResult>>
 }

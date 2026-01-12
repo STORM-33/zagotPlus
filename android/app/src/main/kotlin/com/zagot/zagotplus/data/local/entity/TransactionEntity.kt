@@ -64,7 +64,8 @@ import java.util.UUID
         Index(value = ["transfer_location_id"]),
         Index(value = ["product_id"]),
         Index(value = ["batch_id"]),
-        Index(value = ["synced_at"])
+        Index(value = ["synced_at"]),
+        Index(value = ["created_at"])
     ]
 )
 data class TransactionEntity(

@@ -20,7 +20,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity
- * Version: 4 (added missing created_at index on purchase_batches)
+ * Version: 5 (added created_at index on transactions)
  */
 @Database(
     entities = [
@@ -29,7 +29,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         TransactionEntity::class,
         PurchaseBatchEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -153,6 +153,16 @@ abstract class ZagotDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_purchase_batches_created_at ON purchase_batches(created_at)")
+            }
+        }
+
+        /**
+         * Migration from version 4 to 5: Add created_at index on transactions.
+         * Improves performance for date-based queries and sync pull operations.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_created_at ON transactions(created_at)")
             }
         }
     }

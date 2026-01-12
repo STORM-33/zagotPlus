@@ -6,6 +6,7 @@ import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.ProductRepository
+import com.zagot.zagotplus.domain.repository.SaleInput
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -363,9 +364,9 @@ class SaleEntryViewModel @Inject constructor(
                 val locationId = devicePreferences.getSelectedLocationId()
                     ?: throw IllegalStateException("Локація не обрана")
 
-                // Create sale transactions for each position
-                for (position in state.positions) {
-                    transactionRepository.createSale(
+                // Create all sale transactions atomically
+                val saleInputs = state.positions.map { position ->
+                    SaleInput(
                         locationId = locationId,
                         productId = position.product.id,
                         weightKg = position.netWeight,
@@ -373,6 +374,7 @@ class SaleEntryViewModel @Inject constructor(
                         notes = buildPositionNotes(position, state.notes)
                     )
                 }
+                transactionRepository.createSales(saleInputs)
 
                 _uiState.update {
                     it.copy(

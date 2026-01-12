@@ -1,5 +1,8 @@
 package com.zagot.zagotplus.data.repository
 
+import androidx.room.withTransaction
+import com.zagot.zagotplus.data.local.ZagotDatabase
+import com.zagot.zagotplus.data.local.dao.InventoryAggregateResult
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.dao.TransactionQueryBuilder
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
@@ -8,6 +11,7 @@ import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.SaleInput
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -19,9 +23,16 @@ import javax.inject.Singleton
 
 /**
  * Implementation of TransactionRepository using Room as data source.
+ *
+ * Weight sign convention:
+ * - Purchases and transfer_in: POSITIVE weights (add to inventory)
+ * - Sales and transfer_out: NEGATIVE weights (subtract from inventory)
+ *
+ * This allows inventory computation via simple SUM(weight_kg).
  */
 @Singleton
 class TransactionRepositoryImpl @Inject constructor(
+    private val database: ZagotDatabase,
     private val transactionDao: TransactionDao,
     private val devicePreferences: DevicePreferences
 ) : TransactionRepository {
@@ -51,6 +62,9 @@ class TransactionRepositoryImpl @Inject constructor(
         pricePerKg: BigDecimal,
         notes: String?
     ): Transaction {
+        require(weightKg > BigDecimal.ZERO) { "Weight must be positive" }
+        require(pricePerKg >= BigDecimal.ZERO) { "Price must be non-negative" }
+        
         val totalAmount = weightKg * pricePerKg
         val entity = TransactionEntity(
             id = UUID.randomUUID(),
@@ -78,6 +92,9 @@ class TransactionRepositoryImpl @Inject constructor(
         pricePerKg: BigDecimal,
         notes: String?
     ): Transaction {
+        require(weightKg > BigDecimal.ZERO) { "Weight must be positive" }
+        require(pricePerKg >= BigDecimal.ZERO) { "Price must be non-negative" }
+        
         val totalAmount = weightKg * pricePerKg
         val entity = TransactionEntity(
             id = UUID.randomUUID(),
@@ -104,6 +121,9 @@ class TransactionRepositoryImpl @Inject constructor(
         productId: UUID,
         weightKg: BigDecimal
     ): Pair<Transaction, Transaction> {
+        require(weightKg > BigDecimal.ZERO) { "Weight must be positive" }
+        require(fromLocationId != toLocationId) { "Cannot transfer to the same location" }
+        
         val transferId = UUID.randomUUID().toString()
         val now = Instant.now()
         val deviceId = devicePreferences.getDeviceId()
@@ -140,34 +160,29 @@ class TransactionRepositoryImpl @Inject constructor(
             syncedAt = null
         )
 
-        transactionDao.insertAll(listOf(outEntity, inEntity))
+        // Atomic transaction: both must succeed or both fail
+        database.withTransaction {
+            transactionDao.insert(outEntity)
+            transactionDao.insert(inEntity)
+        }
         return outEntity.toDomain() to inEntity.toDomain()
     }
 
     override fun getInventory(): Flow<List<InventoryItem>> =
-        transactionDao.getAllFlow().map { transactions ->
-            computeInventory(transactions)
+        transactionDao.getInventoryAggregatedFlow().map { results ->
+            results.map { it.toInventoryItem() }
         }
 
     override fun getInventoryByLocation(locationId: UUID): Flow<List<InventoryItem>> =
-        transactionDao.getByLocationFlow(locationId).map { transactions ->
-            computeInventory(transactions)
+        transactionDao.getInventoryByLocationAggregatedFlow(locationId).map { results ->
+            results.map { it.toInventoryItem() }
         }
 
-    private fun computeInventory(transactions: List<TransactionEntity>): List<InventoryItem> {
-        return transactions
-            .filter { it.locationId != null && it.productId != null }
-            .groupBy { it.locationId!! to it.productId!! }
-            .map { (key, txns) ->
-                val (locationId, productId) = key
-                val totalWeight = txns.sumOf { it.weightKg }
-                InventoryItem(
-                    locationId = locationId,
-                    productId = productId,
-                    totalWeightKg = totalWeight
-                )
-            }
-    }
+    private fun InventoryAggregateResult.toInventoryItem() = InventoryItem(
+        locationId = UUID.fromString(locationId),
+        productId = UUID.fromString(productId),
+        totalWeightKg = BigDecimal(totalWeightKg)
+    )
 
     override suspend fun getFilteredTransactions(
         filter: TransactionFilter,
@@ -194,6 +209,47 @@ class TransactionRepositoryImpl @Inject constructor(
             .buildCount()
 
         return transactionDao.getFilteredCount(query)
+    }
+
+    override suspend fun createSales(
+        sales: List<SaleInput>
+    ): List<Transaction> {
+        require(sales.isNotEmpty()) { "Sales list cannot be empty" }
+        sales.forEach { sale ->
+            require(sale.weightKg > BigDecimal.ZERO) { "Weight must be positive" }
+            require(sale.pricePerKg >= BigDecimal.ZERO) { "Price must be non-negative" }
+        }
+
+        val now = Instant.now()
+        val deviceId = devicePreferences.getDeviceId()
+
+        val entities = sales.map { sale ->
+            val totalAmount = sale.weightKg * sale.pricePerKg
+            TransactionEntity(
+                id = UUID.randomUUID(),
+                localId = UUID.randomUUID().toString(),
+                locationId = sale.locationId,
+                type = TransactionType.SALE.toDbValue(),
+                transferLocationId = null,
+                productId = sale.productId,
+                weightKg = -sale.weightKg, // Sales are negative
+                pricePerKg = sale.pricePerKg,
+                totalAmount = totalAmount,
+                notes = sale.notes?.ifBlank { null },
+                deviceId = deviceId,
+                createdAt = now,
+                syncedAt = null
+            )
+        }
+
+        // Atomic transaction: all sales must succeed or all fail
+        database.withTransaction {
+            entities.forEach { entity ->
+                transactionDao.insert(entity)
+            }
+        }
+
+        return entities.map { it.toDomain() }
     }
 
     private fun TransactionEntity.toDomain() = Transaction(

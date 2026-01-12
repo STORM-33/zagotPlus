@@ -8,6 +8,17 @@ import java.math.BigDecimal
 import java.util.UUID
 
 /**
+ * Input data for creating a sale transaction.
+ */
+data class SaleInput(
+    val locationId: UUID,
+    val productId: UUID,
+    val weightKg: BigDecimal,
+    val pricePerKg: BigDecimal,
+    val notes: String? = null
+)
+
+/**
  * Repository interface for Transaction domain model.
  */
 interface TransactionRepository {
@@ -114,4 +125,13 @@ interface TransactionRepository {
      * Get count of transactions matching filter criteria.
      */
     suspend fun getFilteredTransactionCount(filter: TransactionFilter): Int
+
+    /**
+     * Create multiple sale transactions atomically.
+     * All sales succeed or all fail together.
+     *
+     * @param sales List of sale inputs
+     * @return List of created transactions
+     */
+    suspend fun createSales(sales: List<SaleInput>): List<Transaction>
 }

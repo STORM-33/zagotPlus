@@ -30,7 +30,8 @@ object DatabaseModule {
     private val MIGRATIONS: Array<Migration> = arrayOf(
         ZagotDatabase.MIGRATION_1_2,
         ZagotDatabase.MIGRATION_2_3,
-        ZagotDatabase.MIGRATION_3_4
+        ZagotDatabase.MIGRATION_3_4,
+        ZagotDatabase.MIGRATION_4_5
     )
 
     /**

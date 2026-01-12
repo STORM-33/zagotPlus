@@ -11,6 +11,11 @@ import javax.inject.Singleton
 /**
  * Manages authentication preferences using SharedPreferences.
  * Stores salted PIN hash for access control with lockout protection.
+ *
+ * Security notes:
+ * - PIN is hashed with salted SHA-256 (not PBKDF2, but acceptable for 4-digit PIN
+ *   with 30-second lockout after 3 attempts)
+ * - Session expires on app process death (in-memory flag)
  */
 @Singleton
 class AuthPreferences @Inject constructor(
@@ -20,6 +25,10 @@ class AuthPreferences @Inject constructor(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
+
+    // In-memory session flag - expires on process death
+    @Volatile
+    private var sessionAuthenticated: Boolean = false
 
     /**
      * Check if PIN has been set.
@@ -133,17 +142,18 @@ class AuthPreferences @Inject constructor(
 
     /**
      * Mark user as authenticated for current session.
-     * Persists across process death.
+     * Session expires on app process death (in-memory flag).
      */
     fun setAuthenticated(authenticated: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTHENTICATED, authenticated).apply()
+        sessionAuthenticated = authenticated
     }
 
     /**
      * Check if user is authenticated in current session.
+     * Returns false after app restart (session-based, not persistent).
      */
     fun isAuthenticated(): Boolean {
-        return prefs.getBoolean(KEY_AUTHENTICATED, false)
+        return sessionAuthenticated
     }
 
     companion object {
@@ -152,7 +162,6 @@ class AuthPreferences @Inject constructor(
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
-        private const val KEY_AUTHENTICATED = "is_authenticated"
 
         private const val MAX_ATTEMPTS = 3
         private const val LOCKOUT_DURATION_MS = 30_000L
