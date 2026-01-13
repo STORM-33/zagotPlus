@@ -85,27 +85,41 @@ interface CashOperationDao {
 
     @Query("""
         SELECT COALESCE(
-            SUM(CASE 
+            (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN type IN ('withdrawal', 'payment') THEN -amount
                 ELSE 0
-            END), 0
-        ) FROM cash_operations
-        WHERE location_id = :locationId
+            END), 0) FROM cash_operations WHERE location_id = :locationId)
+            +
+            (SELECT COALESCE(SUM(CASE 
+                WHEN type = 'sale' THEN total_amount
+                WHEN type = 'purchase' THEN -total_amount
+                ELSE 0
+            END), 0) FROM transactions WHERE location_id = :locationId)
+        , 0)
     """)
     fun getBalanceByLocation(locationId: UUID): Flow<java.math.BigDecimal>
 
     @Query("""
         SELECT COALESCE(
-            SUM(CASE 
+            (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN type IN ('withdrawal', 'payment') THEN -amount
                 ELSE 0
-            END), 0
-        ) FROM cash_operations
-        WHERE location_id = :locationId
-          AND created_at >= :startOfDay
-          AND created_at < :endOfDay
+            END), 0) FROM cash_operations
+            WHERE location_id = :locationId
+              AND created_at >= :startOfDay
+              AND created_at < :endOfDay)
+            +
+            (SELECT COALESCE(SUM(CASE 
+                WHEN type = 'sale' THEN total_amount
+                WHEN type = 'purchase' THEN -total_amount
+                ELSE 0
+            END), 0) FROM transactions
+            WHERE location_id = :locationId
+              AND created_at >= :startOfDay
+              AND created_at < :endOfDay)
+        , 0)
     """)
     fun getDailyBalanceChange(
         locationId: UUID,
@@ -134,26 +148,45 @@ interface CashOperationDao {
     @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT :limit")
     fun getRecentOperations(limit: Int): Flow<List<CashOperationEntity>>
 
+    @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    suspend fun getOperationsPaged(limit: Int, offset: Int): List<CashOperationEntity>
+
+    @Query("SELECT COUNT(*) FROM cash_operations")
+    suspend fun getTotalOperationsCount(): Int
+
     @Query("""
         SELECT COALESCE(
-            SUM(CASE 
+            (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN type IN ('withdrawal', 'payment') THEN -amount
                 ELSE 0
-            END), 0
-        ) FROM cash_operations
+            END), 0) FROM cash_operations)
+            +
+            (SELECT COALESCE(SUM(CASE 
+                WHEN type = 'sale' THEN total_amount
+                WHEN type = 'purchase' THEN -total_amount
+                ELSE 0
+            END), 0) FROM transactions)
+        , 0)
     """)
     fun getTotalBalance(): Flow<java.math.BigDecimal>
 
     @Query("""
         SELECT COALESCE(
-            SUM(CASE 
+            (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN type IN ('withdrawal', 'payment') THEN -amount
                 ELSE 0
-            END), 0
-        ) FROM cash_operations
-        WHERE created_at >= :startOfDay AND created_at < :endOfDay
+            END), 0) FROM cash_operations
+            WHERE created_at >= :startOfDay AND created_at < :endOfDay)
+            +
+            (SELECT COALESCE(SUM(CASE 
+                WHEN type = 'sale' THEN total_amount
+                WHEN type = 'purchase' THEN -total_amount
+                ELSE 0
+            END), 0) FROM transactions
+            WHERE created_at >= :startOfDay AND created_at < :endOfDay)
+        , 0)
     """)
     fun getDailyBalanceChange(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
 

@@ -96,6 +96,14 @@ class CashRepositoryImpl @Inject constructor(
             enrichWithCategories(entities)
         }
 
+    override suspend fun getOperationsPaged(limit: Int, offset: Int): List<CashOperation> {
+        val entities = cashOperationDao.getOperationsPaged(limit, offset)
+        return enrichWithCategories(entities)
+    }
+
+    override suspend fun getTotalOperationsCount(): Int =
+        cashOperationDao.getTotalOperationsCount()
+
     override fun getTotalBalance(): Flow<BigDecimal> =
         cashOperationDao.getTotalBalance()
 

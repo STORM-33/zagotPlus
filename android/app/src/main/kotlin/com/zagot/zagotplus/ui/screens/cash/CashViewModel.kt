@@ -43,8 +43,11 @@ data class CashUiState(
     val dialogCategoryId: UUID? = null,
     val newCategoryName: String = "",
     val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
     val isSaving: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val hasMoreOperations: Boolean = true,
+    val totalOperationsCount: Int = 0
 ) {
     val canConfirmDeposit: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
@@ -64,6 +67,10 @@ class CashViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CashUiState())
     val uiState: StateFlow<CashUiState> = _uiState.asStateFlow()
 
+    companion object {
+        private const val PAGE_SIZE = 20
+    }
+
     init {
         loadData()
     }
@@ -72,20 +79,25 @@ class CashViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Use global operations (across all locations)
+                // Load initial page of operations
+                val totalCount = cashRepository.getTotalOperationsCount()
+                val initialOperations = cashRepository.getOperationsPaged(PAGE_SIZE, 0)
+                
+                // Collect balance and categories as flows
                 combine(
                     cashRepository.getTotalBalance(),
                     cashRepository.getDailyChangeGlobal(LocalDate.now()),
-                    cashRepository.getRecentOperationsGlobal(50),
                     cashRepository.getActiveCategories()
-                ) { balance, dailyChange, operations, categories ->
+                ) { balance, dailyChange, categories ->
                     _uiState.update { state ->
                         state.copy(
                             balance = balance,
                             dailyChange = dailyChange,
-                            operations = operations,
+                            operations = initialOperations,
                             categories = categories,
-                            isLoading = false
+                            isLoading = false,
+                            totalOperationsCount = totalCount,
+                            hasMoreOperations = initialOperations.size < totalCount
                         )
                     }
                 }.collect { }
@@ -96,6 +108,53 @@ class CashViewModel @Inject constructor(
                         isLoading = false
                     )
                 }
+            }
+        }
+    }
+
+    fun loadMoreOperations() {
+        val state = _uiState.value
+        if (state.isLoadingMore || !state.hasMoreOperations) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            try {
+                val offset = state.operations.size
+                val moreOperations = cashRepository.getOperationsPaged(PAGE_SIZE, offset)
+                _uiState.update { currentState ->
+                    val newOperations = currentState.operations + moreOperations
+                    currentState.copy(
+                        operations = newOperations,
+                        isLoadingMore = false,
+                        hasMoreOperations = newOperations.size < currentState.totalOperationsCount
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Помилка завантаження",
+                        isLoadingMore = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshOperations() {
+        viewModelScope.launch {
+            try {
+                val totalCount = cashRepository.getTotalOperationsCount()
+                val currentCount = _uiState.value.operations.size.coerceAtLeast(PAGE_SIZE)
+                val operations = cashRepository.getOperationsPaged(currentCount, 0)
+                _uiState.update { state ->
+                    state.copy(
+                        operations = operations,
+                        totalOperationsCount = totalCount,
+                        hasMoreOperations = operations.size < totalCount
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Помилка оновлення") }
             }
         }
     }
@@ -184,6 +243,7 @@ class CashViewModel @Inject constructor(
                 )
                 dismissDialog()
                 _uiState.update { it.copy(isSaving = false) }
+                refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -214,6 +274,7 @@ class CashViewModel @Inject constructor(
                 )
                 dismissDialog()
                 _uiState.update { it.copy(isSaving = false) }
+                refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -245,6 +306,7 @@ class CashViewModel @Inject constructor(
                 )
                 dismissDialog()
                 _uiState.update { it.copy(isSaving = false) }
+                refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(

@@ -50,6 +50,9 @@ class SyncService @Inject constructor(
     suspend fun sync(): SyncResult {
         Log.d(TAG, "Starting sync...")
 
+        // Capture the sync timestamp ONCE at the start for all pull operations
+        val syncStartTimestamp = syncPreferences.getLastSyncTimestamp()
+
         // Step 1: Push pending products (before other entities due to FK)
         val productPushResult = try {
             pushPendingProducts()
@@ -115,7 +118,7 @@ class SyncService @Inject constructor(
 
         // Step 7: Pull new expense categories
         val categoryPullResult = try {
-            pullNewExpenseCategories()
+            pullNewExpenseCategories(syncStartTimestamp)
         } catch (e: Exception) {
             Log.e(TAG, "Expense category pull failed after successful push", e)
             0
@@ -124,7 +127,7 @@ class SyncService @Inject constructor(
 
         // Step 8: Pull new batches
         val batchPullResult = try {
-            pullNewBatches()
+            pullNewBatches(syncStartTimestamp)
         } catch (e: Exception) {
             Log.e(TAG, "Batch pull failed after successful push", e)
             // Continue to transaction pull
@@ -134,7 +137,7 @@ class SyncService @Inject constructor(
 
         // Step 9: Pull new transactions
         val pullResult = try {
-            pullNewTransactions()
+            pullNewTransactions(syncStartTimestamp)
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
@@ -147,12 +150,15 @@ class SyncService @Inject constructor(
 
         // Step 10: Pull new cash operations
         val cashPullResult = try {
-            pullNewCashOperations()
+            pullNewCashOperations(syncStartTimestamp)
         } catch (e: Exception) {
             Log.e(TAG, "Cash operations pull failed after successful push", e)
             0
         }
         Log.d(TAG, "Pulled $cashPullResult cash operations")
+
+        // Update last sync timestamp only once at the end after all pulls complete
+        syncPreferences.setLastSyncTimestamp(Instant.now())
 
         return SyncResult.Success(
             pushed = pushResult.successCount + batchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
@@ -210,17 +216,16 @@ class SyncService @Inject constructor(
      * For this app's use case (single user, few devices), this is acceptable.
      * A more robust solution would use a monotonic sequence number or updated_at timestamp.
      *
+     * @param since Timestamp to filter transactions created after
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewTransactions(): Int {
-        val lastSync = syncPreferences.getLastSyncTimestamp()
-        Log.d(TAG, "Pulling transactions created after $lastSync")
+    private suspend fun pullNewTransactions(since: Instant): Int {
+        Log.d(TAG, "Pulling transactions created after $since")
 
-        val remoteDtos = syncDataSource.pullTransactions(lastSync)
+        val remoteDtos = syncDataSource.pullTransactions(since)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote transactions")
-            syncPreferences.setLastSyncTimestamp(Instant.now())
             return 0
         }
 
@@ -243,7 +248,6 @@ class SyncService @Inject constructor(
             }
         }
 
-        syncPreferences.setLastSyncTimestamp(Instant.now())
         return insertCount
     }
 
@@ -321,13 +325,13 @@ class SyncService @Inject constructor(
      * Pull new batches from Supabase that were created after last sync.
      * Inserts or updates local Room database.
      *
+     * @param since Timestamp to filter batches created after
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewBatches(): Int {
-        val lastSync = syncPreferences.getLastSyncTimestamp()
-        Log.d(TAG, "Pulling batches created after $lastSync")
+    private suspend fun pullNewBatches(since: Instant): Int {
+        Log.d(TAG, "Pulling batches created after $since")
 
-        val remoteDtos = syncDataSource.pullBatches(lastSync)
+        val remoteDtos = syncDataSource.pullBatches(since)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote batches")
@@ -472,13 +476,13 @@ class SyncService @Inject constructor(
      * Pull new expense categories from Supabase that were created after last sync.
      * Inserts or updates local Room database.
      *
+     * @param since Timestamp to filter expense categories created after
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewExpenseCategories(): Int {
-        val lastSync = syncPreferences.getLastSyncTimestamp()
-        Log.d(TAG, "Pulling expense categories created after $lastSync")
+    private suspend fun pullNewExpenseCategories(since: Instant): Int {
+        Log.d(TAG, "Pulling expense categories created after $since")
 
-        val remoteDtos = syncDataSource.pullExpenseCategories(lastSync)
+        val remoteDtos = syncDataSource.pullExpenseCategories(since)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote expense categories")
@@ -508,13 +512,13 @@ class SyncService @Inject constructor(
      * Pull new cash operations from Supabase that were created after last sync.
      * Inserts or updates local Room database.
      *
+     * @param since Timestamp to filter cash operations created after
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewCashOperations(): Int {
-        val lastSync = syncPreferences.getLastSyncTimestamp()
-        Log.d(TAG, "Pulling cash operations created after $lastSync")
+    private suspend fun pullNewCashOperations(since: Instant): Int {
+        Log.d(TAG, "Pulling cash operations created after $since")
 
-        val remoteDtos = syncDataSource.pullCashOperations(lastSync)
+        val remoteDtos = syncDataSource.pullCashOperations(since)
 
         if (remoteDtos.isEmpty()) {
             Log.d(TAG, "No new remote cash operations")

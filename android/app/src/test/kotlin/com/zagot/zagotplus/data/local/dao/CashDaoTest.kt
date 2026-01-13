@@ -7,6 +7,8 @@ import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.local.entity.LocationEntity
+import com.zagot.zagotplus.data.local.entity.ProductEntity
+import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -32,9 +34,12 @@ class CashDaoTest {
     private lateinit var expenseCategoryDao: ExpenseCategoryDao
     private lateinit var cashOperationDao: CashOperationDao
     private lateinit var locationDao: LocationDao
+    private lateinit var productDao: ProductDao
+    private lateinit var transactionDao: TransactionDao
 
     private val testInstant = Instant.parse("2024-01-15T10:00:00Z")
     private val testLocationId = UUID.randomUUID()
+    private val testProductId = UUID.randomUUID()
 
     @Before
     fun setup() {
@@ -45,13 +50,24 @@ class CashDaoTest {
         expenseCategoryDao = database.expenseCategoryDao()
         cashOperationDao = database.cashOperationDao()
         locationDao = database.locationDao()
+        productDao = database.productDao()
+        transactionDao = database.transactionDao()
 
-        // Insert test location for FK
+        // Insert test location and product for FK
         runTest {
             locationDao.insert(LocationEntity(
                 id = testLocationId,
                 name = "Склад №1",
                 type = "kiosk",
+                createdAt = testInstant
+            ))
+            productDao.insert(ProductEntity(
+                id = testProductId,
+                localId = "prod-local-$testProductId",
+                name = "Яблука",
+                defaultBuyPrice = BigDecimal("45.00"),
+                defaultSellPrice = BigDecimal("55.00"),
+                isActive = true,
                 createdAt = testInstant
             ))
         }
@@ -380,16 +396,31 @@ class CashDaoTest {
     }
 
     @Test
-    fun `purchase operation affects balance negatively`() = runTest {
+    fun `purchase transaction affects balance negatively`() = runTest {
         val deposit = createCashOperation(type = "deposit", amount = BigDecimal("5000.00"))
-        val purchase = createCashOperation(type = "purchase", amount = BigDecimal("2000.00"))
-        
         cashOperationDao.insert(deposit)
-        cashOperationDao.insert(purchase)
+        
+        // Create a purchase transaction (this is now how purchases affect balance)
+        val purchaseTransaction = TransactionEntity(
+            id = UUID.randomUUID(),
+            localId = "tx-purchase-1",
+            locationId = testLocationId,
+            type = "purchase",
+            transferLocationId = null,
+            productId = testProductId,
+            weightKg = BigDecimal("40.00"),
+            pricePerKg = BigDecimal("50.00"),
+            totalAmount = BigDecimal("2000.00"),
+            notes = null,
+            deviceId = "test-device",
+            createdAt = testInstant,
+            syncedAt = null
+        )
+        transactionDao.insert(purchaseTransaction)
 
         val balance = cashOperationDao.getBalanceByLocation(testLocationId).first()
 
-        // 5000 - 2000 = 3000
+        // 5000 (deposit) - 2000 (purchase transaction) = 3000
         assertEquals(0, BigDecimal("3000.00").compareTo(balance))
     }
 

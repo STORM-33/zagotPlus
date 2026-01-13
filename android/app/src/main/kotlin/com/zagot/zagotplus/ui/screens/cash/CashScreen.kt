@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -51,10 +52,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,9 +71,68 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.CashOperation
 import com.zagot.zagotplus.domain.model.CashOperationType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+/**
+ * Represents an item in the operations list.
+ * Can be either a single operation or a grouped purchase day summary.
+ */
+private sealed class OperationListItem {
+    abstract val key: String
+
+    data class SingleOperation(val operation: CashOperation) : OperationListItem() {
+        override val key: String = operation.id.toString()
+    }
+
+    data class PurchaseDaySummary(
+        val date: LocalDate,
+        val totalAmount: BigDecimal,
+        val purchaseCount: Int
+    ) : OperationListItem() {
+        override val key: String = "purchase_day_${date}"
+    }
+}
+
+/**
+ * Groups purchase operations by day and keeps other operations as individual items.
+ */
+private fun groupOperations(operations: List<CashOperation>): List<OperationListItem> {
+    val result = mutableListOf<OperationListItem>()
+
+    // Group operations by date
+    val operationsByDate = operations.groupBy { op ->
+        op.createdAt.atZone(ZoneId.systemDefault()).toLocalDate()
+    }
+
+    // Process by date to maintain chronological order
+    for ((date, dateOperations) in operationsByDate.entries.sortedByDescending { it.key }) {
+        val datePurchases = dateOperations.filter { it.type == CashOperationType.PURCHASE }
+        val otherOperations = dateOperations.filter { it.type != CashOperationType.PURCHASE }
+
+        // Add purchase summary for this day if there are any
+        if (datePurchases.isNotEmpty()) {
+            result.add(
+                OperationListItem.PurchaseDaySummary(
+                    date = date,
+                    totalAmount = datePurchases.fold(BigDecimal.ZERO) { acc, op -> acc + op.amount },
+                    purchaseCount = datePurchases.size
+                )
+            )
+        }
+
+        // Add other operations sorted by time descending
+        otherOperations
+            .sortedByDescending { it.createdAt }
+            .forEach { result.add(OperationListItem.SingleOperation(it)) }
+    }
+
+    return result
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,29 +200,108 @@ fun CashScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Operations List
-                Text(
-                    text = "Останні операції",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                // Operations List Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Історія операцій",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (uiState.totalOperationsCount > 0) {
+                        Text(
+                            text = "${uiState.operations.size} з ${uiState.totalOperationsCount}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                val listState = rememberLazyListState()
+
+                // Group operations: purchases grouped by day, others shown individually
+                val groupedOperations = remember(uiState.operations) {
+                    groupOperations(uiState.operations)
+                }
+
+                // Trigger load more when reaching end
+                val shouldLoadMore by remember {
+                    derivedStateOf {
+                        val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+                            ?: return@derivedStateOf false
+                        lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 3
+                    }
+                }
+
+                LaunchedEffect(shouldLoadMore) {
+                    snapshotFlow { shouldLoadMore }
+                        .distinctUntilChanged()
+                        .collect { shouldLoad ->
+                            if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreOperations) {
+                                viewModel.loadMoreOperations()
+                            }
+                        }
+                }
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.operations) { operation ->
-                        OperationItem(operation = operation)
+                    items(
+                        items = groupedOperations,
+                        key = { it.key }
+                    ) { item ->
+                        when (item) {
+                            is OperationListItem.SingleOperation -> OperationItem(operation = item.operation)
+                            is OperationListItem.PurchaseDaySummary -> PurchaseDaySummaryItem(summary = item)
+                        }
                     }
 
-                    if (uiState.operations.isEmpty()) {
+                    // Loading indicator at bottom
+                    if (uiState.isLoadingMore) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
+                    }
+
+                    if (groupedOperations.isEmpty() && !uiState.isLoading) {
                         item {
                             Text(
                                 text = "Немає операцій",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+
+                    // End of list indicator
+                    if (!uiState.hasMoreOperations && groupedOperations.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Усі операції завантажено",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
@@ -400,6 +541,73 @@ private fun OperationItem(
                 )
                 Text(
                     text = "${dateFormatter.format(operation.createdAt.atZone(java.time.ZoneId.systemDefault()))} ${timeFormatter.format(operation.createdAt.atZone(java.time.ZoneId.systemDefault()))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PurchaseDaySummaryItem(
+    summary: OperationListItem.PurchaseDaySummary,
+    modifier: Modifier = Modifier
+) {
+    val color = Color(0xFF2196F3)
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ShoppingCart,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Закупки",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "${summary.purchaseCount} закупок",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "-${summary.totalAmount.setScale(2)} ₴",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Text(
+                    text = dateFormatter.format(summary.date),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

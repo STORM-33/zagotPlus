@@ -29,6 +29,11 @@ interface CashRepository {
     fun getAllOperations(): Flow<List<CashOperation>>
     fun getRecentOperationsGlobal(limit: Int = 50): Flow<List<CashOperation>>
     
+    // Paginated operations (for infinite scroll)
+    suspend fun getOperationsPaged(limit: Int, offset: Int): List<CashOperation>
+    suspend fun getTotalOperationsCount(): Int
+
+    
     // Balance (per location)
     fun getBalance(locationId: UUID): Flow<BigDecimal>
     fun getDailyChange(locationId: UUID, date: LocalDate): Flow<BigDecimal>
