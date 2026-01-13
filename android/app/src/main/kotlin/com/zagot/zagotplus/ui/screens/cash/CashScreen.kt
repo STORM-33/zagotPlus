@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -68,71 +67,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.zagot.zagotplus.domain.model.CashOperation
-import com.zagot.zagotplus.domain.model.CashOperationType
+import com.zagot.zagotplus.domain.model.CashHistoryItem
+import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
-import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-
-/**
- * Represents an item in the operations list.
- * Can be either a single operation or a grouped purchase day summary.
- */
-private sealed class OperationListItem {
-    abstract val key: String
-
-    data class SingleOperation(val operation: CashOperation) : OperationListItem() {
-        override val key: String = operation.id.toString()
-    }
-
-    data class PurchaseDaySummary(
-        val date: LocalDate,
-        val totalAmount: BigDecimal,
-        val purchaseCount: Int
-    ) : OperationListItem() {
-        override val key: String = "purchase_day_${date}"
-    }
-}
-
-/**
- * Groups purchase operations by day and keeps other operations as individual items.
- */
-private fun groupOperations(operations: List<CashOperation>): List<OperationListItem> {
-    val result = mutableListOf<OperationListItem>()
-
-    // Group operations by date
-    val operationsByDate = operations.groupBy { op ->
-        op.createdAt.atZone(ZoneId.systemDefault()).toLocalDate()
-    }
-
-    // Process by date to maintain chronological order
-    for ((date, dateOperations) in operationsByDate.entries.sortedByDescending { it.key }) {
-        val datePurchases = dateOperations.filter { it.type == CashOperationType.PURCHASE }
-        val otherOperations = dateOperations.filter { it.type != CashOperationType.PURCHASE }
-
-        // Add purchase summary for this day if there are any
-        if (datePurchases.isNotEmpty()) {
-            result.add(
-                OperationListItem.PurchaseDaySummary(
-                    date = date,
-                    totalAmount = datePurchases.fold(BigDecimal.ZERO) { acc, op -> acc + op.amount },
-                    purchaseCount = datePurchases.size
-                )
-            )
-        }
-
-        // Add other operations sorted by time descending
-        otherOperations
-            .sortedByDescending { it.createdAt }
-            .forEach { result.add(OperationListItem.SingleOperation(it)) }
-    }
-
-    return result
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -212,9 +153,9 @@ fun CashScreen(
                         text = "Історія операцій",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    if (uiState.totalOperationsCount > 0) {
+                    if (uiState.totalItemsCount > 0) {
                         Text(
-                            text = "${uiState.operations.size} з ${uiState.totalOperationsCount}",
+                            text = "${uiState.historyItems.size} з ${uiState.totalItemsCount}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -222,11 +163,6 @@ fun CashScreen(
                 }
 
                 val listState = rememberLazyListState()
-
-                // Group operations: purchases grouped by day, others shown individually
-                val groupedOperations = remember(uiState.operations) {
-                    groupOperations(uiState.operations)
-                }
 
                 // Trigger load more when reaching end
                 val shouldLoadMore by remember {
@@ -241,7 +177,7 @@ fun CashScreen(
                     snapshotFlow { shouldLoadMore }
                         .distinctUntilChanged()
                         .collect { shouldLoad ->
-                            if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreOperations) {
+                            if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreItems) {
                                 viewModel.loadMoreOperations()
                             }
                         }
@@ -254,13 +190,10 @@ fun CashScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
-                        items = groupedOperations,
-                        key = { it.key }
+                        items = uiState.historyItems,
+                        key = { it.id.toString() }
                     ) { item ->
-                        when (item) {
-                            is OperationListItem.SingleOperation -> OperationItem(operation = item.operation)
-                            is OperationListItem.PurchaseDaySummary -> PurchaseDaySummaryItem(summary = item)
-                        }
+                        HistoryItem(item = item)
                     }
 
                     // Loading indicator at bottom
@@ -280,7 +213,7 @@ fun CashScreen(
                         }
                     }
 
-                    if (groupedOperations.isEmpty() && !uiState.isLoading) {
+                    if (uiState.historyItems.isEmpty() && !uiState.isLoading) {
                         item {
                             Text(
                                 text = "Немає операцій",
@@ -292,7 +225,7 @@ fun CashScreen(
                     }
 
                     // End of list indicator
-                    if (!uiState.hasMoreOperations && groupedOperations.isNotEmpty()) {
+                    if (!uiState.hasMoreItems && uiState.historyItems.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Усі операції завантажено",
@@ -372,7 +305,9 @@ private fun BalanceCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -454,30 +389,37 @@ private fun ActionButtons(
 }
 
 @Composable
-private fun OperationItem(
-    operation: CashOperation,
+private fun HistoryItem(
+    item: CashHistoryItem,
     modifier: Modifier = Modifier
 ) {
-    val (icon, color, label) = when (operation.type) {
-        CashOperationType.DEPOSIT -> Triple(
+    val blueColor = Color(0xFF2196F3) // Blue for purchases and sales
+    
+    val (icon, color, label) = when (item.type) {
+        CashHistoryItemType.DEPOSIT -> Triple(
             Icons.Filled.ArrowDownward,
             Color(0xFF4CAF50),
             "Поповнення"
         )
-        CashOperationType.WITHDRAWAL -> Triple(
+        CashHistoryItemType.WITHDRAWAL -> Triple(
             Icons.Filled.ArrowUpward,
             Color(0xFFF44336),
             "Виведення"
         )
-        CashOperationType.PAYMENT -> Triple(
+        CashHistoryItemType.PAYMENT -> Triple(
             Icons.Filled.Payment,
             Color(0xFFFF9800),
-            operation.categoryName ?: "Оплата"
+            item.categoryName ?: "Оплата"
         )
-        CashOperationType.PURCHASE -> Triple(
-            Icons.Filled.ShoppingCart,
-            Color(0xFF2196F3),
-            "Закупка"
+        CashHistoryItemType.PURCHASE -> Triple(
+            Icons.Filled.Remove,
+            blueColor,
+            "Закупки"
+        )
+        CashHistoryItemType.SALE -> Triple(
+            Icons.Filled.Add,
+            blueColor,
+            "Продажі"
         )
     }
 
@@ -519,9 +461,21 @@ private fun OperationItem(
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
-                if (!operation.notes.isNullOrBlank()) {
+                // Show details based on type
+                val detailText = when {
+                    item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE -> {
+                        val parts = mutableListOf<String>()
+                        item.batchCount?.let { if (it > 1) parts.add("$it клієнтів") }
+                        item.itemCount?.let { parts.add("$it поз.") }
+                        item.weightKg?.let { parts.add("${it.setScale(2)} кг") }
+                        if (parts.isNotEmpty()) parts.joinToString(" • ") else null
+                    }
+                    !item.notes.isNullOrBlank() -> item.notes
+                    else -> null
+                }
+                if (detailText != null) {
                     Text(
-                        text = operation.notes,
+                        text = detailText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -529,9 +483,10 @@ private fun OperationItem(
             }
 
             Column(horizontalAlignment = Alignment.End) {
-                val amountText = when (operation.type) {
-                    CashOperationType.DEPOSIT -> "+${operation.amount.setScale(2)}"
-                    else -> "-${operation.amount.setScale(2)}"
+                val amountText = if (item.type.isInflow) {
+                    "+${item.amount.setScale(2)}"
+                } else {
+                    "-${item.amount.setScale(2)}"
                 }
                 Text(
                     text = "$amountText ₴",
@@ -540,74 +495,7 @@ private fun OperationItem(
                     color = color
                 )
                 Text(
-                    text = "${dateFormatter.format(operation.createdAt.atZone(java.time.ZoneId.systemDefault()))} ${timeFormatter.format(operation.createdAt.atZone(java.time.ZoneId.systemDefault()))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PurchaseDaySummaryItem(
-    summary: OperationListItem.PurchaseDaySummary,
-    modifier: Modifier = Modifier
-) {
-    val color = Color(0xFF2196F3)
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ShoppingCart,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Закупки",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "${summary.purchaseCount} закупок",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "-${summary.totalAmount.setScale(2)} ₴",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = color
-                )
-                Text(
-                    text = dateFormatter.format(summary.date),
+                    text = dateFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

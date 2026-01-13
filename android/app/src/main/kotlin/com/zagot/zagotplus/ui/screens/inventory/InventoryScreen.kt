@@ -1,20 +1,21 @@
 package com.zagot.zagotplus.ui.screens.inventory
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,41 +24,56 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 @Composable
 fun InventoryScreen(
     modifier: Modifier = Modifier,
+    onNavigateToTransfer: (productId: String, destinationLocationId: String) -> Unit = { _, _ -> },
     viewModel: InventoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayItems by viewModel.displayItems.collectAsStateWithLifecycle()
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    
+    // State for move dialog
+    var showMoveDialog by remember { mutableStateOf(false) }
+    var selectedItemForMove by remember { mutableStateOf<InventoryDisplayItem?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Location tabs
+            // Location tabs + Total tab
             if (uiState.locations.isNotEmpty()) {
-                val selectedIndex = uiState.locations.indexOfFirst { 
-                    it.id == uiState.selectedLocation?.id 
-                }.coerceAtLeast(0)
+                val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
+                val selectedIndex = if (isTotalView) {
+                    uiState.locations.size // Total tab is last
+                } else {
+                    uiState.locations.indexOfFirst { 
+                        it.id == uiState.selectedLocation?.id 
+                    }.coerceAtLeast(0)
+                }
                 
                 TabRow(selectedTabIndex = selectedIndex) {
                     uiState.locations.forEachIndexed { index, location ->
@@ -67,6 +83,12 @@ fun InventoryScreen(
                             text = { Text(location.name) }
                         )
                     }
+                    // Total tab
+                    Tab(
+                        selected = isTotalView,
+                        onClick = { viewModel.selectTotalView() },
+                        text = { Text("Всього") }
+                    )
                 }
             }
 
@@ -98,54 +120,25 @@ fun InventoryScreen(
                                 )
                             }
                         } else {
-                            // Calculate totals
-                            val totalWeight = displayItems.sumOf { it.weightKg }
+                            val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
                             
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Summary card
-                                item {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                                        )
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(20.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(
-                                                text = "Загальний залишок",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                text = "${decimalFormat.format(totalWeight)} кг",
-                                                style = MaterialTheme.typography.displaySmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                            Text(
-                                                text = "${displayItems.size} позицій",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                                            )
-                                        }
-                                    }
-                                }
-                                
                                 // Inventory items as cards
                                 items(displayItems, key = { it.productId }) { item ->
                                     InventoryItemCard(
                                         item = item,
-                                        decimalFormat = decimalFormat
+                                        decimalFormat = decimalFormat,
+                                        showMoveOption = !isTotalView && item.weightKg > BigDecimal.ZERO,
+                                        onLongPress = {
+                                            if (!isTotalView && item.weightKg > BigDecimal.ZERO) {
+                                                selectedItemForMove = item
+                                                showMoveDialog = true
+                                            }
+                                        }
                                     )
                                 }
                             }
@@ -173,13 +166,84 @@ fun InventoryScreen(
                 }
             }
         }
+        
+        // Move product dialog
+        if (showMoveDialog && selectedItemForMove != null) {
+            val item = selectedItemForMove!!
+            val currentLocationId = item.locationId
+            val otherLocations = uiState.locations.filter { it.id != currentLocationId }
+            
+            MoveProductDialog(
+                productName = item.productName,
+                availableLocations = otherLocations,
+                onDismiss = { 
+                    showMoveDialog = false
+                    selectedItemForMove = null
+                },
+                onLocationSelected = { destinationLocation ->
+                    onNavigateToTransfer(
+                        item.productId.toString(),
+                        destinationLocation.id.toString()
+                    )
+                    showMoveDialog = false
+                    selectedItemForMove = null
+                }
+            )
+        }
     }
 }
 
 @Composable
+private fun MoveProductDialog(
+    productName: String,
+    availableLocations: List<Location>,
+    onDismiss: () -> Unit,
+    onLocationSelected: (Location) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Перемістити товар") },
+        text = {
+            Column {
+                Text(
+                    text = productName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Оберіть куди перемістити:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+                )
+                availableLocations.forEach { location ->
+                    TextButton(
+                        onClick = { onLocationSelected(location) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = location.name,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Скасувати")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun InventoryItemCard(
     item: InventoryDisplayItem,
     decimalFormat: DecimalFormat,
+    showMoveOption: Boolean = false,
+    onLongPress: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val weightText = "${decimalFormat.format(item.weightKg)} кг"
@@ -199,7 +263,18 @@ private fun InventoryItemCard(
     }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (showMoveOption) {
+                    Modifier.combinedClickable(
+                        onClick = { },
+                        onLongClick = onLongPress
+                    )
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Row(

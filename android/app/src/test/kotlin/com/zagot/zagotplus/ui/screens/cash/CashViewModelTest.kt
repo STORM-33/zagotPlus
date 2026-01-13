@@ -1,7 +1,7 @@
 package com.zagot.zagotplus.ui.screens.cash
 
-import com.zagot.zagotplus.domain.model.CashOperation
-import com.zagot.zagotplus.domain.model.CashOperationType
+import com.zagot.zagotplus.domain.model.CashHistoryItem
+import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.testutil.MainDispatcherRule
@@ -43,20 +43,17 @@ class CashViewModelTest {
         )
     )
 
-    private val testOperations = listOf(
-        CashOperation(
-            id = UUID.randomUUID(),
-            localId = "op-1",
-            locationId = null,
-            type = CashOperationType.DEPOSIT,
+    private val testHistoryItems = listOf(
+        CashHistoryItem(
+            id = UUID.randomUUID().toString(),
+            type = CashHistoryItemType.DEPOSIT,
             amount = BigDecimal("1000.00"),
-            categoryId = null,
-            categoryName = null,
-            batchId = null,
             notes = null,
-            deviceId = "device-1",
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
             createdAt = Instant.now(),
-            syncedAt = null
+            batchCount = null
         )
     )
 
@@ -70,8 +67,8 @@ class CashViewModelTest {
         every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("5000.00"))
         every { cashRepository.getDailyChangeGlobal(any()) } returns flowOf(BigDecimal("500.00"))
         every { cashRepository.getActiveCategories() } returns flowOf(testCategories)
-        coEvery { cashRepository.getTotalOperationsCount() } returns 1
-        coEvery { cashRepository.getOperationsPaged(any(), any()) } returns testOperations
+        coEvery { cashRepository.getTotalHistoryCount() } returns 1
+        coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns testHistoryItems
     }
 
     private fun createViewModel(): CashViewModel {
@@ -86,7 +83,7 @@ class CashViewModelTest {
         
         assertEquals(BigDecimal.ZERO, initialState.balance)
         assertEquals(BigDecimal.ZERO, initialState.dailyChange)
-        assertTrue(initialState.operations.isEmpty())
+        assertTrue(initialState.historyItems.isEmpty())
         assertTrue(initialState.categories.isEmpty())
         assertEquals(CashDialogType.NONE, initialState.dialogType)
         assertFalse(initialState.isLoading)
@@ -104,12 +101,12 @@ class CashViewModelTest {
     }
 
     @Test
-    fun `loadData loads operations`() = runTest {
+    fun `loadData loads history items`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.operations.size)
+        assertEquals(1, state.historyItems.size)
     }
 
     // ==================== Dialog Tests ====================
@@ -409,25 +406,22 @@ class CashViewModelTest {
 
     @Test
     fun `loadMoreOperations loads next page`() = runTest {
-        val moreOperations = listOf(
-            CashOperation(
-                id = UUID.randomUUID(),
-                localId = "op-2",
-                locationId = null,
-                type = CashOperationType.WITHDRAWAL,
+        val moreItems = listOf(
+            CashHistoryItem(
+                id = UUID.randomUUID().toString(),
+                type = CashHistoryItemType.WITHDRAWAL,
                 amount = BigDecimal("500.00"),
-                categoryId = null,
-                categoryName = null,
-                batchId = null,
                 notes = null,
-                deviceId = "device-1",
+                categoryName = null,
+                itemCount = null,
+                weightKg = null,
                 createdAt = Instant.now(),
-                syncedAt = null
+                batchCount = null
             )
         )
-        coEvery { cashRepository.getTotalOperationsCount() } returns 2
-        coEvery { cashRepository.getOperationsPaged(20, 0) } returns testOperations
-        coEvery { cashRepository.getOperationsPaged(20, 1) } returns moreOperations
+        coEvery { cashRepository.getTotalHistoryCount() } returns 2
+        coEvery { cashRepository.getCashHistoryPaged(20, 0) } returns testHistoryItems
+        coEvery { cashRepository.getCashHistoryPaged(20, 1) } returns moreItems
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -435,22 +429,22 @@ class CashViewModelTest {
         viewModel.loadMoreOperations()
         advanceUntilIdle()
 
-        assertEquals(2, viewModel.uiState.value.operations.size)
+        assertEquals(2, viewModel.uiState.value.historyItems.size)
     }
 
     @Test
-    fun `loadMoreOperations does nothing when no more operations`() = runTest {
-        coEvery { cashRepository.getTotalOperationsCount() } returns 1
+    fun `loadMoreOperations does nothing when no more items`() = runTest {
+        coEvery { cashRepository.getTotalHistoryCount() } returns 1
         
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        // hasMoreOperations should be false since totalCount == operations.size
+        // hasMoreItems should be false since totalCount == historyItems.size
         viewModel.loadMoreOperations()
         advanceUntilIdle()
 
-        // Should only have initial operations
-        assertEquals(1, viewModel.uiState.value.operations.size)
+        // Should only have initial items
+        assertEquals(1, viewModel.uiState.value.historyItems.size)
     }
 
     // ==================== Error Handling Tests ====================

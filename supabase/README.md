@@ -17,8 +17,18 @@ Database backend for Zagot+ inventory and sync system.
 Option A: **Supabase Dashboard (Recommended)**
 1. Open project in Supabase dashboard
 2. Go to SQL Editor
-3. Copy contents of `migrations/20260111000000_initial_schema.sql`
-4. Paste and run
+3. Run ALL migrations in order:
+   - `20260111000000_initial_schema.sql`
+   - `20260111000001_purchase_batches.sql`
+   - `20260111000002_product_images.sql`
+   - `20260112000000_product_sync.sql`
+   - `20260112100000_product_images_storage.sql`
+   - `20260113000000_cash_operations.sql`
+   - `20260113100000_sale_batches.sql`
+   - `20260114000000_cash_operations_batch_id.sql`
+4. Copy contents of each migration file, paste and run in order
+
+**Important**: All migrations must be applied. Missing `20260114000000_cash_operations_batch_id.sql` will cause cash operation sync to fail.
 
 Option B: **Supabase CLI**
 ```bash
@@ -160,6 +170,8 @@ select * from inventory;
 **Slow queries**: Add indexes (already included in migration)
 
 **Sync fails**: Check device has internet, verify API key is correct
+
+**Cash operations not syncing**: Ensure migration `20260114000000_cash_operations_batch_id.sql` is applied. This migration renames `transaction_id` to `batch_id` in the cash_operations table. Without it, cash operation sync will fail with column mismatch errors.
 
 ## Next Steps
 

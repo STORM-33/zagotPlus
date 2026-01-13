@@ -1,5 +1,7 @@
 package com.zagot.zagotplus.ui.navigation
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -15,10 +17,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -38,7 +42,11 @@ import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.cash.CashScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import com.zagot.zagotplus.ui.screens.transfer.TransferScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import kotlinx.coroutines.flow.Flow
+
+private const val BACK_PRESS_INTERVAL = 2000L // 2 seconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,10 +59,27 @@ fun NavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     var showMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // Track last back press time for double-tap exit
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
     
     // Check if current route is a bottom nav item
     val isBottomNavRoute = Destination.bottomNavItems.any { dest ->
         currentDestination?.route == dest.route
+    }
+    
+    // Handle back press - require double tap to exit on main screens
+    BackHandler(enabled = isBottomNavRoute) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastBackPressTime < BACK_PRESS_INTERVAL) {
+            // Second press within interval - exit app
+            (context as? android.app.Activity)?.finish()
+        } else {
+            // First press - show toast and record time
+            lastBackPressTime = currentTime
+            Toast.makeText(context, "Натисніть ще раз для виходу", Toast.LENGTH_SHORT).show()
+        }
     }
     
     val currentTitle = Destination.bottomNavItems.find { destination ->
@@ -189,7 +214,13 @@ fun NavGraph(
                 )
             }
             composable(Destination.Inventory.route) {
-                InventoryScreen()
+                InventoryScreen(
+                    onNavigateToTransfer = { productId, destinationLocationId ->
+                        navController.navigate(
+                            Destination.Transfer.createRoute(productId, destinationLocationId)
+                        )
+                    }
+                )
             }
             composable(Destination.History.route) {
                 HistoryScreen()
@@ -210,9 +241,27 @@ fun NavGraph(
                     onNavigateToProducts = { navController.navigate(Destination.Products.route) }
                 )
             }
-            composable(Destination.Transfer.route) {
+            composable(
+                route = Destination.Transfer.ROUTE_WITH_ARGS,
+                arguments = listOf(
+                    navArgument(Destination.Transfer.ARG_PRODUCT_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(Destination.Transfer.ARG_DESTINATION_LOCATION_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val productId = backStackEntry.arguments?.getString(Destination.Transfer.ARG_PRODUCT_ID)
+                val destinationLocationId = backStackEntry.arguments?.getString(Destination.Transfer.ARG_DESTINATION_LOCATION_ID)
                 TransferScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    prefilledProductId = productId,
+                    prefilledDestinationLocationId = destinationLocationId
                 )
             }
             composable(Destination.Cash.route) {

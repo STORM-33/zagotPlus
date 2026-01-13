@@ -2,7 +2,6 @@ package com.zagot.zagotplus.ui.screens.purchase
 
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
-import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.testutil.MainDispatcherRule
@@ -29,7 +28,6 @@ class PurchaseEntryViewModelTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
-    private lateinit var cashRepository: CashRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var viewModel: PurchaseEntryViewModel
@@ -41,7 +39,6 @@ class PurchaseEntryViewModelTest {
     fun setup() {
         productRepository = mockk()
         purchaseBatchRepository = mockk()
-        cashRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
 
@@ -56,7 +53,6 @@ class PurchaseEntryViewModelTest {
         return PurchaseEntryViewModel(
             productRepository = productRepository,
             purchaseBatchRepository = purchaseBatchRepository,
-            cashRepository = cashRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences
         )
@@ -363,7 +359,6 @@ class PurchaseEntryViewModelTest {
     @Test
     fun `confirmSave creates batch with transactions and navigates back`() = runTest {
         coEvery { purchaseBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
-        coEvery { cashRepository.recordPurchasePayment(any(), any(), any()) } returns Unit
 
         viewModel = createViewModel()
         advanceUntilIdle()

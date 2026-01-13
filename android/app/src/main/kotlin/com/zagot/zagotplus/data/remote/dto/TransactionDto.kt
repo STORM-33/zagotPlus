@@ -52,8 +52,14 @@ data class TransactionDto(
     @SerialName("synced_at")
     val syncedAt: String?,
 
+    @SerialName("server_updated_at")
+    val serverUpdatedAt: String? = null,
+
     @SerialName("batch_id")
-    val batchId: String? = null
+    val batchId: String? = null,
+
+    @SerialName("sale_batch_id")
+    val saleBatchId: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -72,7 +78,8 @@ data class TransactionDto(
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
-        batchId = batchId?.let { UUID.fromString(it) }
+        batchId = batchId?.let { UUID.fromString(it) },
+        saleBatchId = saleBatchId?.let { UUID.fromString(it) }
     )
 
     companion object {
@@ -93,7 +100,8 @@ data class TransactionDto(
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString(),
-            batchId = entity.batchId?.toString()
+            batchId = entity.batchId?.toString(),
+            saleBatchId = entity.saleBatchId?.toString()
         )
     }
 }

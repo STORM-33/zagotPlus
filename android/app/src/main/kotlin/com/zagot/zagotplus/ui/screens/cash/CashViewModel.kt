@@ -2,7 +2,7 @@ package com.zagot.zagotplus.ui.screens.cash
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.zagot.zagotplus.domain.model.CashOperation
+import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.repository.CashRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +34,7 @@ enum class CashDialogType {
 data class CashUiState(
     val balance: BigDecimal = BigDecimal.ZERO,
     val dailyChange: BigDecimal = BigDecimal.ZERO,
-    val operations: List<CashOperation> = emptyList(),
+    val historyItems: List<CashHistoryItem> = emptyList(),
     val categories: List<ExpenseCategory> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
     val dialogType: CashDialogType = CashDialogType.NONE,
@@ -46,8 +46,8 @@ data class CashUiState(
     val isLoadingMore: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
-    val hasMoreOperations: Boolean = true,
-    val totalOperationsCount: Int = 0
+    val hasMoreItems: Boolean = true,
+    val totalItemsCount: Int = 0
 ) {
     val canConfirmDeposit: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
@@ -79,9 +79,9 @@ class CashViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Load initial page of operations
-                val totalCount = cashRepository.getTotalOperationsCount()
-                val initialOperations = cashRepository.getOperationsPaged(PAGE_SIZE, 0)
+                // Load initial page of history items (cash operations + purchases + sales)
+                val totalCount = cashRepository.getTotalHistoryCount()
+                val initialItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
                 
                 // Collect balance and categories as flows
                 combine(
@@ -93,11 +93,11 @@ class CashViewModel @Inject constructor(
                         state.copy(
                             balance = balance,
                             dailyChange = dailyChange,
-                            operations = initialOperations,
+                            historyItems = initialItems,
                             categories = categories,
                             isLoading = false,
-                            totalOperationsCount = totalCount,
-                            hasMoreOperations = initialOperations.size < totalCount
+                            totalItemsCount = totalCount,
+                            hasMoreItems = initialItems.size < totalCount
                         )
                     }
                 }.collect { }
@@ -114,19 +114,19 @@ class CashViewModel @Inject constructor(
 
     fun loadMoreOperations() {
         val state = _uiState.value
-        if (state.isLoadingMore || !state.hasMoreOperations) return
+        if (state.isLoadingMore || !state.hasMoreItems) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMore = true) }
             try {
-                val offset = state.operations.size
-                val moreOperations = cashRepository.getOperationsPaged(PAGE_SIZE, offset)
+                val offset = state.historyItems.size
+                val moreItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
                 _uiState.update { currentState ->
-                    val newOperations = currentState.operations + moreOperations
+                    val newItems = currentState.historyItems + moreItems
                     currentState.copy(
-                        operations = newOperations,
+                        historyItems = newItems,
                         isLoadingMore = false,
-                        hasMoreOperations = newOperations.size < currentState.totalOperationsCount
+                        hasMoreItems = newItems.size < currentState.totalItemsCount
                     )
                 }
             } catch (e: Exception) {
@@ -143,14 +143,14 @@ class CashViewModel @Inject constructor(
     fun refreshOperations() {
         viewModelScope.launch {
             try {
-                val totalCount = cashRepository.getTotalOperationsCount()
-                val currentCount = _uiState.value.operations.size.coerceAtLeast(PAGE_SIZE)
-                val operations = cashRepository.getOperationsPaged(currentCount, 0)
+                val totalCount = cashRepository.getTotalHistoryCount()
+                val currentCount = _uiState.value.historyItems.size.coerceAtLeast(PAGE_SIZE)
+                val items = cashRepository.getCashHistoryPaged(currentCount, 0)
                 _uiState.update { state ->
                     state.copy(
-                        operations = operations,
-                        totalOperationsCount = totalCount,
-                        hasMoreOperations = operations.size < totalCount
+                        historyItems = items,
+                        totalItemsCount = totalCount,
+                        hasMoreItems = items.size < totalCount
                     )
                 }
             } catch (e: Exception) {

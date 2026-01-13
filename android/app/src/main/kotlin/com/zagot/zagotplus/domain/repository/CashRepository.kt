@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.domain.repository
 
+import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashOperation
 import com.zagot.zagotplus.domain.model.CashOperationType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
@@ -32,6 +33,10 @@ interface CashRepository {
     // Paginated operations (for infinite scroll)
     suspend fun getOperationsPaged(limit: Int, offset: Int): List<CashOperation>
     suspend fun getTotalOperationsCount(): Int
+    
+    // Cash history (unified: cash_operations + purchases + sales)
+    suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryItem>
+    suspend fun getTotalHistoryCount(): Int
 
     
     // Balance (per location)
@@ -46,7 +51,4 @@ interface CashRepository {
     suspend fun deposit(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun withdraw(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun payment(locationId: UUID?, amount: BigDecimal, categoryId: UUID?, notes: String? = null)
-    
-    // For linking purchases
-    suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, batchId: UUID)
 }

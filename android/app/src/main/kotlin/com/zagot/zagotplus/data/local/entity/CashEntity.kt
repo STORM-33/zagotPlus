@@ -65,6 +65,27 @@ data class ExpenseCategoryEntity(
  * @property createdAt When operation was created
  * @property syncedAt When synced to Supabase (null = pending)
  */
+/**
+ * Projection class for unified cash history query.
+ * Used to receive results from UNION query combining cash_operations and daily aggregates of purchase_batches/sale_batches.
+ */
+data class CashHistoryProjection(
+    val id: String, // UUID for operations, date-based ID for aggregates
+    val type: String, // "deposit", "withdrawal", "payment", "purchase", "sale"
+    val amount: BigDecimal,
+    val notes: String?,
+    @ColumnInfo(name = "category_name")
+    val categoryName: String?,
+    @ColumnInfo(name = "item_count")
+    val itemCount: Int?,
+    @ColumnInfo(name = "weight_kg")
+    val weightKg: BigDecimal?,
+    @ColumnInfo(name = "created_at")
+    val createdAt: Instant,
+    @ColumnInfo(name = "batch_count")
+    val batchCount: Int? // Number of batches in aggregated entry
+)
+
 @Entity(
     tableName = "cash_operations",
     foreignKeys = [

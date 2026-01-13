@@ -35,7 +35,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +52,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,10 +79,19 @@ import java.math.BigDecimal
 @Composable
 fun TransferScreen(
     onNavigateBack: () -> Unit,
+    prefilledProductId: String? = null,
+    prefilledDestinationLocationId: String? = null,
     viewModel: TransferViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Handle prefilled data
+    LaunchedEffect(prefilledProductId, prefilledDestinationLocationId) {
+        if (prefilledProductId != null || prefilledDestinationLocationId != null) {
+            viewModel.applyPrefilledData(prefilledProductId, prefilledDestinationLocationId)
+        }
+    }
 
     // Handle navigation
     LaunchedEffect(uiState.navigateBack) {
@@ -168,7 +182,9 @@ fun TransferScreen(
                             TransferScreenState.PRODUCT_GRID -> {
                                 InventoryGrid(
                                     inventoryItems = uiState.inventoryItems,
-                                    sourceLocationName = uiState.sourceLocation?.name ?: "Поточна точка",
+                                    sourceLocation = uiState.sourceLocation,
+                                    allLocations = uiState.allLocations,
+                                    onSourceLocationChange = viewModel::selectSourceLocation,
                                     onProductClick = viewModel::selectProduct,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -218,15 +234,20 @@ fun TransferScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InventoryGrid(
     inventoryItems: List<InventoryWithProduct>,
-    sourceLocationName: String,
+    sourceLocation: Location?,
+    allLocations: List<Location>,
+    onSourceLocationChange: (Location) -> Unit,
     onProductClick: (InventoryWithProduct) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    
     Column(modifier = modifier) {
-        // Source location header
+        // Source location selector
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -235,30 +256,60 @@ private fun InventoryGrid(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         ) {
-            Row(
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Place,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Звідки:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Text(
-                        text = sourceLocationName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Звідки:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = sourceLocation?.name ?: "Оберіть точку",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                }
+                
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    allLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = { Text(location.name) },
+                            onClick = {
+                                onSourceLocationChange(location)
+                                expanded = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Place,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -414,41 +465,6 @@ private fun TransferWeightEntry(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Weight from scales - LARGE display
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Вага",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = scaleWeight?.let { "${it.toPlainString()} кг" } ?: "-- кг",
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "(ваги не підключено)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
         // Manual weight input
         OutlinedTextField(
             value = weight,
@@ -466,9 +482,9 @@ private fun TransferWeightEntry(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Add position button
+        // Add position button - directly under weight field
         Button(
             onClick = onAddPosition,
             enabled = canAdd,

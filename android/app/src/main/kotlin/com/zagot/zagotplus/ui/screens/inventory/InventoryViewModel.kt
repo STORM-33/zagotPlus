@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -31,9 +32,18 @@ import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * Represents the view mode for inventory display.
+ */
+enum class InventoryViewMode {
+    BY_LOCATION,  // Show inventory for specific location
+    TOTAL         // Show total inventory across all locations
+}
+
 data class InventoryUiState(
     val locations: List<Location> = emptyList(),
     val selectedLocation: Location? = null,
+    val viewMode: InventoryViewMode = InventoryViewMode.BY_LOCATION,
     val products: List<Product> = emptyList(),
     val inventory: List<InventoryItem> = emptyList(),
     val isLoading: Boolean = false,
@@ -46,7 +56,8 @@ data class InventoryDisplayItem(
     val productId: UUID,
     val productName: String,
     val weightKg: BigDecimal,
-    val isNegative: Boolean
+    val isNegative: Boolean,
+    val locationId: UUID? = null  // null for total view
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,6 +76,9 @@ class InventoryViewModel @Inject constructor(
 
     // Track user's manual location selection (overrides device preference)
     private val _manualLocationSelection = MutableStateFlow<UUID?>(null)
+    
+    // Track view mode (BY_LOCATION or TOTAL)
+    private val _viewMode = MutableStateFlow(InventoryViewMode.BY_LOCATION)
 
     val syncStatus: Flow<SyncStatus> = syncStatusRepository.syncStatus
 
@@ -74,15 +88,36 @@ class InventoryViewModel @Inject constructor(
      */
     val displayItems: StateFlow<List<InventoryDisplayItem>> = _uiState
         .map { state ->
-            val inventoryMap = state.inventory.associateBy { it.productId }
-            state.products.map { product ->
-                val weight = inventoryMap[product.id]?.totalWeightKg ?: BigDecimal.ZERO
-                InventoryDisplayItem(
-                    productId = product.id,
-                    productName = product.name,
-                    weightKg = weight,
-                    isNegative = weight < BigDecimal.ZERO
-                )
+            if (state.viewMode == InventoryViewMode.TOTAL) {
+                // For total view, aggregate inventory across all locations
+                val aggregatedInventory = state.inventory
+                    .groupBy { it.productId }
+                    .mapValues { (_, items) -> items.sumOf { it.totalWeightKg } }
+                
+                state.products.map { product ->
+                    val weight = aggregatedInventory[product.id] ?: BigDecimal.ZERO
+                    InventoryDisplayItem(
+                        productId = product.id,
+                        productName = product.name,
+                        weightKg = weight,
+                        isNegative = weight < BigDecimal.ZERO,
+                        locationId = null
+                    )
+                }
+            } else {
+                // For location view, show inventory for selected location
+                val inventoryMap = state.inventory.associateBy { it.productId }
+                state.products.map { product ->
+                    val inventoryItem = inventoryMap[product.id]
+                    val weight = inventoryItem?.totalWeightKg ?: BigDecimal.ZERO
+                    InventoryDisplayItem(
+                        productId = product.id,
+                        productName = product.name,
+                        weightKg = weight,
+                        isNegative = weight < BigDecimal.ZERO,
+                        locationId = state.selectedLocation?.id
+                    )
+                }
             }
         }
         .stateIn(
@@ -108,32 +143,38 @@ class InventoryViewModel @Inject constructor(
                 
                 _uiState.update { it.copy(locations = locations, products = products) }
                 
-                // Observe location changes (from manual selection or device preferences)
-                // and reactively update inventory
-                _manualLocationSelection
-                    .flatMapLatest { manualSelection ->
-                        // Manual selection takes precedence, otherwise use device preference
+                // Observe view mode and location changes, reactively update inventory
+                combine(_viewMode, _manualLocationSelection) { viewMode, manualSelection ->
+                    viewMode to manualSelection
+                }.flatMapLatest { (viewMode, manualSelection) ->
+                    if (viewMode == InventoryViewMode.TOTAL) {
+                        // Load all inventory for total view
+                        transactionRepository.getInventory()
+                            .map { inventory -> Triple(viewMode, null, inventory) }
+                    } else {
+                        // Load inventory for specific location
                         val locationId = manualSelection 
                             ?: devicePreferences.getSelectedLocationId()
                             ?: locationsMap.keys.firstOrNull()
                         
                         if (locationId != null) {
                             transactionRepository.getInventoryByLocation(locationId)
-                                .map { inventory -> locationId to inventory }
+                                .map { inventory -> Triple(viewMode, locationId, inventory) }
                         } else {
-                            flowOf(null to emptyList<InventoryItem>())
+                            flowOf(Triple(viewMode, null, emptyList<InventoryItem>()))
                         }
                     }
-                    .collect { (locationId, inventory) ->
-                        val selectedLocation = locationId?.let { locationsMap[it] }
-                        _uiState.update {
-                            it.copy(
-                                selectedLocation = selectedLocation,
-                                inventory = inventory,
-                                isLoading = false
-                            )
-                        }
+                }.collect { (viewMode, locationId, inventory) ->
+                    val selectedLocation = locationId?.let { locationsMap[it] }
+                    _uiState.update {
+                        it.copy(
+                            viewMode = viewMode,
+                            selectedLocation = selectedLocation,
+                            inventory = inventory,
+                            isLoading = false
+                        )
                     }
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -154,9 +195,16 @@ class InventoryViewModel @Inject constructor(
     }
 
     fun selectLocation(location: Location) {
-        if (location == _uiState.value.selectedLocation) return
-        // Update manual selection - the Flow will reactively update inventory
+        if (_uiState.value.viewMode == InventoryViewMode.BY_LOCATION && 
+            location == _uiState.value.selectedLocation) return
+        // Switch to location view and select this location
+        _viewMode.value = InventoryViewMode.BY_LOCATION
         _manualLocationSelection.value = location.id
+    }
+    
+    fun selectTotalView() {
+        if (_uiState.value.viewMode == InventoryViewMode.TOTAL) return
+        _viewMode.value = InventoryViewMode.TOTAL
     }
 
     fun refresh() {

@@ -69,7 +69,7 @@ class SupabaseSyncDataSource @Inject constructor(
         return supabaseClient.postgrest[TABLE_TRANSACTIONS]
             .select(Columns.ALL) {
                 filter {
-                    gt("created_at", since.toString())
+                    gt("server_updated_at", since.toString())
                 }
             }
             .decodeList()
@@ -79,7 +79,7 @@ class SupabaseSyncDataSource @Inject constructor(
         return supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
             .select(Columns.ALL) {
                 filter {
-                    gt("created_at", since.toString())
+                    gt("server_updated_at", since.toString())
                 }
             }
             .decodeList()
@@ -89,7 +89,7 @@ class SupabaseSyncDataSource @Inject constructor(
         return supabaseClient.postgrest[TABLE_SALE_BATCHES]
             .select(Columns.ALL) {
                 filter {
-                    gt("created_at", since.toString())
+                    gt("server_updated_at", since.toString())
                 }
             }
             .decodeList()
@@ -99,7 +99,7 @@ class SupabaseSyncDataSource @Inject constructor(
         return supabaseClient.postgrest[TABLE_EXPENSE_CATEGORIES]
             .select(Columns.ALL) {
                 filter {
-                    gt("created_at", since.toString())
+                    gt("server_updated_at", since.toString())
                 }
             }
             .decodeList()
@@ -109,7 +109,7 @@ class SupabaseSyncDataSource @Inject constructor(
         return supabaseClient.postgrest[TABLE_CASH_OPERATIONS]
             .select(Columns.ALL) {
                 filter {
-                    gt("created_at", since.toString())
+                    gt("server_updated_at", since.toString())
                 }
             }
             .decodeList()

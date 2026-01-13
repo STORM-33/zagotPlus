@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import kotlinx.coroutines.flow.Flow
@@ -192,4 +193,78 @@ interface CashOperationDao {
 
     @Query("SELECT * FROM cash_operations WHERE local_id = :localId")
     suspend fun getByLocalId(localId: String): CashOperationEntity?
+
+    /**
+     * Get unified cash history with pagination.
+     * Combines individual cash_operations with daily aggregates of purchase_batches and sale_batches.
+     * Purchases and sales are grouped by day to avoid hundreds of entries per day.
+     */
+    @Query("""
+        SELECT 
+            id,
+            type,
+            amount,
+            notes,
+            category_name,
+            item_count,
+            weight_kg,
+            created_at,
+            batch_count
+        FROM (
+            SELECT 
+                CAST(co.id AS TEXT) as id,
+                co.type,
+                co.amount,
+                co.notes,
+                ec.name as category_name,
+                NULL as item_count,
+                NULL as weight_kg,
+                co.created_at,
+                NULL as batch_count
+            FROM cash_operations co
+            LEFT JOIN expense_categories ec ON co.category_id = ec.id
+            UNION ALL
+            SELECT 
+                'purchase_' || date(created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase' as type,
+                SUM(total_amount) as amount,
+                NULL as notes,
+                NULL as category_name,
+                SUM(item_count) as item_count,
+                SUM(total_weight_kg) as weight_kg,
+                MAX(created_at) as created_at,
+                COUNT(*) as batch_count
+            FROM purchase_batches
+            WHERE total_amount IS NOT NULL
+            GROUP BY date(created_at / 1000, 'unixepoch', 'localtime')
+            UNION ALL
+            SELECT 
+                'sale_' || date(created_at / 1000, 'unixepoch', 'localtime') as id,
+                'sale' as type,
+                SUM(total_amount) as amount,
+                NULL as notes,
+                NULL as category_name,
+                SUM(item_count) as item_count,
+                SUM(total_weight_kg) as weight_kg,
+                MAX(created_at) as created_at,
+                COUNT(*) as batch_count
+            FROM sale_batches
+            WHERE total_amount IS NOT NULL
+            GROUP BY date(created_at / 1000, 'unixepoch', 'localtime')
+        )
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryProjection>
+
+    /**
+     * Get total count of all cash history items (operations + unique days of batches).
+     */
+    @Query("""
+        SELECT 
+            (SELECT COUNT(*) FROM cash_operations) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL)
+    """)
+    suspend fun getTotalHistoryCount(): Int
 }

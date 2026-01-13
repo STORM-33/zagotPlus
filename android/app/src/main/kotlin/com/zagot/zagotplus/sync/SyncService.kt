@@ -231,16 +231,15 @@ class SyncService @Inject constructor(
     }
 
     /**
-     * Pull new transactions from Supabase that were created after last sync.
+     * Pull new transactions from Supabase that were updated after last sync.
      * Inserts or updates local Room database.
      *
-     * Note: Uses created_at filter which has a known edge case - if device A creates
-     * a transaction at T1, device B syncs at T2 (setting lastSync=T2), then device A
-     * syncs at T3, device B won't see A's transaction on next sync because created_at=T1 < T2.
-     * For this app's use case (single user, few devices), this is acceptable.
-     * A more robust solution would use a monotonic sequence number or updated_at timestamp.
+     * Uses server_updated_at filter which is set by a Postgres trigger when the
+     * server receives the record. This ensures no gaps even if devices sync at
+     * different times - we always query based on when the server received data,
+     * not when the client created it.
      *
-     * @param since Timestamp to filter transactions created after
+     * @param since Timestamp to filter transactions updated after
      * @throws Exception if network error occurs
      */
     private suspend fun pullNewTransactions(since: Instant): Int {

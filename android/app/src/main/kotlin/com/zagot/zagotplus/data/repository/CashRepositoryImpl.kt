@@ -2,9 +2,12 @@ package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
+import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.domain.model.CashHistoryItem
+import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.CashOperation
 import com.zagot.zagotplus.domain.model.CashOperationType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
@@ -104,6 +107,18 @@ class CashRepositoryImpl @Inject constructor(
     override suspend fun getTotalOperationsCount(): Int =
         cashOperationDao.getTotalOperationsCount()
 
+    // ========== Cash History (Unified) ==========
+
+    override suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryItem> {
+        val projections = cashOperationDao.getCashHistoryPaged(limit, offset)
+        return projections.map { it.toDomain() }
+    }
+
+    override suspend fun getTotalHistoryCount(): Int =
+        cashOperationDao.getTotalHistoryCount()
+
+    // ========== Balance ==========
+
     override fun getTotalBalance(): Flow<BigDecimal> =
         cashOperationDao.getTotalBalance()
 
@@ -180,24 +195,6 @@ class CashRepositoryImpl @Inject constructor(
         cashOperationDao.insert(entity)
     }
 
-    override suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, batchId: UUID) {
-        val now = Instant.now()
-        val entity = CashOperationEntity(
-            id = UUID.randomUUID(),
-            localId = UUID.randomUUID().toString(),
-            locationId = locationId,
-            type = CashOperationType.PURCHASE.toDbValue(),
-            amount = amount,
-            categoryId = null,
-            batchId = batchId,
-            notes = null,
-            deviceId = devicePreferences.getDeviceId(),
-            createdAt = now,
-            syncedAt = null
-        )
-        cashOperationDao.insert(entity)
-    }
-
     // ========== Helpers ==========
 
     private suspend fun enrichWithCategories(entities: List<CashOperationEntity>): List<CashOperation> {
@@ -226,10 +223,28 @@ class CashRepositoryImpl @Inject constructor(
         amount = amount,
         categoryId = categoryId,
         categoryName = categoryName,
-        batchId = batchId,
         notes = notes,
         deviceId = deviceId,
         createdAt = createdAt,
         syncedAt = syncedAt
+    )
+
+    private fun CashHistoryProjection.toDomain() = CashHistoryItem(
+        id = id,
+        type = when (type) {
+            "deposit" -> CashHistoryItemType.DEPOSIT
+            "withdrawal" -> CashHistoryItemType.WITHDRAWAL
+            "payment" -> CashHistoryItemType.PAYMENT
+            "purchase" -> CashHistoryItemType.PURCHASE
+            "sale" -> CashHistoryItemType.SALE
+            else -> throw IllegalArgumentException("Unknown cash history type: $type")
+        },
+        amount = amount,
+        notes = notes,
+        categoryName = categoryName,
+        itemCount = itemCount,
+        weightKg = weightKg,
+        createdAt = createdAt,
+        batchCount = batchCount
     )
 }

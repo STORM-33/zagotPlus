@@ -8,7 +8,6 @@ import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
-import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -106,7 +105,6 @@ data class PurchaseEntryUiState(
 class PurchaseEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val purchaseBatchRepository: PurchaseBatchRepository,
-    private val cashRepository: CashRepository,
     private val devicePreferences: DevicePreferences,
     private val productOrderPreferences: ProductOrderPreferences
 ) : ViewModel() {
@@ -331,14 +329,8 @@ class PurchaseEntryViewModel @Inject constructor(
 
                 purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
 
-                // Record cash payment for purchase
-                if (locationId != null) {
-                    cashRepository.recordPurchasePayment(
-                        locationId = locationId,
-                        amount = state.totalAmount,
-                        batchId = batchId
-                    )
-                }
+                // Note: Cash balance is automatically updated via transactions table
+                // (purchases reduce cash balance in the balance calculation query)
 
                 // TODO: Print receipt here (Phase 6 - hardware integration)
                 // printReceipt(batch, positions)

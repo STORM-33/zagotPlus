@@ -41,7 +41,10 @@ data class PurchaseBatchDto(
     val createdAt: String,
 
     @SerialName("synced_at")
-    val syncedAt: String?
+    val syncedAt: String?,
+
+    @SerialName("server_updated_at")
+    val serverUpdatedAt: String? = null
 ) {
     /**
      * Convert DTO to Room entity.

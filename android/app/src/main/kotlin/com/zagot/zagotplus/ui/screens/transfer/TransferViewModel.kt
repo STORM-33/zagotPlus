@@ -48,6 +48,7 @@ enum class TransferScreenState {
 data class TransferUiState(
     val sourceLocation: Location? = null,
     val destinationLocation: Location? = null,
+    val allLocations: List<Location> = emptyList(),
     val availableDestinations: List<Location> = emptyList(),
     val inventoryItems: List<InventoryWithProduct> = emptyList(),
     val selectedProduct: Product? = null,
@@ -102,6 +103,9 @@ class TransferViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TransferUiState())
     val uiState: StateFlow<TransferUiState> = _uiState.asStateFlow()
+    
+    private var allLocations: List<Location> = emptyList()
+    private var allProducts: List<Product> = emptyList()
 
     init {
         loadData()
@@ -116,32 +120,23 @@ class TransferViewModel @Inject constructor(
                 // Load source location
                 val sourceLocation = locationId?.let { locationRepository.getLocationById(it) }
                 
-                // Load all locations except current one for destination options
-                val allLocations = locationRepository.getAllLocations().first()
+                // Load all locations
+                allLocations = locationRepository.getAllLocations().first()
                 val destinations = allLocations.filter { it.id != locationId }
                 
+                // Store products for later use
+                allProducts = productRepository.getActiveProducts().first()
+                
                 // Load inventory for current location with product details
-                combine(
-                    transactionRepository.getInventoryByLocation(locationId ?: UUID.randomUUID()),
-                    productRepository.getActiveProducts()
-                ) { inventory, products ->
-                    val productMap = products.associateBy { it.id }
-                    inventory
-                        .filter { it.totalWeightKg > BigDecimal.ZERO }
-                        .mapNotNull { item ->
-                            productMap[item.productId]?.let { product ->
-                                InventoryWithProduct(item, product)
-                            }
-                        }
-                }.collect { inventoryWithProducts ->
-                    _uiState.update {
-                        it.copy(
-                            sourceLocation = sourceLocation,
-                            availableDestinations = destinations,
-                            inventoryItems = inventoryWithProducts,
-                            isLoading = false
-                        )
-                    }
+                loadInventoryForLocation(locationId ?: UUID.randomUUID())
+                
+                _uiState.update {
+                    it.copy(
+                        sourceLocation = sourceLocation,
+                        allLocations = allLocations,
+                        availableDestinations = destinations,
+                        isLoading = false
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -152,6 +147,51 @@ class TransferViewModel @Inject constructor(
                 }
             }
         }
+    }
+    
+    private fun loadInventoryForLocation(locationId: UUID) {
+        viewModelScope.launch {
+            combine(
+                transactionRepository.getInventoryByLocation(locationId),
+                productRepository.getActiveProducts()
+            ) { inventory, products ->
+                val productMap = products.associateBy { it.id }
+                inventory
+                    .filter { it.totalWeightKg > BigDecimal.ZERO }
+                    .mapNotNull { item ->
+                        productMap[item.productId]?.let { product ->
+                            InventoryWithProduct(item, product)
+                        }
+                    }
+            }.collect { inventoryWithProducts ->
+                _uiState.update {
+                    it.copy(inventoryItems = inventoryWithProducts)
+                }
+            }
+        }
+    }
+    
+    fun selectSourceLocation(location: Location) {
+        val currentSource = _uiState.value.sourceLocation
+        if (location.id == currentSource?.id) return
+        
+        // Clear positions when changing source location
+        val destinations = allLocations.filter { it.id != location.id }
+        
+        _uiState.update {
+            it.copy(
+                sourceLocation = location,
+                availableDestinations = destinations,
+                positions = emptyList(),
+                selectedProduct = null,
+                currentWeight = "",
+                selectedAvailableStock = BigDecimal.ZERO,
+                screenState = TransferScreenState.PRODUCT_GRID
+            )
+        }
+        
+        // Reload inventory for new source location
+        loadInventoryForLocation(location.id)
     }
 
     fun selectProduct(inventoryWithProduct: InventoryWithProduct) {
@@ -318,5 +358,50 @@ class TransferViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+    
+    /**
+     * Apply prefilled data from navigation (e.g., from inventory screen).
+     * Selects the product and optionally pre-selects destination location.
+     */
+    fun applyPrefilledData(productIdStr: String?, destinationLocationIdStr: String?) {
+        if (productIdStr == null && destinationLocationIdStr == null) return
+        
+        viewModelScope.launch {
+            // Wait for initial data to load
+            val currentState = _uiState.value
+            if (currentState.isLoading) {
+                // Wait for loading to complete
+                _uiState.first { !it.isLoading }
+            }
+            
+            val state = _uiState.value
+            
+            // Find and select the product
+            productIdStr?.let { idStr ->
+                try {
+                    val productId = UUID.fromString(idStr)
+                    val inventoryWithProduct = state.inventoryItems.find { it.product.id == productId }
+                    inventoryWithProduct?.let { selectProduct(it) }
+                } catch (_: IllegalArgumentException) {
+                    // Invalid UUID, ignore
+                }
+            }
+            
+            // Pre-select destination location
+            destinationLocationIdStr?.let { idStr ->
+                try {
+                    val locationId = UUID.fromString(idStr)
+                    val destination = state.availableDestinations.find { it.id == locationId }
+                    destination?.let { 
+                        _uiState.update { current -> 
+                            current.copy(destinationLocation = it) 
+                        }
+                    }
+                } catch (_: IllegalArgumentException) {
+                    // Invalid UUID, ignore
+                }
+            }
+        }
     }
 }

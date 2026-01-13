@@ -31,7 +31,6 @@ class CashRepositoryImplTest {
 
     private val testLocationId = UUID.randomUUID()
     private val testCategoryId = UUID.randomUUID()
-    private val testBatchId = UUID.randomUUID()
     private val now = Instant.now()
 
     @Before
@@ -284,19 +283,6 @@ class CashRepositoryImplTest {
 
         assertNull(slot.captured.categoryId)
         assertNull(slot.captured.notes)
-    }
-
-    @Test
-    fun `recordPurchasePayment creates purchase operation with batchId`() = runTest {
-        val slot = slot<CashOperationEntity>()
-        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
-
-        repository.recordPurchasePayment(testLocationId, BigDecimal("1000.00"), testBatchId)
-
-        assertEquals(CashOperationType.PURCHASE.toDbValue(), slot.captured.type)
-        assertEquals(BigDecimal("1000.00"), slot.captured.amount)
-        assertEquals(testBatchId, slot.captured.batchId)
-        assertEquals(testLocationId, slot.captured.locationId)
     }
 
     // ==================== Category Enrichment Tests ====================

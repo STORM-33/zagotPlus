@@ -293,7 +293,7 @@ private fun DateRangeDropdown(
     var expanded by remember { mutableStateOf(false) }
 
     val presetLabels = mapOf(
-        DateRangePreset.ALL to "Всі дати",
+        DateRangePreset.ALL to "Весь час",
         DateRangePreset.TODAY to "Сьогодні",
         DateRangePreset.THIS_WEEK to "Цей тиждень",
         DateRangePreset.THIS_MONTH to "Цей місяць"
@@ -305,7 +305,7 @@ private fun DateRangeDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = presetLabels[selectedPreset] ?: "Всі дати",
+            value = presetLabels[selectedPreset] ?: "Весь час",
             onValueChange = {},
             readOnly = true,
             label = { Text("Період") },
@@ -551,6 +551,13 @@ private fun TransactionRow(
     decimalFormat: DecimalFormat,
     modifier: Modifier = Modifier
 ) {
+    val pricePerKg = transaction.totalAmount?.let { amount ->
+        val weight = transaction.weightKg.abs()
+        if (weight > java.math.BigDecimal.ZERO) {
+            amount.abs().divide(weight, 2, java.math.RoundingMode.HALF_UP)
+        } else null
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -563,6 +570,13 @@ private fun TransactionRow(
                 text = transaction.productName,
                 style = MaterialTheme.typography.bodyMedium
             )
+            pricePerKg?.let { price ->
+                Text(
+                    text = "₴${decimalFormat.format(price)}/кг",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
