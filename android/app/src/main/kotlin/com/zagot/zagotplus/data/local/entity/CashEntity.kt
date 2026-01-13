@@ -9,6 +9,8 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
+// Note: PurchaseBatchEntity import not needed as it's in the same package
+
 /**
  * Room entity representing an expense category.
  * User-defined categories for organizing cash payments.
@@ -49,7 +51,7 @@ data class ExpenseCategoryEntity(
  * - "deposit": Cash added to register from external source
  * - "withdrawal": Cash removed from register to external destination
  * - "payment": Cash paid out for expenses (has category)
- * - "purchase": Cash paid for product purchase (auto-generated, linked to transaction)
+ * - "purchase": Cash paid for product purchase (auto-generated, linked to batch)
  *
  * @property id Primary key (UUID)
  * @property localId Device-generated UUID for sync
@@ -57,7 +59,7 @@ data class ExpenseCategoryEntity(
  * @property type Operation type: "deposit", "withdrawal", "payment", "purchase"
  * @property amount Amount in UAH (always positive)
  * @property categoryId For payments: optional expense category
- * @property transactionId For purchases: linked purchase transaction
+ * @property batchId For purchases: linked purchase batch
  * @property notes Optional description
  * @property deviceId Which device created this operation
  * @property createdAt When operation was created
@@ -79,9 +81,9 @@ data class ExpenseCategoryEntity(
             onDelete = ForeignKey.SET_NULL
         ),
         ForeignKey(
-            entity = TransactionEntity::class,
+            entity = PurchaseBatchEntity::class,
             parentColumns = ["id"],
-            childColumns = ["transaction_id"],
+            childColumns = ["batch_id"],
             onDelete = ForeignKey.CASCADE
         )
     ],
@@ -89,7 +91,7 @@ data class ExpenseCategoryEntity(
         Index(value = ["local_id"], unique = true),
         Index(value = ["location_id"]),
         Index(value = ["category_id"]),
-        Index(value = ["transaction_id"]),
+        Index(value = ["batch_id"]),
         Index(value = ["synced_at"]),
         Index(value = ["created_at"]),
         Index(value = ["type"])
@@ -115,8 +117,8 @@ data class CashOperationEntity(
     @ColumnInfo(name = "category_id")
     val categoryId: UUID?,
 
-    @ColumnInfo(name = "transaction_id")
-    val transactionId: UUID?,
+    @ColumnInfo(name = "batch_id")
+    val batchId: UUID?,
 
     @ColumnInfo(name = "notes")
     val notes: String?,

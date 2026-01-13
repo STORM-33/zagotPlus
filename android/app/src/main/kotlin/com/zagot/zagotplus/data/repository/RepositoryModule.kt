@@ -6,6 +6,7 @@ import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import dagger.Binds
 import dagger.Module
@@ -43,6 +44,12 @@ abstract class RepositoryModule {
     abstract fun bindPurchaseBatchRepository(
         impl: PurchaseBatchRepositoryImpl
     ): PurchaseBatchRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSaleBatchRepository(
+        impl: SaleBatchRepositoryImpl
+    ): SaleBatchRepository
 
     @Binds
     @Singleton

@@ -74,8 +74,8 @@ interface CashOperationDao {
     @Query("SELECT * FROM cash_operations WHERE id = :id")
     suspend fun getById(id: UUID): CashOperationEntity?
 
-    @Query("SELECT * FROM cash_operations WHERE transaction_id = :transactionId")
-    suspend fun getByTransactionId(transactionId: UUID): CashOperationEntity?
+    @Query("SELECT * FROM cash_operations WHERE batch_id = :batchId")
+    suspend fun getByBatchId(batchId: UUID): CashOperationEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(operation: CashOperationEntity)

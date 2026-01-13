@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -90,6 +91,23 @@ fun SaleEntryScreen(
         if (uiState.navigateBack) {
             viewModel.onNavigationHandled()
             onNavigateBack()
+        }
+    }
+
+    // Handle Android back button
+    BackHandler {
+        when (uiState.screenState) {
+            SaleEntryScreenState.PRODUCT_GRID -> {
+                if (uiState.positions.isEmpty()) {
+                    viewModel.cancel()
+                } else {
+                    viewModel.backToGrid()
+                }
+            }
+            SaleEntryScreenState.WEIGHING -> viewModel.backToGrid()
+            SaleEntryScreenState.POSITION_REVIEW -> viewModel.backToWeighing()
+            SaleEntryScreenState.POSITIONS_LIST -> viewModel.cancel()
+            SaleEntryScreenState.SUMMARY -> viewModel.dismissSummary()
         }
     }
 
@@ -252,6 +270,25 @@ fun SaleEntryScreen(
                 onDismiss = viewModel::cancelEditPosition,
                 onConfirm = { tareWeight, price ->
                     viewModel.updatePosition(position.id, tareWeight, price)
+                }
+            )
+        }
+
+        // Exit confirmation dialog
+        if (uiState.showExitConfirmation) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissExitConfirmation,
+                title = { Text("Скасувати продаж?") },
+                text = { Text("Всі введені дані буде втрачено.") },
+                confirmButton = {
+                    TextButton(onClick = viewModel::confirmExit) {
+                        Text("Так, вийти")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissExitConfirmation) {
+                        Text("Продовжити")
+                    }
                 }
             )
         }

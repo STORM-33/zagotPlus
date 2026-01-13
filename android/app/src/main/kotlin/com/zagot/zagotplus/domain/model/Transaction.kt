@@ -21,7 +21,8 @@ data class Transaction(
     val deviceId: String?,
     val createdAt: Instant,
     val syncedAt: Instant?,
-    val batchId: UUID? = null
+    val batchId: UUID? = null,
+    val saleBatchId: UUID? = null
 )
 
 enum class TransactionType {

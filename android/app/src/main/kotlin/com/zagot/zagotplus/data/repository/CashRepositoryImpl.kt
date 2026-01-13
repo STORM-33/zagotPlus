@@ -135,7 +135,7 @@ class CashRepositoryImpl @Inject constructor(
             type = CashOperationType.DEPOSIT.toDbValue(),
             amount = amount,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = notes,
             deviceId = devicePreferences.getDeviceId(),
             createdAt = now,
@@ -153,7 +153,7 @@ class CashRepositoryImpl @Inject constructor(
             type = CashOperationType.WITHDRAWAL.toDbValue(),
             amount = amount,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = notes,
             deviceId = devicePreferences.getDeviceId(),
             createdAt = now,
@@ -171,7 +171,7 @@ class CashRepositoryImpl @Inject constructor(
             type = CashOperationType.PAYMENT.toDbValue(),
             amount = amount,
             categoryId = categoryId,
-            transactionId = null,
+            batchId = null,
             notes = notes,
             deviceId = devicePreferences.getDeviceId(),
             createdAt = now,
@@ -180,7 +180,7 @@ class CashRepositoryImpl @Inject constructor(
         cashOperationDao.insert(entity)
     }
 
-    override suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, transactionId: UUID) {
+    override suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, batchId: UUID) {
         val now = Instant.now()
         val entity = CashOperationEntity(
             id = UUID.randomUUID(),
@@ -189,7 +189,7 @@ class CashRepositoryImpl @Inject constructor(
             type = CashOperationType.PURCHASE.toDbValue(),
             amount = amount,
             categoryId = null,
-            transactionId = transactionId,
+            batchId = batchId,
             notes = null,
             deviceId = devicePreferences.getDeviceId(),
             createdAt = now,
@@ -226,7 +226,7 @@ class CashRepositoryImpl @Inject constructor(
         amount = amount,
         categoryId = categoryId,
         categoryName = categoryName,
-        transactionId = transactionId,
+        batchId = batchId,
         notes = notes,
         deviceId = deviceId,
         createdAt = createdAt,

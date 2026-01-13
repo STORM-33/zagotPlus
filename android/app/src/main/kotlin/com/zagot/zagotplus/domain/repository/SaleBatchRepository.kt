@@ -1,39 +1,39 @@
 package com.zagot.zagotplus.domain.repository
 
-import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 /**
- * Repository interface for purchase batch operations.
+ * Repository interface for sale batch operations.
  */
-interface PurchaseBatchRepository {
+interface SaleBatchRepository {
 
     /**
      * Observe all batches ordered by creation date (newest first).
      */
-    fun observeAll(): Flow<List<PurchaseBatch>>
+    fun observeAll(): Flow<List<SaleBatch>>
 
     /**
      * Observe today's batches ordered by creation date (newest first).
      */
-    fun observeTodaysBatches(): Flow<List<PurchaseBatch>>
+    fun observeTodaysBatches(): Flow<List<SaleBatch>>
 
     /**
      * Get today's batches.
      */
-    suspend fun getTodaysBatches(): List<PurchaseBatch>
+    suspend fun getTodaysBatches(): List<SaleBatch>
 
     /**
      * Get a batch by its ID.
      */
-    suspend fun getById(id: UUID): PurchaseBatch?
+    suspend fun getById(id: UUID): SaleBatch?
 
     /**
      * Get a batch by its local ID.
      */
-    suspend fun getByLocalId(localId: String): PurchaseBatch?
+    suspend fun getByLocalId(localId: String): SaleBatch?
 
     /**
      * Create a new batch with its transactions atomically.
@@ -41,14 +41,14 @@ interface PurchaseBatchRepository {
      * @param transactions The transactions belonging to this batch
      */
     suspend fun createBatchWithTransactions(
-        batch: PurchaseBatch,
+        batch: SaleBatch,
         transactions: List<Transaction>
     )
 
     /**
      * Get unsynced batches for sync.
      */
-    suspend fun getUnsynced(): List<PurchaseBatch>
+    suspend fun getUnsynced(): List<SaleBatch>
 
     /**
      * Mark a batch as synced.
@@ -68,7 +68,7 @@ interface PurchaseBatchRepository {
     /**
      * Get paginated batches ordered by creation date (newest first).
      */
-    suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<PurchaseBatch>
+    suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<SaleBatch>
 
     /**
      * Get total count of batches.

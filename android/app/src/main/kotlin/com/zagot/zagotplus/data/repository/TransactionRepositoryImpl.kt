@@ -258,6 +258,9 @@ class TransactionRepositoryImpl @Inject constructor(
         return entities.map { it.toDomain() }
     }
 
+    override suspend fun getTransactionsByIds(ids: List<UUID>): List<Transaction> =
+        transactionDao.getByIds(ids).map { it.toDomain() }
+
     private fun TransactionEntity.toDomain()= Transaction(
         id = id,
         localId = localId,
@@ -272,6 +275,7 @@ class TransactionRepositoryImpl @Inject constructor(
         deviceId = deviceId,
         createdAt = createdAt,
         syncedAt = syncedAt,
-        batchId = batchId
+        batchId = batchId,
+        saleBatchId = saleBatchId
     )
 }

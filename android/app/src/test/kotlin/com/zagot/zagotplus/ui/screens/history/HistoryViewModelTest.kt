@@ -4,16 +4,17 @@ import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
-import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
+import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -36,12 +37,15 @@ import java.util.UUID
 class HistoryViewModelTest {
 
     private lateinit var transactionRepository: TransactionRepository
+    private lateinit var purchaseBatchRepository: PurchaseBatchRepository
+    private lateinit var saleBatchRepository: SaleBatchRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var viewModel: HistoryViewModel
     private val testDispatcher = UnconfinedTestDispatcher()
     private val testScope = TestScope(testDispatcher)
-    private val transactionCountFlow = MutableStateFlow(2)
+    private val purchaseBatchCountFlow = MutableStateFlow(2)
+    private val saleBatchCountFlow = MutableStateFlow(0)
 
     private val testProduct = Product(
         id = UUID.randomUUID(),
@@ -57,6 +61,26 @@ class HistoryViewModelTest {
         name = "Кіоск 1",
         type = LocationType.KIOSK,
         createdAt = Instant.now()
+    )
+
+    private val testBatch = PurchaseBatch(
+        id = UUID.randomUUID(),
+        localId = "test-batch-local-id",
+        locationId = testLocation.id,
+        deviceId = "test-device",
+        totalWeightKg = BigDecimal("10.50"),
+        totalAmount = BigDecimal("472.50"),
+        itemCount = 1,
+        notes = null,
+        createdAt = Instant.now(),
+        syncedAt = null
+    )
+
+    private val testBatch2 = testBatch.copy(
+        id = UUID.randomUUID(),
+        localId = "test-batch-local-id-2",
+        totalWeightKg = BigDecimal("20.00"),
+        totalAmount = BigDecimal("900.00")
     )
 
     private val testTransaction = Transaction(
@@ -86,14 +110,21 @@ class HistoryViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         transactionRepository = mockk()
+        purchaseBatchRepository = mockk()
+        saleBatchRepository = mockk()
         productRepository = mockk()
         locationRepository = mockk()
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
-        every { transactionRepository.getTotalTransactionCount() } returns transactionCountFlow
-        coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 2
-        coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns listOf(testTransaction, saleTransaction)
+        every { purchaseBatchRepository.observeTotalBatchCount() } returns purchaseBatchCountFlow
+        every { saleBatchRepository.observeTotalBatchCount() } returns saleBatchCountFlow
+        coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 2
+        coEvery { saleBatchRepository.getTotalBatchCount() } returns 0
+        coEvery { purchaseBatchRepository.getAllBatchesPaginated(any(), any()) } returns listOf(testBatch, testBatch2)
+        coEvery { saleBatchRepository.getAllBatchesPaginated(any(), any()) } returns emptyList()
+        // Return empty list for unbatched transactions by default to avoid virtual batches
+        coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns emptyList()
     }
 
     @After
@@ -104,50 +135,48 @@ class HistoryViewModelTest {
     }
 
     private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(transactionRepository, productRepository, locationRepository)
+        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository)
     }
 
     @Test
-    fun `initial state loads all transactions`() = testScope.runTest {
+    fun `initial state loads all batches`() = testScope.runTest {
         viewModel = createViewModel()
         
 
         val state = viewModel.uiState.value
-        assertEquals(2, state.transactions.size)
+        assertEquals(2, state.batches.size)
         assertEquals(2, state.totalCount)
         assertFalse(state.isLoading)
         assertFalse(state.hasActiveFilters)
     }
 
     @Test
-    fun `transactions are mapped to display items correctly`() = testScope.runTest {
+    fun `batches are mapped to display items correctly`() = testScope.runTest {
         viewModel = createViewModel()
         
 
         val state = viewModel.uiState.value
-        val firstItem = state.transactions.first()
-        assertEquals(testProduct.name, firstItem.productName)
+        val firstItem = state.batches.first()
+        assertTrue(firstItem is HistoryBatchDisplayItem.RealBatch)
         assertEquals(testLocation.name, firstItem.locationName)
-        assertEquals(testTransaction.weightKg, firstItem.weightKg)
-        assertEquals(testTransaction.type, firstItem.type)
+        assertEquals(testBatch.totalWeightKg, firstItem.totalWeightKg)
+        assertEquals(BatchType.PURCHASE, firstItem.batchType)
     }
 
     @Test
     fun `toggleTypeFilter adds type to filter`() = testScope.runTest {
-        val filterSlot = slot<TransactionFilter>()
-        coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
-        coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
+        coEvery { purchaseBatchRepository.getAllBatchesPaginated(any(), any()) } returns listOf(testBatch)
+        coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 1
 
         viewModel = createViewModel()
         
 
-        viewModel.toggleTypeFilter(TransactionType.PURCHASE)
+        viewModel.toggleTypeFilter(BatchType.PURCHASE)
         
 
         val state = viewModel.uiState.value
-        assertTrue(state.selectedTypes.contains(TransactionType.PURCHASE))
+        assertTrue(state.selectedTypes.contains(BatchType.PURCHASE))
         assertTrue(state.hasActiveFilters)
-        assertEquals(setOf(TransactionType.PURCHASE), filterSlot.captured.types)
     }
 
     @Test
@@ -155,13 +184,13 @@ class HistoryViewModelTest {
         viewModel = createViewModel()
         
 
-        viewModel.toggleTypeFilter(TransactionType.PURCHASE)
+        viewModel.toggleTypeFilter(BatchType.PURCHASE)
         
-        assertTrue(viewModel.uiState.value.selectedTypes.contains(TransactionType.PURCHASE))
+        assertTrue(viewModel.uiState.value.selectedTypes.contains(BatchType.PURCHASE))
 
-        viewModel.toggleTypeFilter(TransactionType.PURCHASE)
+        viewModel.toggleTypeFilter(BatchType.PURCHASE)
         
-        assertFalse(viewModel.uiState.value.selectedTypes.contains(TransactionType.PURCHASE))
+        assertFalse(viewModel.uiState.value.selectedTypes.contains(BatchType.PURCHASE))
     }
 
     @Test
@@ -179,10 +208,6 @@ class HistoryViewModelTest {
 
     @Test
     fun `setLocationFilter filters by location`() = testScope.runTest {
-        val filterSlot = slot<TransactionFilter>()
-        coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
-        coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
-
         viewModel = createViewModel()
         
 
@@ -192,15 +217,10 @@ class HistoryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(testLocation.id, state.selectedLocationId)
         assertTrue(state.hasActiveFilters)
-        assertEquals(testLocation.id, filterSlot.captured.locationId)
     }
 
     @Test
     fun `setSearchQuery filters by product name`() = testScope.runTest {
-        val filterSlot = slot<TransactionFilter>()
-        coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns listOf(testTransaction)
-        coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 1
-
         viewModel = createViewModel()
         
 
@@ -210,7 +230,6 @@ class HistoryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("Горіх", state.searchQuery)
         assertTrue(state.hasActiveFilters)
-        assertEquals("Горіх", filterSlot.captured.productNameSearch)
     }
 
     @Test
@@ -219,7 +238,7 @@ class HistoryViewModelTest {
         
 
         // Set some filters
-        viewModel.toggleTypeFilter(TransactionType.PURCHASE)
+        viewModel.toggleTypeFilter(BatchType.PURCHASE)
         viewModel.setLocationFilter(testLocation.id)
         viewModel.setSearchQuery("test")
         
@@ -252,28 +271,28 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `loadMoreTransactions appends to existing list when hasMorePages is true`() = testScope.runTest {
-        // Create enough transactions to simulate pagination
-        val transactions = (1..50).map { 
-            testTransaction.copy(id = UUID.randomUUID(), localId = "tx-$it")
+    fun `loadMoreBatches appends to existing list when hasMorePages is true`() = testScope.runTest {
+        // Create enough batches to simulate pagination
+        val batches = (1..50).map { 
+            testBatch.copy(id = UUID.randomUUID(), localId = "batch-$it")
         }
-        val additionalTransactions = listOf(testTransaction.copy(id = UUID.randomUUID(), localId = "tx-51"))
+        val additionalBatches = listOf(testBatch.copy(id = UUID.randomUUID(), localId = "batch-51"))
         
         var callCount = 0
-        coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } answers {
+        coEvery { purchaseBatchRepository.getAllBatchesPaginated(any(), any()) } answers {
             callCount++
-            if (callCount == 1) transactions else additionalTransactions
+            if (callCount == 1) batches else additionalBatches
         }
-        coEvery { transactionRepository.getFilteredTransactionCount(any()) } returns 51
+        coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 51
 
         viewModel = createViewModel()
         
-        assertEquals(50, viewModel.uiState.value.transactions.size)
+        assertEquals(50, viewModel.uiState.value.batches.size)
         assertTrue(viewModel.uiState.value.hasMorePages)
 
-        viewModel.loadMoreTransactions()
+        viewModel.loadMoreBatches()
         
 
-        assertEquals(51, viewModel.uiState.value.transactions.size)
+        assertEquals(51, viewModel.uiState.value.batches.size)
     }
 }

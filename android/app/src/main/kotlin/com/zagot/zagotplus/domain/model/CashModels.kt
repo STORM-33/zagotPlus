@@ -49,7 +49,7 @@ data class CashOperation(
     val amount: BigDecimal,
     val categoryId: UUID? = null,
     val categoryName: String? = null, // Denormalized for display
-    val transactionId: UUID? = null,
+    val batchId: UUID? = null,
     val notes: String? = null,
     val deviceId: String? = null,
     val createdAt: Instant,

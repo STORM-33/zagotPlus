@@ -3,7 +3,7 @@ package com.zagot.zagotplus.ui.screens.sale
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.repository.ProductRepository
-import com.zagot.zagotplus.domain.repository.SaleInput
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import com.zagot.zagotplus.testutil.MainDispatcherRule
 import com.zagot.zagotplus.testutil.TestData
@@ -29,6 +29,7 @@ class SaleEntryViewModelTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var transactionRepository: TransactionRepository
+    private lateinit var saleBatchRepository: SaleBatchRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var viewModel: SaleEntryViewModel
@@ -45,6 +46,7 @@ class SaleEntryViewModelTest {
     fun setup() {
         productRepository = mockk()
         transactionRepository = mockk()
+        saleBatchRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
 
@@ -54,12 +56,14 @@ class SaleEntryViewModelTest {
         every { transactionRepository.getInventoryByLocation(testLocation.id) } returns flowOf(listOf(testInventoryItem))
         every { productOrderPreferences.getProductOrder() } returns emptyList()
         every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
+        coEvery { saleBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
     }
 
     private fun createViewModel(): SaleEntryViewModel {
         return SaleEntryViewModel(
             productRepository = productRepository,
             transactionRepository = transactionRepository,
+            saleBatchRepository = saleBatchRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences
         )
@@ -361,8 +365,6 @@ class SaleEntryViewModelTest {
 
     @Test
     fun `confirmSave creates sales and navigates back`() = runTest {
-        coEvery { transactionRepository.createSales(any()) } returns listOf(TestData.createSaleTransaction())
-
         viewModel = createViewModel()
         advanceUntilIdle()
         viewModel.selectProduct(testProduct)
@@ -376,13 +378,13 @@ class SaleEntryViewModelTest {
         viewModel.confirmSave()
         advanceUntilIdle()
 
-        coVerify { transactionRepository.createSales(any()) }
+        coVerify { saleBatchRepository.createBatchWithTransactions(any(), any()) }
         assertTrue(viewModel.uiState.value.navigateBack)
     }
 
     @Test
     fun `confirmSave handles error`() = runTest {
-        coEvery { transactionRepository.createSales(any()) } throws RuntimeException("Save failed")
+        coEvery { saleBatchRepository.createBatchWithTransactions(any(), any()) } throws RuntimeException("Save failed")
 
         viewModel = createViewModel()
         advanceUntilIdle()

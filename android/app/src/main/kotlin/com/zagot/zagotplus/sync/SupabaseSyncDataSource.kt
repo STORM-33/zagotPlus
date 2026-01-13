@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
+import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -25,6 +26,7 @@ class SupabaseSyncDataSource @Inject constructor(
     companion object {
         private const val TABLE_TRANSACTIONS = "transactions"
         private const val TABLE_PURCHASE_BATCHES = "purchase_batches"
+        private const val TABLE_SALE_BATCHES = "sale_batches"
         private const val TABLE_LOCATIONS = "locations"
         private const val TABLE_PRODUCTS = "products"
         private const val TABLE_EXPENSE_CATEGORIES = "expense_categories"
@@ -37,6 +39,10 @@ class SupabaseSyncDataSource @Inject constructor(
 
     override suspend fun pushBatch(dto: PurchaseBatchDto) {
         supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
+    }
+
+    override suspend fun pushSaleBatch(dto: SaleBatchDto) {
+        supabaseClient.postgrest[TABLE_SALE_BATCHES].upsert(dto, onConflict = "local_id")
     }
 
     override suspend fun pushProduct(dto: ProductDto) {
@@ -71,6 +77,16 @@ class SupabaseSyncDataSource @Inject constructor(
 
     override suspend fun pullBatches(since: Instant): List<PurchaseBatchDto> {
         return supabaseClient.postgrest[TABLE_PURCHASE_BATCHES]
+            .select(Columns.ALL) {
+                filter {
+                    gt("created_at", since.toString())
+                }
+            }
+            .decodeList()
+    }
+
+    override suspend fun pullSaleBatches(since: Instant): List<SaleBatchDto> {
+        return supabaseClient.postgrest[TABLE_SALE_BATCHES]
             .select(Columns.ALL) {
                 filter {
                     gt("created_at", since.toString())

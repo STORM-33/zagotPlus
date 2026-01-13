@@ -6,8 +6,11 @@ import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.domain.model.SaleBatch
+import com.zagot.zagotplus.domain.model.Transaction
+import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.ProductRepository
-import com.zagot.zagotplus.domain.repository.SaleInput
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 
@@ -100,8 +104,14 @@ data class SaleEntryUiState(
     val isSaving: Boolean = false,
     val error: String? = null,
     val navigateBack: Boolean = false,
-    val editingPosition: SalePosition? = null // Position being edited
+    val editingPosition: SalePosition? = null, // Position being edited
+    val showExitConfirmation: Boolean = false // Show confirmation dialog before exit
 ) {
+    val hasUnsavedData: Boolean
+        get() = positions.isNotEmpty() || 
+                currentBatches.isNotEmpty() || 
+                currentWeight.isNotBlank() ||
+                notes.isNotBlank()
     // Current product calculations
     val currentGrossWeight: BigDecimal
         get() = currentBatches.fold(BigDecimal.ZERO) { acc, batch -> acc.add(batch.grossWeightKg) }
@@ -156,6 +166,7 @@ data class SaleEntryUiState(
 class SaleEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val transactionRepository: TransactionRepository,
+    private val saleBatchRepository: SaleBatchRepository,
     private val devicePreferences: DevicePreferences,
     private val productOrderPreferences: ProductOrderPreferences
 ) : ViewModel() {
@@ -401,17 +412,49 @@ class SaleEntryViewModel @Inject constructor(
                 val locationId = devicePreferences.getSelectedLocationId()
                     ?: throw IllegalStateException("Локація не обрана")
 
-                // Create all sale transactions atomically
-                val saleInputs = state.positions.map { position ->
-                    SaleInput(
+                val now = Instant.now()
+                val deviceId = devicePreferences.getDeviceId()
+                val batchId = UUID.randomUUID()
+                val batchLocalId = UUID.randomUUID().toString()
+
+                // Calculate totals
+                val totalWeight = state.positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.netWeight) }
+                val totalAmount = state.positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.totalAmount) }
+
+                val batch = SaleBatch(
+                    id = batchId,
+                    localId = batchLocalId,
+                    locationId = locationId,
+                    notes = state.notes.ifBlank { null },
+                    totalWeightKg = totalWeight,
+                    totalAmount = totalAmount,
+                    itemCount = state.positions.size,
+                    deviceId = deviceId,
+                    createdAt = now,
+                    syncedAt = null
+                )
+
+                val transactions = state.positions.map { position ->
+                    Transaction(
+                        id = UUID.randomUUID(),
+                        localId = UUID.randomUUID().toString(),
                         locationId = locationId,
+                        type = TransactionType.SALE,
+                        transferLocationId = null,
                         productId = position.product.id,
-                        weightKg = position.netWeight,
+                        weightKg = -position.netWeight, // Sales are negative
                         pricePerKg = position.pricePerKg,
-                        notes = buildPositionNotes(position, state.notes)
+                        totalAmount = position.totalAmount,
+                        notes = buildPositionNotes(position, state.notes),
+                        deviceId = deviceId,
+                        createdAt = now,
+                        syncedAt = null,
+                        batchId = null,
+                        saleBatchId = batchId
                     )
                 }
-                transactionRepository.createSales(saleInputs)
+
+                saleBatchRepository.createBatchWithTransactions(batch, transactions)
 
                 _uiState.update {
                     it.copy(
@@ -456,7 +499,20 @@ class SaleEntryViewModel @Inject constructor(
     }
 
     fun cancel() {
-        _uiState.update { it.copy(navigateBack = true) }
+        val state = _uiState.value
+        if (state.hasUnsavedData) {
+            _uiState.update { it.copy(showExitConfirmation = true) }
+        } else {
+            _uiState.update { it.copy(navigateBack = true) }
+        }
+    }
+
+    fun confirmExit() {
+        _uiState.update { it.copy(showExitConfirmation = false, navigateBack = true) }
+    }
+
+    fun dismissExitConfirmation() {
+        _uiState.update { it.copy(showExitConfirmation = false) }
     }
 
     fun onNavigationHandled() {

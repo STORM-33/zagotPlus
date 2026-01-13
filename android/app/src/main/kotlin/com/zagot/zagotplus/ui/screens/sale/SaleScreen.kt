@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.text.DecimalFormat
@@ -60,11 +61,6 @@ fun SaleScreen(
         }
     }
 
-    // Refresh when screen becomes visible again
-    LaunchedEffect(Unit) {
-        viewModel.refresh()
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -80,7 +76,7 @@ fun SaleScreen(
 
             Divider(modifier = Modifier.padding(vertical = 12.dp))
 
-            // Sales list or empty state
+            // Batches list or empty state
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -90,7 +86,7 @@ fun SaleScreen(
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (uiState.todaysSales.isEmpty()) {
+            } else if (uiState.todaysBatches.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -109,10 +105,10 @@ fun SaleScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(
-                        items = uiState.todaysSales,
-                        key = { it.transaction.id }
-                    ) { saleItem ->
-                        SaleItem(saleItem = saleItem)
+                        items = uiState.todaysBatches,
+                        key = { it.id }
+                    ) { batch ->
+                        SaleBatchItem(batch = batch)
                     }
                 }
             }
@@ -141,21 +137,21 @@ fun SaleScreen(
 }
 
 @Composable
-private fun SaleItem(
-    saleItem: SaleDisplayItem,
+private fun SaleBatchItem(
+    batch: SaleBatch,
     modifier: Modifier = Modifier
 ) {
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val decimalFormat = remember { DecimalFormat("#,##0.0") }
     val currencyFormat = remember { DecimalFormat("#,##0") }
 
-    val transaction = saleItem.transaction
-    val time = transaction.createdAt
+    val time = batch.createdAt
         .atZone(ZoneId.systemDefault())
         .format(timeFormatter)
-    // Weight is stored as negative for sales, display as positive
-    val weight = "${decimalFormat.format(abs(transaction.weightKg.toDouble()))} кг"
-    val amount = transaction.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
+    // Weight is stored as positive in batch totals
+    val weight = batch.totalWeightKg?.let { "${decimalFormat.format(abs(it.toDouble()))} кг" } ?: "-- кг"
+    val amount = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
+    val positions = "${batch.itemCount ?: 0} поз"
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -175,25 +171,19 @@ private fun SaleItem(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
-            Column(
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
-            ) {
-                Text(
-                    text = saleItem.productName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = weight,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = weight,
+                style = MaterialTheme.typography.bodyMedium
+            )
             Text(
                 text = amount,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = positions,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -92,6 +93,16 @@ fun PurchaseEntryScreen(
         }
     }
 
+    // Handle Android back button
+    BackHandler {
+        when (uiState.screenState) {
+            PurchaseEntryScreenState.PRODUCT_GRID -> viewModel.cancel()
+            PurchaseEntryScreenState.WEIGHT_ENTRY -> viewModel.backToGrid()
+            PurchaseEntryScreenState.POSITIONS_LIST -> viewModel.cancel()
+            PurchaseEntryScreenState.SUMMARY -> viewModel.dismissSummary()
+        }
+    }
+
     // Show error
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -180,14 +191,15 @@ fun PurchaseEntryScreen(
                         }
                         PurchaseEntryScreenState.WEIGHT_ENTRY -> {
                             WeightEntry(
-                                product = uiState.selectedProduct,
-                                weight = uiState.currentWeight,
+                                weight = uiState.effectiveWeight,
                                 price = uiState.currentPrice,
                                 total = uiState.currentTotal,
-                                scaleWeight = uiState.scaleWeight,
+                                isScaleConnected = uiState.isScaleConnected,
+                                isManualMode = uiState.isManualWeightMode,
                                 canAdd = uiState.canAddPosition,
                                 onWeightChange = viewModel::onWeightChange,
                                 onPriceChange = viewModel::onPriceChange,
+                                onToggleManualMode = viewModel::toggleManualWeightMode,
                                 onAddPosition = viewModel::addPosition,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -227,74 +239,125 @@ fun PurchaseEntryScreen(
                 }
             )
         }
+
+        // Exit confirmation dialog
+        if (uiState.showExitConfirmation) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissExitConfirmation,
+                title = { Text("Скасувати закупку?") },
+                text = { Text("Всі введені дані буде втрачено.") },
+                confirmButton = {
+                    TextButton(onClick = viewModel::confirmExit) {
+                        Text("Так, вийти")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissExitConfirmation) {
+                        Text("Продовжити")
+                    }
+                }
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WeightEntry(
-    product: Product?,
     weight: String,
     price: String,
     total: BigDecimal?,
-    scaleWeight: BigDecimal?,
+    isScaleConnected: Boolean,
+    isManualMode: Boolean,
     canAdd: Boolean,
     onWeightChange: (String) -> Unit,
     onPriceChange: (String) -> Unit,
+    onToggleManualMode: () -> Unit,
     onAddPosition: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Color coding for weight field:
+    // - Scales connected + auto mode: green (tertiary)
+    // - Scales connected + manual mode: yellow/warning (error container)
+    // - Scales not connected: default
+    val weightFieldColors = when {
+        isScaleConnected && !isManualMode -> androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.tertiary,
+            focusedLabelColor = MaterialTheme.colorScheme.tertiary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.tertiary,
+            focusedContainerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        )
+        isScaleConnected && isManualMode -> androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.error,
+            unfocusedBorderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+            focusedLabelColor = MaterialTheme.colorScheme.error,
+            unfocusedLabelColor = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+            focusedContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+        )
+        else -> androidx.compose.material3.OutlinedTextFieldDefaults.colors()
+    }
+
+    // Price field uses secondary color
+    val priceFieldColors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+        focusedLabelColor = MaterialTheme.colorScheme.secondary,
+        unfocusedLabelColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+        focusedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+    )
+
+    val weightLabel = when {
+        isScaleConnected && !isManualMode -> "Вага з ваг (кг)"
+        isScaleConnected && isManualMode -> "Вага вручну (кг)"
+        else -> "Вага (кг)"
+    }
+
     Column(
         modifier = modifier
             .padding(16.dp)
             .imePadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Weight from scales - compact display
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+        // Weight input - long press to toggle manual mode when scales connected
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (isScaleConnected) {
+                        Modifier.combinedClickable(
+                            onClick = { },
+                            onLongClick = onToggleManualMode
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Вага:",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = scaleWeight?.let { "${it.toPlainString()} кг" } ?: "-- кг",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
+            OutlinedTextField(
+                value = weight,
+                onValueChange = { if (isManualMode || !isScaleConnected) onWeightChange(it) },
+                label = { Text(weightLabel) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Next
+                ),
+                singleLine = true,
+                readOnly = isScaleConnected && !isManualMode,
+                colors = weightFieldColors,
+                supportingText = if (isScaleConnected && !isManualMode) {
+                    { Text("Утримуйте для ручного вводу", style = MaterialTheme.typography.bodySmall) }
+                } else null,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Manual weight input
-        OutlinedTextField(
-            value = weight,
-            onValueChange = onWeightChange,
-            label = { Text("Вага (кг)") },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Next
-            ),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Price input
+        // Price input with color coding
         OutlinedTextField(
             value = price,
             onValueChange = onPriceChange,
@@ -304,6 +367,7 @@ private fun WeightEntry(
                 imeAction = ImeAction.Done
             ),
             singleLine = true,
+            colors = priceFieldColors,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -336,7 +400,7 @@ private fun WeightEntry(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Add position button - LARGER touch target
         Button(

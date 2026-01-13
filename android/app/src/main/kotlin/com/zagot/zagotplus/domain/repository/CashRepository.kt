@@ -48,5 +48,5 @@ interface CashRepository {
     suspend fun payment(locationId: UUID?, amount: BigDecimal, categoryId: UUID?, notes: String? = null)
     
     // For linking purchases
-    suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, transactionId: UUID)
+    suspend fun recordPurchasePayment(locationId: UUID, amount: BigDecimal, batchId: UUID)
 }

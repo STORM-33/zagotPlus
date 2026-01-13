@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
+import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import java.time.Instant
 
@@ -25,6 +26,12 @@ interface SyncDataSource {
      * @throws Exception on network or server error
      */
     suspend fun pushBatch(dto: PurchaseBatchDto)
+
+    /**
+     * Push a sale batch to the remote server.
+     * @throws Exception on network or server error
+     */
+    suspend fun pushSaleBatch(dto: SaleBatchDto)
 
     /**
      * Push a product to the remote server.
@@ -59,6 +66,11 @@ interface SyncDataSource {
      * Pull purchase batches created after the given timestamp.
      */
     suspend fun pullBatches(since: Instant): List<PurchaseBatchDto>
+
+    /**
+     * Pull sale batches created after the given timestamp.
+     */
+    suspend fun pullSaleBatches(since: Instant): List<SaleBatchDto>
 
     /**
      * Pull expense categories created after the given timestamp.

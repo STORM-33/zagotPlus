@@ -9,6 +9,7 @@ import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
+import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import dagger.Module
 import dagger.Provides
@@ -35,7 +36,9 @@ object DatabaseModule {
         ZagotDatabase.MIGRATION_3_4,
         ZagotDatabase.MIGRATION_4_5,
         ZagotDatabase.MIGRATION_5_6,
-        ZagotDatabase.MIGRATION_6_7
+        ZagotDatabase.MIGRATION_6_7,
+        ZagotDatabase.MIGRATION_7_8,
+        ZagotDatabase.MIGRATION_8_9
     )
 
     /**
@@ -90,6 +93,15 @@ object DatabaseModule {
     @Singleton
     fun providePurchaseBatchDao(database: ZagotDatabase): PurchaseBatchDao {
         return database.purchaseBatchDao()
+    }
+
+    /**
+     * Provides SaleBatchDao from database.
+     */
+    @Provides
+    @Singleton
+    fun provideSaleBatchDao(database: ZagotDatabase): SaleBatchDao {
+        return database.saleBatchDao()
     }
 
     /**

@@ -11,20 +11,22 @@ import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
+import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.local.entity.LocationEntity
 import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
+import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 
 /**
  * Room database for Zagot+ application.
  * Offline-first local storage with Supabase sync.
  *
- * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 7 (added expense_categories and cash_operations tables)
+ * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
+ * Version: 8 (added sale_batches table and sale_batch_id FK on transactions)
  */
 @Database(
     entities = [
@@ -32,10 +34,11 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         ProductEntity::class,
         TransactionEntity::class,
         PurchaseBatchEntity::class,
+        SaleBatchEntity::class,
         ExpenseCategoryEntity::class,
         CashOperationEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -60,6 +63,11 @@ abstract class ZagotDatabase : RoomDatabase() {
      * Provides access to purchase_batches table.
      */
     abstract fun purchaseBatchDao(): PurchaseBatchDao
+
+    /**
+     * Provides access to sale_batches table.
+     */
+    abstract fun saleBatchDao(): SaleBatchDao
 
     /**
      * Provides access to expense_categories table.
@@ -243,6 +251,149 @@ abstract class ZagotDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_transaction_id ON cash_operations(transaction_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
+            }
+        }
+
+        /**
+         * Migration from version 7 to 8: Add sale_batches table and sale_batch_id FK on transactions.
+         * Implements sale batching similar to purchase batching.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create sale_batches table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sale_batches (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        local_id TEXT NOT NULL,
+                        location_id TEXT,
+                        notes TEXT,
+                        total_weight_kg TEXT,
+                        total_amount TEXT,
+                        item_count INTEGER,
+                        device_id TEXT,
+                        created_at INTEGER NOT NULL,
+                        synced_at INTEGER,
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT
+                    )
+                """)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sale_batches_local_id ON sale_batches(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_location_id ON sale_batches(location_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_synced_at ON sale_batches(synced_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_created_at ON sale_batches(created_at)")
+
+                // Add sale_batch_id column to transactions (with FK and index)
+                // SQLite doesn't support adding FK via ALTER TABLE, so we recreate transactions table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS transactions_new (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        local_id TEXT NOT NULL,
+                        location_id TEXT,
+                        type TEXT NOT NULL,
+                        transfer_location_id TEXT,
+                        product_id TEXT,
+                        weight_kg TEXT NOT NULL,
+                        price_per_kg TEXT,
+                        total_amount TEXT,
+                        notes TEXT,
+                        device_id TEXT,
+                        created_at INTEGER NOT NULL,
+                        synced_at INTEGER,
+                        batch_id TEXT,
+                        sale_batch_id TEXT,
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                        FOREIGN KEY (transfer_location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
+                        FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE SET NULL,
+                        FOREIGN KEY (sale_batch_id) REFERENCES sale_batches(id) ON DELETE SET NULL
+                    )
+                """)
+                
+                // Copy data from old table (sale_batch_id will be null)
+                db.execSQL("""
+                    INSERT INTO transactions_new (
+                        id, local_id, location_id, type, transfer_location_id,
+                        product_id, weight_kg, price_per_kg, total_amount, notes,
+                        device_id, created_at, synced_at, batch_id, sale_batch_id
+                    )
+                    SELECT 
+                        id, local_id, location_id, type, transfer_location_id,
+                        product_id, weight_kg, price_per_kg, total_amount, notes,
+                        device_id, created_at, synced_at, batch_id, NULL
+                    FROM transactions
+                """)
+                
+                // Drop old table
+                db.execSQL("DROP TABLE transactions")
+                
+                // Rename new table
+                db.execSQL("ALTER TABLE transactions_new RENAME TO transactions")
+                
+                // Recreate all indexes
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_transactions_local_id ON transactions(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_location_id ON transactions(location_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_transfer_location_id ON transactions(transfer_location_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_product_id ON transactions(product_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_batch_id ON transactions(batch_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_sale_batch_id ON transactions(sale_batch_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_synced_at ON transactions(synced_at)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_created_at ON transactions(created_at)")
+            }
+        }
+
+        /**
+         * Migration from version 8 to 9: Change cash_operations FK from transactions to purchase_batches.
+         * Renames transaction_id column to batch_id and updates FK reference.
+         * This fixes the bug where purchase payments were incorrectly referencing batch IDs
+         * as transaction IDs, causing FK constraint failures.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // SQLite doesn't support altering FK constraints, so we need to recreate the table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS cash_operations_new (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        local_id TEXT NOT NULL,
+                        location_id TEXT,
+                        type TEXT NOT NULL,
+                        amount TEXT NOT NULL,
+                        category_id TEXT,
+                        batch_id TEXT,
+                        notes TEXT,
+                        device_id TEXT,
+                        created_at INTEGER NOT NULL,
+                        synced_at INTEGER,
+                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                        FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+                        FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                // Copy data from old table (transaction_id becomes batch_id)
+                db.execSQL("""
+                    INSERT INTO cash_operations_new (
+                        id, local_id, location_id, type, amount, category_id,
+                        batch_id, notes, device_id, created_at, synced_at
+                    )
+                    SELECT 
+                        id, local_id, location_id, type, amount, category_id,
+                        transaction_id, notes, device_id, created_at, synced_at
+                    FROM cash_operations
+                """)
+                
+                // Drop old table
+                db.execSQL("DROP TABLE cash_operations")
+                
+                // Rename new table
+                db.execSQL("ALTER TABLE cash_operations_new RENAME TO cash_operations")
+                
+                // Recreate all indexes
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_batch_id ON cash_operations(batch_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")

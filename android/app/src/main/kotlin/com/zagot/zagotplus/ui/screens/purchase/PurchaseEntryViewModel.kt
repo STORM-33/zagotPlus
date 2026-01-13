@@ -54,16 +54,33 @@ data class PurchaseEntryUiState(
     val positions: List<PurchasePosition> = emptyList(),
     val notes: String = "",
     val screenState: PurchaseEntryScreenState = PurchaseEntryScreenState.PRODUCT_GRID,
-    val scaleWeight: BigDecimal? = null, // null = not connected (placeholder)
+    val scaleWeight: BigDecimal? = null, // null = not connected
+    val isManualWeightMode: Boolean = false, // true = user overriding scale weight
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
     val navigateBack: Boolean = false,
-    val editingPosition: PurchasePosition? = null // Position being edited
+    val editingPosition: PurchasePosition? = null, // Position being edited
+    val showExitConfirmation: Boolean = false // Show confirmation dialog before exit
 ) {
+    val hasUnsavedData: Boolean
+        get() = positions.isNotEmpty() || 
+                currentWeight.isNotBlank() || 
+                (currentPrice.isNotBlank() && selectedProduct != null) ||
+                notes.isNotBlank()
+    val isScaleConnected: Boolean
+        get() = scaleWeight != null
+
+    val effectiveWeight: String
+        get() = if (isScaleConnected && !isManualWeightMode) {
+            scaleWeight?.toPlainString() ?: ""
+        } else {
+            currentWeight
+        }
+
     val currentTotal: BigDecimal?
         get() {
-            val weight = currentWeight.toBigDecimalOrNull()
+            val weight = effectiveWeight.toBigDecimalOrNull()
             val price = currentPrice.toBigDecimalOrNull()
             return if (weight != null && price != null && weight > BigDecimal.ZERO) {
                 weight.multiply(price).setScale(2, java.math.RoundingMode.HALF_UP)
@@ -72,7 +89,7 @@ data class PurchaseEntryUiState(
 
     val canAddPosition: Boolean
         get() = selectedProduct != null &&
-                currentWeight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
+                effectiveWeight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
                 currentPrice.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
 
     val canFinalize: Boolean
@@ -130,6 +147,7 @@ class PurchaseEntryViewModel @Inject constructor(
                 selectedProduct = product,
                 currentWeight = "",
                 currentPrice = product.defaultBuyPrice?.toPlainString() ?: "",
+                isManualWeightMode = false, // Reset to auto mode on new product
                 screenState = PurchaseEntryScreenState.WEIGHT_ENTRY
             )
         }
@@ -139,6 +157,22 @@ class PurchaseEntryViewModel @Inject constructor(
         // Allow only valid decimal input
         if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
             _uiState.update { it.copy(currentWeight = weight) }
+        }
+    }
+
+    fun toggleManualWeightMode() {
+        _uiState.update { state ->
+            val newManualMode = !state.isManualWeightMode
+            // When entering manual mode, copy scale weight to manual field if available
+            val newWeight = if (newManualMode && state.scaleWeight != null) {
+                state.scaleWeight.toPlainString()
+            } else {
+                state.currentWeight
+            }
+            state.copy(
+                isManualWeightMode = newManualMode,
+                currentWeight = newWeight
+            )
         }
     }
 
@@ -156,7 +190,7 @@ class PurchaseEntryViewModel @Inject constructor(
     fun addPosition() {
         val state = _uiState.value
         val product = state.selectedProduct ?: return
-        val weight = state.currentWeight.toBigDecimalOrNull() ?: return
+        val weight = state.effectiveWeight.toBigDecimalOrNull() ?: return
         val price = state.currentPrice.toBigDecimalOrNull() ?: return
 
         if (weight <= BigDecimal.ZERO || price <= BigDecimal.ZERO) return
@@ -302,7 +336,7 @@ class PurchaseEntryViewModel @Inject constructor(
                     cashRepository.recordPurchasePayment(
                         locationId = locationId,
                         amount = state.totalAmount,
-                        transactionId = batchId
+                        batchId = batchId
                     )
                 }
 
@@ -334,7 +368,20 @@ class PurchaseEntryViewModel @Inject constructor(
     }
 
     fun cancel() {
-        _uiState.update { it.copy(navigateBack = true) }
+        val state = _uiState.value
+        if (state.hasUnsavedData) {
+            _uiState.update { it.copy(showExitConfirmation = true) }
+        } else {
+            _uiState.update { it.copy(navigateBack = true) }
+        }
+    }
+
+    fun confirmExit() {
+        _uiState.update { it.copy(showExitConfirmation = false, navigateBack = true) }
+    }
+
+    fun dismissExitConfirmation() {
+        _uiState.update { it.copy(showExitConfirmation = false) }
     }
 
     fun onNavigationHandled() {

@@ -2,14 +2,14 @@ package com.zagot.zagotplus.data.repository
 
 import androidx.room.withTransaction
 import com.zagot.zagotplus.data.local.ZagotDatabase
-import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
+import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
-import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
+import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
-import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
-import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -21,31 +21,31 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Implementation of PurchaseBatchRepository using Room as data source.
+ * Implementation of SaleBatchRepository using Room as data source.
  */
 @Singleton
-class PurchaseBatchRepositoryImpl @Inject constructor(
+class SaleBatchRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
-    private val purchaseBatchDao: PurchaseBatchDao,
+    private val saleBatchDao: SaleBatchDao,
     private val transactionDao: TransactionDao,
     private val syncManager: SyncManager
-) : PurchaseBatchRepository {
+) : SaleBatchRepository {
 
-    override fun observeAll(): Flow<List<PurchaseBatch>> =
-        purchaseBatchDao.observeAll().map { entities ->
+    override fun observeAll(): Flow<List<SaleBatch>> =
+        saleBatchDao.observeAll().map { entities ->
             entities.map { it.toDomain() }
         }
 
-    override fun observeTodaysBatches(): Flow<List<PurchaseBatch>> {
+    override fun observeTodaysBatches(): Flow<List<SaleBatch>> {
         val (startMillis, endMillis) = getTodayRange()
-        return purchaseBatchDao.observeBatchesInRange(startMillis, endMillis).map { entities ->
+        return saleBatchDao.observeBatchesInRange(startMillis, endMillis).map { entities ->
             entities.map { it.toDomain() }
         }
     }
 
-    override suspend fun getTodaysBatches(): List<PurchaseBatch> {
+    override suspend fun getTodaysBatches(): List<SaleBatch> {
         val (startMillis, endMillis) = getTodayRange()
-        return purchaseBatchDao.getBatchesInRange(startMillis, endMillis).map { it.toDomain() }
+        return saleBatchDao.getBatchesInRange(startMillis, endMillis).map { it.toDomain() }
     }
     
     /**
@@ -60,51 +60,51 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         return Pair(startOfDay, startOfTomorrow)
     }
 
-    override suspend fun getById(id: UUID): PurchaseBatch? =
-        purchaseBatchDao.getById(id)?.toDomain()
+    override suspend fun getById(id: UUID): SaleBatch? =
+        saleBatchDao.getById(id)?.toDomain()
 
-    override suspend fun getByLocalId(localId: String): PurchaseBatch? =
-        purchaseBatchDao.getByLocalId(localId)?.toDomain()
+    override suspend fun getByLocalId(localId: String): SaleBatch? =
+        saleBatchDao.getByLocalId(localId)?.toDomain()
 
     override suspend fun createBatchWithTransactions(
-        batch: PurchaseBatch,
+        batch: SaleBatch,
         transactions: List<Transaction>
     ) {
         database.withTransaction {
             // Insert batch
-            purchaseBatchDao.insert(batch.toEntity())
+            saleBatchDao.insert(batch.toEntity())
             
-            // Insert transactions with batch_id set
+            // Insert transactions with sale_batch_id set
             val transactionEntities = transactions.map { it.toEntity(batch.id) }
             transactionDao.insertAll(transactionEntities)
         }
         syncManager.triggerManualSync()
     }
 
-    override suspend fun getUnsynced(): List<PurchaseBatch> =
-        purchaseBatchDao.getUnsynced().map { it.toDomain() }
+    override suspend fun getUnsynced(): List<SaleBatch> =
+        saleBatchDao.getUnsynced().map { it.toDomain() }
 
     override suspend fun markSynced(id: UUID) {
-        purchaseBatchDao.markSynced(id, Instant.now())
+        saleBatchDao.markSynced(id, Instant.now())
     }
 
     override suspend fun delete(id: UUID) {
-        purchaseBatchDao.delete(id)
+        saleBatchDao.delete(id)
     }
 
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
-        transactionDao.getByBatchId(batchId).map { it.toDomain() }
+        transactionDao.getBySaleBatchId(batchId).map { it.toDomain() }
 
-    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<PurchaseBatch> =
-        purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<SaleBatch> =
+        saleBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
 
     override suspend fun getTotalBatchCount(): Int =
-        purchaseBatchDao.getTotalCount()
+        saleBatchDao.getTotalCount()
 
     override fun observeTotalBatchCount(): Flow<Int> =
-        purchaseBatchDao.observeTotalCount()
+        saleBatchDao.observeTotalCount()
 
-    private fun PurchaseBatchEntity.toDomain() = PurchaseBatch(
+    private fun SaleBatchEntity.toDomain() = SaleBatch(
         id = id,
         localId = localId,
         locationId = locationId,
@@ -117,7 +117,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt
     )
 
-    private fun PurchaseBatch.toEntity() = PurchaseBatchEntity(
+    private fun SaleBatch.toEntity() = SaleBatchEntity(
         id = id,
         localId = localId,
         locationId = locationId,
@@ -130,7 +130,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt
     )
 
-    private fun Transaction.toEntity(batchId: UUID) = TransactionEntity(
+    private fun Transaction.toEntity(saleBatchId: UUID) = TransactionEntity(
         id = id,
         localId = localId,
         locationId = locationId,
@@ -144,8 +144,8 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         deviceId = deviceId,
         createdAt = createdAt,
         syncedAt = syncedAt,
-        batchId = batchId,
-        saleBatchId = null
+        batchId = null,
+        saleBatchId = saleBatchId
     )
 
     private fun TransactionEntity.toDomain() = Transaction(

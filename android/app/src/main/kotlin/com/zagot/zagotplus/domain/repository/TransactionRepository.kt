@@ -134,4 +134,12 @@ interface TransactionRepository {
      * @return List of created transactions
      */
     suspend fun createSales(sales: List<SaleInput>): List<Transaction>
+
+    /**
+     * Get transactions by their IDs.
+     *
+     * @param ids List of transaction IDs
+     * @return List of transactions matching the IDs
+     */
+    suspend fun getTransactionsByIds(ids: List<UUID>): List<Transaction>
 }

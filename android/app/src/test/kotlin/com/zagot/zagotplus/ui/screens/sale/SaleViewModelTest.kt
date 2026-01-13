@@ -1,17 +1,12 @@
 package com.zagot.zagotplus.ui.screens.sale
 
-import com.zagot.zagotplus.data.preferences.DevicePreferences
-import com.zagot.zagotplus.domain.model.Product
-import com.zagot.zagotplus.domain.model.Transaction
-import com.zagot.zagotplus.domain.model.TransactionFilter
-import com.zagot.zagotplus.domain.model.TransactionType
-import com.zagot.zagotplus.domain.repository.ProductRepository
-import com.zagot.zagotplus.domain.repository.TransactionRepository
-import io.mockk.coEvery
+import com.zagot.zagotplus.domain.model.SaleBatch
+import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -27,35 +22,20 @@ import java.util.UUID
 @OptIn(ExperimentalCoroutinesApi::class)
 class SaleViewModelTest {
 
-    private lateinit var productRepository: ProductRepository
-    private lateinit var transactionRepository: TransactionRepository
-    private lateinit var devicePreferences: DevicePreferences
+    private lateinit var saleBatchRepository: SaleBatchRepository
     private lateinit var viewModel: SaleViewModel
     private val testDispatcher = StandardTestDispatcher()
 
-    private val testProductId = UUID.randomUUID()
     private val testLocationId = UUID.randomUUID()
 
-    private val testProduct = Product(
-        id = testProductId,
-        name = "Горіх білий",
-        defaultBuyPrice = BigDecimal("45.00"),
-        defaultSellPrice = BigDecimal("55.00"),
-        isActive = true,
-        createdAt = Instant.now()
-    )
-
-    private val testTransaction = Transaction(
+    private val testSaleBatch = SaleBatch(
         id = UUID.randomUUID(),
         localId = "test-local-id",
         locationId = testLocationId,
-        type = TransactionType.SALE,
-        transferLocationId = null,
-        productId = testProductId,
-        weightKg = BigDecimal("-30.0"),
-        pricePerKg = BigDecimal("55.00"),
-        totalAmount = BigDecimal("1650.00"),
         notes = null,
+        totalWeightKg = BigDecimal("30.0"),
+        totalAmount = BigDecimal("1650.00"),
+        itemCount = 2,
         deviceId = null,
         createdAt = Instant.now(),
         syncedAt = null
@@ -64,46 +44,24 @@ class SaleViewModelTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-        productRepository = mockk()
-        transactionRepository = mockk()
-        devicePreferences = mockk()
+        saleBatchRepository = mockk()
 
-        every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
-        every { devicePreferences.getSelectedLocationId() } returns testLocationId
-        coEvery { 
-            transactionRepository.getFilteredTransactions(any<TransactionFilter>(), any(), any()) 
-        } returns listOf(testTransaction)
+        every { saleBatchRepository.observeTodaysBatches() } returns flowOf(listOf(testSaleBatch))
     }
 
     private fun createViewModel(): SaleViewModel {
-        return SaleViewModel(transactionRepository, productRepository, devicePreferences)
+        return SaleViewModel(saleBatchRepository)
     }
 
     @Test
-    fun `loads today sales on init`() = runTest {
+    fun `loads today batches on init`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(1, state.todaysSales.size)
-        assertEquals(testProduct.name, state.todaysSales[0].productName)
-    }
-
-    @Test
-    fun `displays unknown product name when product not found`() = runTest {
-        val transactionWithUnknownProduct = testTransaction.copy(
-            productId = UUID.randomUUID()
-        )
-        coEvery { 
-            transactionRepository.getFilteredTransactions(any<TransactionFilter>(), any(), any()) 
-        } returns listOf(transactionWithUnknownProduct)
-
-        viewModel = createViewModel()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals("Невідомий товар", state.todaysSales[0].productName)
+        assertEquals(1, state.todaysBatches.size)
+        assertEquals(testSaleBatch.id, state.todaysBatches[0].id)
     }
 
     @Test
@@ -129,9 +87,10 @@ class SaleViewModelTest {
 
     @Test
     fun `handles error during loading`() = runTest {
-        coEvery { 
-            transactionRepository.getFilteredTransactions(any<TransactionFilter>(), any(), any()) 
-        } throws RuntimeException("Database error")
+        // Mock with flow that throws on collection
+        every { saleBatchRepository.observeTodaysBatches() } returns flow<List<SaleBatch>> {
+            throw RuntimeException("Database error")
+        }
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -144,9 +103,9 @@ class SaleViewModelTest {
 
     @Test
     fun `dismissError clears error`() = runTest {
-        coEvery { 
-            transactionRepository.getFilteredTransactions(any<TransactionFilter>(), any(), any()) 
-        } throws RuntimeException("Database error")
+        every { saleBatchRepository.observeTodaysBatches() } returns flow<List<SaleBatch>> {
+            throw RuntimeException("Database error")
+        }
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -157,18 +116,14 @@ class SaleViewModelTest {
     }
 
     @Test
-    fun `refresh reloads data`() = runTest {
+    fun `empty state when no batches`() = runTest {
+        every { saleBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        val newTransaction = testTransaction.copy(id = UUID.randomUUID())
-        coEvery { 
-            transactionRepository.getFilteredTransactions(any<TransactionFilter>(), any(), any()) 
-        } returns listOf(testTransaction, newTransaction)
-
-        viewModel.refresh()
-        advanceUntilIdle()
-
-        assertEquals(2, viewModel.uiState.value.todaysSales.size)
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertTrue(state.todaysBatches.isEmpty())
     }
 }

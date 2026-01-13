@@ -144,6 +144,24 @@ interface TransactionDao {
     suspend fun deleteAll()
 
     /**
+     * Get transactions belonging to a specific batch.
+     */
+    @Query("SELECT * FROM transactions WHERE batch_id = :batchId ORDER BY created_at DESC")
+    suspend fun getByBatchId(batchId: UUID): List<TransactionEntity>
+
+    /**
+     * Get transactions belonging to a specific sale batch.
+     */
+    @Query("SELECT * FROM transactions WHERE sale_batch_id = :saleBatchId ORDER BY created_at DESC")
+    suspend fun getBySaleBatchId(saleBatchId: UUID): List<TransactionEntity>
+
+    /**
+     * Get transactions by their IDs.
+     */
+    @Query("SELECT * FROM transactions WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<UUID>): List<TransactionEntity>
+
+    /**
      * Get filtered transactions with dynamic query.
      * Use TransactionQueryBuilder to construct the query.
      */

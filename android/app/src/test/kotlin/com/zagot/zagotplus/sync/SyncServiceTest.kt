@@ -5,6 +5,7 @@ import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
+import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
@@ -37,6 +38,7 @@ class SyncServiceTest {
     private lateinit var syncDataSource: SyncDataSource
     private lateinit var transactionDao: TransactionDao
     private lateinit var purchaseBatchDao: PurchaseBatchDao
+    private lateinit var saleBatchDao: SaleBatchDao
     private lateinit var locationDao: LocationDao
     private lateinit var productDao: ProductDao
     private lateinit var expenseCategoryDao: ExpenseCategoryDao
@@ -61,7 +63,7 @@ class SyncServiceTest {
         type = "deposit",
         amount = BigDecimal("1000.00"),
         categoryId = null,
-        transactionId = null,
+        batchId = null,
         notes = "Початкова каса",
         deviceId = "device-1",
         createdAt = Instant.now(),
@@ -89,6 +91,7 @@ class SyncServiceTest {
         syncDataSource = mockk()
         transactionDao = mockk()
         purchaseBatchDao = mockk()
+        saleBatchDao = mockk()
         locationDao = mockk()
         productDao = mockk()
         expenseCategoryDao = mockk()
@@ -98,11 +101,13 @@ class SyncServiceTest {
         // Default empty responses
         coEvery { productDao.getUnsynced() } returns emptyList()
         coEvery { purchaseBatchDao.getUnsynced() } returns emptyList()
+        coEvery { saleBatchDao.getUnsynced() } returns emptyList()
         coEvery { expenseCategoryDao.getUnsynced() } returns emptyList()
         coEvery { cashOperationDao.getUnsynced() } returns emptyList()
         coEvery { syncDataSource.pullLocations() } returns emptyList()
         coEvery { syncDataSource.pullProducts() } returns emptyList()
         coEvery { syncDataSource.pullBatches(any()) } returns emptyList()
+        coEvery { syncDataSource.pullSaleBatches(any()) } returns emptyList()
         coEvery { syncDataSource.pullExpenseCategories(any()) } returns emptyList()
         coEvery { syncDataSource.pullCashOperations(any()) } returns emptyList()
 
@@ -110,6 +115,7 @@ class SyncServiceTest {
             syncDataSource = syncDataSource,
             transactionDao = transactionDao,
             purchaseBatchDao = purchaseBatchDao,
+            saleBatchDao = saleBatchDao,
             locationDao = locationDao,
             productDao = productDao,
             expenseCategoryDao = expenseCategoryDao,
@@ -514,7 +520,7 @@ class SyncServiceTest {
             type = "withdrawal",
             amount = 500.0,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = "Видача готівки",
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -549,7 +555,7 @@ class SyncServiceTest {
             type = "deposit",
             amount = 1000.0,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = null,
             deviceId = "this-device",
             createdAt = Instant.now().toString(),
@@ -628,12 +634,12 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync handles purchase cash operation linked to transaction`() = runTest {
+    fun `sync handles purchase cash operation linked to batch`() = runTest {
         // Given
-        val transactionId = UUID.randomUUID()
+        val batchId = UUID.randomUUID()
         val purchaseOp = testCashOperation.copy(
             type = "purchase",
-            transactionId = transactionId,
+            batchId = batchId,
             amount = BigDecimal("4500.00")
         )
         coEvery { transactionDao.getUnsynced() } returns emptyList()
@@ -651,7 +657,7 @@ class SyncServiceTest {
         assertTrue(result is SyncResult.Success)
         coVerify { 
             syncDataSource.pushCashOperation(match { 
-                it.type == "purchase" && it.transactionId == transactionId.toString() 
+                it.type == "purchase" && it.batchId == batchId.toString() 
             }) 
         }
     }

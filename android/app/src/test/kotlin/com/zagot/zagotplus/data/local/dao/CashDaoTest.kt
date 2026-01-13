@@ -197,7 +197,7 @@ class CashDaoTest {
         type: String = "deposit",
         amount: BigDecimal = BigDecimal("1000.00"),
         categoryId: UUID? = null,
-        transactionId: UUID? = null,
+        batchId: UUID? = null,
         notes: String? = null,
         syncedAt: Instant? = null,
         createdAt: Instant = testInstant
@@ -208,7 +208,7 @@ class CashDaoTest {
         type = type,
         amount = amount,
         categoryId = categoryId,
-        transactionId = transactionId,
+        batchId = batchId,
         notes = notes,
         deviceId = "test-device",
         createdAt = createdAt,

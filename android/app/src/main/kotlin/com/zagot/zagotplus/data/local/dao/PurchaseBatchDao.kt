@@ -62,4 +62,26 @@ interface PurchaseBatchDao {
 
     @Query("DELETE FROM purchase_batches WHERE id = :id")
     suspend fun delete(id: UUID)
+
+    /**
+     * Get paginated batches ordered by creation date (newest first).
+     */
+    @Query("""
+        SELECT * FROM purchase_batches
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getAllPaginated(limit: Int, offset: Int): List<PurchaseBatchEntity>
+
+    /**
+     * Get total count of batches.
+     */
+    @Query("SELECT COUNT(*) FROM purchase_batches")
+    suspend fun getTotalCount(): Int
+
+    /**
+     * Observe total count of batches (reactive).
+     */
+    @Query("SELECT COUNT(*) FROM purchase_batches")
+    fun observeTotalCount(): Flow<Int>
 }

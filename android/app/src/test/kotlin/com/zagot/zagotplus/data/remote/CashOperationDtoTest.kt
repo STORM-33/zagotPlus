@@ -16,7 +16,7 @@ class CashOperationDtoTest {
     private val testId = UUID.fromString("11111111-1111-1111-1111-111111111111")
     private val testLocationId = UUID.fromString("22222222-2222-2222-2222-222222222222")
     private val testCategoryId = UUID.fromString("33333333-3333-3333-3333-333333333333")
-    private val testTransactionId = UUID.fromString("44444444-4444-4444-4444-444444444444")
+    private val testBatchId = UUID.fromString("44444444-4444-4444-4444-444444444444")
     private val testInstant = Instant.parse("2024-01-15T10:30:00Z")
 
     // ==================== toEntity Tests ====================
@@ -30,7 +30,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = 1000.50,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = "Початкова каса",
             deviceId = "device-1",
             createdAt = testInstant.toString(),
@@ -45,7 +45,7 @@ class CashOperationDtoTest {
         assertEquals("deposit", entity.type)
         assertEquals(BigDecimal.valueOf(1000.50), entity.amount)
         assertNull(entity.categoryId)
-        assertNull(entity.transactionId)
+        assertNull(entity.batchId)
         assertEquals("Початкова каса", entity.notes)
         assertEquals("device-1", entity.deviceId)
         assertEquals(testInstant, entity.createdAt)
@@ -61,7 +61,7 @@ class CashOperationDtoTest {
             type = "withdrawal",
             amount = 500.0,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = "Видача готівки",
             deviceId = "device-2",
             createdAt = testInstant.toString(),
@@ -84,7 +84,7 @@ class CashOperationDtoTest {
             type = "payment",
             amount = 250.0,
             categoryId = testCategoryId.toString(),
-            transactionId = null,
+            batchId = null,
             notes = "Оплата за транспорт",
             deviceId = "device-1",
             createdAt = testInstant.toString(),
@@ -95,11 +95,11 @@ class CashOperationDtoTest {
 
         assertEquals("payment", entity.type)
         assertEquals(testCategoryId, entity.categoryId)
-        assertNull(entity.transactionId)
+        assertNull(entity.batchId)
     }
 
     @Test
-    fun `toEntity converts purchase operation linked to transaction`() {
+    fun `toEntity converts purchase operation linked to batch`() {
         val dto = CashOperationDto(
             id = testId.toString(),
             localId = "local-abc",
@@ -107,7 +107,7 @@ class CashOperationDtoTest {
             type = "purchase",
             amount = 4500.0,
             categoryId = null,
-            transactionId = testTransactionId.toString(),
+            batchId = testBatchId.toString(),
             notes = null,
             deviceId = "device-1",
             createdAt = testInstant.toString(),
@@ -117,7 +117,7 @@ class CashOperationDtoTest {
         val entity = dto.toEntity()
 
         assertEquals("purchase", entity.type)
-        assertEquals(testTransactionId, entity.transactionId)
+        assertEquals(testBatchId, entity.batchId)
         assertNull(entity.categoryId)
     }
 
@@ -130,7 +130,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = 100.0,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = null,
             deviceId = null,
             createdAt = testInstant.toString(),
@@ -155,7 +155,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = BigDecimal("1000.50"),
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = "Початкова каса",
             deviceId = "device-1",
             createdAt = testInstant,
@@ -170,7 +170,7 @@ class CashOperationDtoTest {
         assertEquals("deposit", dto.type)
         assertEquals(1000.50, dto.amount, 0.001)
         assertNull(dto.categoryId)
-        assertNull(dto.transactionId)
+        assertNull(dto.batchId)
         assertEquals("Початкова каса", dto.notes)
         assertEquals("device-1", dto.deviceId)
         assertEquals(testInstant.toString(), dto.createdAt)
@@ -186,7 +186,7 @@ class CashOperationDtoTest {
             type = "payment",
             amount = BigDecimal("350.00"),
             categoryId = testCategoryId,
-            transactionId = null,
+            batchId = null,
             notes = "Витрати на пальне",
             deviceId = "device-2",
             createdAt = testInstant,
@@ -197,12 +197,12 @@ class CashOperationDtoTest {
 
         assertEquals("payment", dto.type)
         assertEquals(testCategoryId.toString(), dto.categoryId)
-        assertNull(dto.transactionId)
+        assertNull(dto.batchId)
         assertNull(dto.syncedAt)
     }
 
     @Test
-    fun `fromEntity handles purchase linked to transaction`() {
+    fun `fromEntity handles purchase linked to batch`() {
         val entity = CashOperationEntity(
             id = testId,
             localId = "local-purch",
@@ -210,7 +210,7 @@ class CashOperationDtoTest {
             type = "purchase",
             amount = BigDecimal("9000.00"),
             categoryId = null,
-            transactionId = testTransactionId,
+            batchId = testBatchId,
             notes = null,
             deviceId = "device-1",
             createdAt = testInstant,
@@ -220,7 +220,7 @@ class CashOperationDtoTest {
         val dto = CashOperationDto.fromEntity(entity)
 
         assertEquals("purchase", dto.type)
-        assertEquals(testTransactionId.toString(), dto.transactionId)
+        assertEquals(testBatchId.toString(), dto.batchId)
         assertNull(dto.categoryId)
     }
 
@@ -233,7 +233,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = BigDecimal("100.00"),
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = null,
             deviceId = null,
             createdAt = testInstant,
@@ -244,7 +244,7 @@ class CashOperationDtoTest {
 
         assertNull(dto.locationId)
         assertNull(dto.categoryId)
-        assertNull(dto.transactionId)
+        assertNull(dto.batchId)
         assertNull(dto.notes)
         assertNull(dto.deviceId)
         assertNull(dto.syncedAt)
@@ -261,7 +261,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = BigDecimal("1234.56"),
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = "Тестовий депозит",
             deviceId = "test-device",
             createdAt = testInstant,
@@ -278,7 +278,7 @@ class CashOperationDtoTest {
         // BigDecimal comparison with scale handling
         assertEquals(0, original.amount.compareTo(restored.amount))
         assertEquals(original.categoryId, restored.categoryId)
-        assertEquals(original.transactionId, restored.transactionId)
+        assertEquals(original.batchId, restored.batchId)
         assertEquals(original.notes, restored.notes)
         assertEquals(original.deviceId, restored.deviceId)
         assertEquals(original.createdAt, restored.createdAt)
@@ -294,7 +294,7 @@ class CashOperationDtoTest {
             type = "payment",
             amount = BigDecimal("500.00"),
             categoryId = testCategoryId,
-            transactionId = null,
+            batchId = null,
             notes = "Оплата транспорту",
             deviceId = "device-1",
             createdAt = testInstant,
@@ -306,11 +306,11 @@ class CashOperationDtoTest {
 
         assertEquals(original.type, restored.type)
         assertEquals(original.categoryId, restored.categoryId)
-        assertNull(restored.transactionId)
+        assertNull(restored.batchId)
     }
 
     @Test
-    fun `round trip preserves data for purchase with transaction link`() {
+    fun `round trip preserves data for purchase with batch link`() {
         val original = CashOperationEntity(
             id = testId,
             localId = "round-trip-purchase",
@@ -318,7 +318,7 @@ class CashOperationDtoTest {
             type = "purchase",
             amount = BigDecimal("4500.00"),
             categoryId = null,
-            transactionId = testTransactionId,
+            batchId = testBatchId,
             notes = null,
             deviceId = "device-1",
             createdAt = testInstant,
@@ -329,7 +329,7 @@ class CashOperationDtoTest {
         val restored = dto.toEntity()
 
         assertEquals(original.type, restored.type)
-        assertEquals(original.transactionId, restored.transactionId)
+        assertEquals(original.batchId, restored.batchId)
         assertNull(restored.categoryId)
     }
 
@@ -344,7 +344,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = 0.0,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = null,
             deviceId = null,
             createdAt = testInstant.toString(),
@@ -366,7 +366,7 @@ class CashOperationDtoTest {
             type = "deposit",
             amount = largeAmount,
             categoryId = null,
-            transactionId = null,
+            batchId = null,
             notes = null,
             deviceId = null,
             createdAt = testInstant.toString(),
@@ -388,7 +388,7 @@ class CashOperationDtoTest {
             type = "payment",
             amount = BigDecimal("2500.00"),
             categoryId = testCategoryId,
-            transactionId = null,
+            batchId = null,
             notes = ukrainianNotes,
             deviceId = "device-1",
             createdAt = testInstant,
