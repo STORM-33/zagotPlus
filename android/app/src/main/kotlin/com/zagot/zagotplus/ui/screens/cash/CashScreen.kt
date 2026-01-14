@@ -46,6 +46,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -129,6 +131,33 @@ fun CashScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                // Location tabs + Total tab
+                if (uiState.locations.isNotEmpty()) {
+                    val selectedIndex = if (uiState.isTotalsView) {
+                        uiState.locations.size // Total tab is last
+                    } else {
+                        uiState.locations.indexOfFirst { 
+                            it.id == uiState.selectedLocationId 
+                        }.coerceAtLeast(0)
+                    }
+                    
+                    TabRow(selectedTabIndex = selectedIndex) {
+                        uiState.locations.forEachIndexed { index, location ->
+                            Tab(
+                                selected = index == selectedIndex,
+                                onClick = { viewModel.selectLocation(location.id) },
+                                text = { Text(location.name) }
+                            )
+                        }
+                        // Total tab
+                        Tab(
+                            selected = uiState.isTotalsView,
+                            onClick = { viewModel.selectTotalView() },
+                            text = { Text("Всього") }
+                        )
+                    }
+                }
+
                 // Balance Card
                 BalanceCard(
                     balance = uiState.balance,
@@ -136,11 +165,12 @@ fun CashScreen(
                     modifier = Modifier.padding(16.dp)
                 )
 
-                // Action Buttons
+                // Action Buttons (disabled in totals view - user must select a location)
                 ActionButtons(
                     onDeposit = { viewModel.showDepositDialog() },
                     onWithdraw = { viewModel.showWithdrawDialog() },
                     onPayment = { viewModel.showPaymentDialog() },
+                    enabled = !uiState.isTotalsView,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
@@ -198,7 +228,10 @@ fun CashScreen(
                         items = uiState.historyItems,
                         key = { it.id.toString() }
                     ) { item ->
-                        HistoryItem(item = item)
+                        HistoryItem(
+                            item = item,
+                            showLocationName = uiState.isTotalsView
+                        )
                     }
 
                     // Loading indicator at bottom
@@ -352,6 +385,7 @@ private fun ActionButtons(
     onDeposit: () -> Unit,
     onWithdraw: () -> Unit,
     onPayment: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -365,6 +399,7 @@ private fun ActionButtons(
             Button(
                 onClick = onDeposit,
                 modifier = Modifier.weight(1f),
+                enabled = enabled,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = CashPositive
                 )
@@ -375,7 +410,8 @@ private fun ActionButtons(
             }
             OutlinedButton(
                 onClick = onWithdraw,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = enabled
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = "Видача", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -384,7 +420,8 @@ private fun ActionButtons(
         }
         Button(
             onClick = onPayment,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled
         ) {
             Icon(Icons.Filled.Payment, contentDescription = "Витрати", modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
@@ -396,6 +433,7 @@ private fun ActionButtons(
 @Composable
 private fun HistoryItem(
     item: CashHistoryItem,
+    showLocationName: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val depositLabel = stringResource(R.string.cash_history_deposit)
@@ -508,11 +546,28 @@ private fun HistoryItem(
                     fontWeight = FontWeight.Bold,
                     color = color
                 )
-                Text(
-                    text = dateFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = dateFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (showLocationName && item.locationName != null) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = item.locationName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
     }
