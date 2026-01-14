@@ -465,7 +465,12 @@ private fun HistoryItem(
                 val detailText = when {
                     item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE -> {
                         val parts = mutableListOf<String>()
-                        item.batchCount?.let { if (it > 1) parts.add("$it клієнтів") }
+                        item.batchCount?.let { count ->
+                            if (count > 1) {
+                                val clientWord = pluralizeUkrainian(count, "клієнт", "клієнти", "клієнтів")
+                                parts.add("$count $clientWord")
+                            }
+                        }
                         item.itemCount?.let { parts.add("$it поз.") }
                         item.weightKg?.let { parts.add("${it.setScale(2)} кг") }
                         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
@@ -822,4 +827,22 @@ private fun CategoriesDialog(
             }
         }
     )
+}
+
+/**
+ * Ukrainian pluralization helper.
+ * Returns the correct form based on the number:
+ * - 1, 21, 31... → singular (клієнт)
+ * - 2-4, 22-24, 32-34... → few (клієнти)
+ * - 0, 5-20, 25-30... → many (клієнтів)
+ */
+private fun pluralizeUkrainian(count: Int, one: String, few: String, many: String): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..19 -> many
+        mod10 == 1 -> one
+        mod10 in 2..4 -> few
+        else -> many
+    }
 }

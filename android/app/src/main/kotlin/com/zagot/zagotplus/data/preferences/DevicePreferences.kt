@@ -18,37 +18,49 @@ import javax.inject.Singleton
  * Generates and persists a unique device ID for transaction tracking.
  * 
  * Security: Uses Android Keystore-backed encryption for sensitive preferences.
+ * IMPORTANT: Throws RuntimeException if encryption fails - never silently degrades to unencrypted storage.
  */
 @Singleton
 class DevicePreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val prefs: SharedPreferences = try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    } catch (e: Exception) {
-        // Fallback to regular SharedPreferences if encryption fails
-        // This can happen on some devices with Keystore issues
-        android.util.Log.w("DevicePreferences", "Failed to create encrypted prefs, using fallback", e)
-        context.getSharedPreferences(PREFS_NAME_FALLBACK, Context.MODE_PRIVATE)
+    private val encryptedPrefs: SharedPreferences by lazy { createEncryptedPrefs() }
+    
+    // Test-only: allows injecting mock SharedPreferences
+    @Volatile
+    internal var testPrefsOverride: SharedPreferences? = null
+    
+    private val prefs: SharedPreferences
+        get() = testPrefsOverride ?: encryptedPrefs
+    
+    private fun createEncryptedPrefs(): SharedPreferences {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            
+            return EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // SECURITY: Never silently degrade to unencrypted storage
+            // This could expose sensitive device data
+            android.util.Log.e("DevicePreferences", "SECURITY ERROR: Encrypted prefs failed!", e)
+            throw RuntimeException("Security initialization failed: encrypted preferences unavailable", e)
+        }
     }
 
-    private val _selectedLocationIdFlow = MutableStateFlow(getSelectedLocationId())
+    private val _selectedLocationIdFlow by lazy { MutableStateFlow(getSelectedLocationId()) }
 
     /**
      * Observable flow of selected location ID.
      * Emits new value whenever location is changed via setSelectedLocationId.
      */
-    val selectedLocationIdFlow: StateFlow<UUID?> = _selectedLocationIdFlow.asStateFlow()
+    val selectedLocationIdFlow: StateFlow<UUID?> by lazy { _selectedLocationIdFlow.asStateFlow() }
 
     /**
      * Get or generate a unique device ID.
@@ -97,8 +109,16 @@ class DevicePreferences @Inject constructor(
 
     companion object {
         private const val PREFS_NAME = "zagot_device_prefs_encrypted"
-        private const val PREFS_NAME_FALLBACK = "zagot_device_prefs"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_SELECTED_LOCATION = "selected_location"
+        
+        /**
+         * Create a DevicePreferences instance for testing with mock SharedPreferences.
+         */
+        internal fun createForTest(context: Context, testPrefs: SharedPreferences): DevicePreferences {
+            return DevicePreferences(context).also {
+                it.testPrefsOverride = testPrefs
+            }
+        }
     }
 }

@@ -26,6 +26,8 @@ interface AuthPreferences {
     fun clearLockout()
     fun setAuthenticated(authenticated: Boolean)
     fun isAuthenticated(): Boolean
+    fun isSessionValid(): Boolean
+    fun getSessionRemainingMinutes(): Int
 }
 
 /**
@@ -36,7 +38,7 @@ interface AuthPreferences {
  * - PIN is hashed with PBKDF2-HMAC-SHA256 (10,000 iterations)
  * - 16-byte random salt per PIN
  * - 30-second lockout after 3 failed attempts
- * - Session expires on app process death (in-memory flag)
+ * - Session expires after 4 hours or on app process death
  */
 @Singleton
 class AuthPreferencesImpl @Inject constructor(
@@ -50,6 +52,10 @@ class AuthPreferencesImpl @Inject constructor(
     // In-memory session flag - expires on process death
     @Volatile
     private var sessionAuthenticated: Boolean = false
+    
+    // Session start time for timeout tracking
+    @Volatile
+    private var sessionStartTime: Long = 0
 
     override fun isPinSet(): Boolean {
         return prefs.contains(KEY_PIN_HASH)
@@ -166,10 +172,27 @@ class AuthPreferencesImpl @Inject constructor(
 
     override fun setAuthenticated(authenticated: Boolean) {
         sessionAuthenticated = authenticated
+        if (authenticated) {
+            sessionStartTime = System.currentTimeMillis()
+        } else {
+            sessionStartTime = 0
+        }
     }
 
     override fun isAuthenticated(): Boolean {
-        return sessionAuthenticated
+        return sessionAuthenticated && isSessionValid()
+    }
+
+    override fun isSessionValid(): Boolean {
+        if (!sessionAuthenticated) return false
+        return System.currentTimeMillis() - sessionStartTime < SESSION_TIMEOUT_MS
+    }
+
+    override fun getSessionRemainingMinutes(): Int {
+        if (!sessionAuthenticated || sessionStartTime == 0L) return 0
+        val elapsed = System.currentTimeMillis() - sessionStartTime
+        val remaining = SESSION_TIMEOUT_MS - elapsed
+        return if (remaining > 0) (remaining / 60_000).toInt() else 0
     }
 
     companion object {
@@ -183,6 +206,9 @@ class AuthPreferencesImpl @Inject constructor(
         private const val MAX_ATTEMPTS = 3
         /** Lockout duration in milliseconds (30 seconds) */
         private const val LOCKOUT_DURATION_MS = 30_000L
+        
+        /** Session timeout in milliseconds (4 hours) */
+        private const val SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000L
         
         // PBKDF2 parameters
         private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"

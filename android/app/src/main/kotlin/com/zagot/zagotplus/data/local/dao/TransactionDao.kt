@@ -67,8 +67,11 @@ interface TransactionDao {
 
     /**
      * Get all transactions (one-time read).
+     * @deprecated Use getAllPaginated(limit, offset) for large datasets to avoid OOM.
+     * This method loads ALL transactions into memory which can crash on large datasets.
      */
-    @Query("SELECT * FROM transactions ORDER BY created_at DESC")
+    @Deprecated("Use getAllPaginated(limit, offset) instead", ReplaceWith("getAllPaginated(100, 0)"))
+    @Query("SELECT * FROM transactions ORDER BY created_at DESC LIMIT 1000")
     suspend fun getAll(): List<TransactionEntity>
 
     /**
@@ -162,6 +165,20 @@ interface TransactionDao {
      */
     @Query("SELECT * FROM transactions WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<UUID>): List<TransactionEntity>
+
+    /**
+     * Get transactions for multiple purchase batch IDs in a single query.
+     * Avoids N+1 query pattern when loading batch transactions.
+     */
+    @Query("SELECT * FROM transactions WHERE batch_id IN (:batchIds) ORDER BY created_at DESC")
+    suspend fun getByPurchaseBatchIds(batchIds: List<UUID>): List<TransactionEntity>
+
+    /**
+     * Get transactions for multiple sale batch IDs in a single query.
+     * Avoids N+1 query pattern when loading batch transactions.
+     */
+    @Query("SELECT * FROM transactions WHERE sale_batch_id IN (:saleBatchIds) ORDER BY created_at DESC")
+    suspend fun getBySaleBatchIds(saleBatchIds: List<UUID>): List<TransactionEntity>
 
     /**
      * Get filtered transactions with dynamic query.

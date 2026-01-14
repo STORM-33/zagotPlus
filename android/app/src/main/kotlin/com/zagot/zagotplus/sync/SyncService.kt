@@ -203,6 +203,11 @@ class SyncService @Inject constructor(
      * Push all unsynced local transactions to Supabase.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
+     * Atomicity note: Each transaction is pushed and marked synced individually.
+     * This is intentional - network calls can fail independently, and the upsert
+     * on Supabase (onConflict="local_id") ensures idempotency if a transaction
+     * is pushed again after app crash. This is an eventually-consistent design.
+     *
      * @throws Exception if network or critical error occurs
      */
     private suspend fun pushPendingTransactions(): PushResult {

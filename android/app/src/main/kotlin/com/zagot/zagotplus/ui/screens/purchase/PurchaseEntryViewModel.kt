@@ -53,7 +53,10 @@ data class PurchaseEntryUiState(
     val positions: List<PurchasePosition> = emptyList(),
     val notes: String = "",
     val screenState: PurchaseEntryScreenState = PurchaseEntryScreenState.PRODUCT_GRID,
-    val scaleWeight: BigDecimal? = null, // null = not connected
+    // Phase 6 stub: Scale weight from Bluetooth/TCP connection
+    // Currently always null (scale not implemented yet)
+    // When implemented, this will be populated by ScaleService
+    val scaleWeight: BigDecimal? = null,
     val isManualWeightMode: Boolean = false, // true = user overriding scale weight
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,

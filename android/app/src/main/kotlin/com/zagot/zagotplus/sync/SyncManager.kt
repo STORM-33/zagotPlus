@@ -22,8 +22,8 @@ class SyncManager @Inject constructor(
     private val lastManualSyncTime = AtomicLong(0L)
 
     companion object {
-        /** Minimum interval between manual syncs in milliseconds */
-        private const val MIN_SYNC_INTERVAL_MS = 5_000L // 5 seconds
+        /** Minimum interval between manual syncs in milliseconds (30 seconds) */
+        private const val MIN_SYNC_INTERVAL_MS = 30_000L
     }
 
     /**

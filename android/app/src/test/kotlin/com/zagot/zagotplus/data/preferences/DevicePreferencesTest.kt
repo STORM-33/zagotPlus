@@ -31,13 +31,13 @@ class DevicePreferencesTest {
         sharedPreferences = mockk(relaxed = true)
         editor = mockk(relaxed = true)
 
-        every { context.getSharedPreferences("zagot_device_prefs", Context.MODE_PRIVATE) } returns sharedPreferences
         every { sharedPreferences.edit() } returns editor
         every { editor.putString(any(), any()) } returns editor
         every { editor.apply() } returns Unit
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        // Use the test factory to bypass encrypted prefs
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
     }
 
     // Device ID Tests
@@ -87,7 +87,7 @@ class DevicePreferencesTest {
     fun `getSelectedLocationId returns null when not set`() {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.getSelectedLocationId()
 
         assertNull(result)
@@ -97,7 +97,7 @@ class DevicePreferencesTest {
     fun `getSelectedLocationId returns UUID when stored`() {
         every { sharedPreferences.getString("selected_location", null) } returns testLocationId.toString()
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.getSelectedLocationId()
 
         assertEquals(testLocationId, result)
@@ -118,7 +118,7 @@ class DevicePreferencesTest {
     fun `selectedLocationIdFlow emits initial value`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns testLocationId.toString()
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
         assertEquals(testLocationId, result)
@@ -128,7 +128,7 @@ class DevicePreferencesTest {
     fun `selectedLocationIdFlow emits null when not set`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
         assertNull(result)
@@ -138,7 +138,7 @@ class DevicePreferencesTest {
     fun `setSelectedLocationId updates flow`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         devicePreferences.setSelectedLocationId(testLocationId)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
