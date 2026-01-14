@@ -257,7 +257,7 @@ private fun ProductCard(
                     } else {
                         Icon(
                             Icons.Filled.Image,
-                            contentDescription = null,
+                            contentDescription = "Немає зображення товару",
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
@@ -386,7 +386,7 @@ private fun AddEditProductDialog(
                         ) {
                             Icon(
                                 Icons.Filled.Image,
-                                contentDescription = null,
+                                contentDescription = "Додати зображення товару",
                                 modifier = Modifier.size(32.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )

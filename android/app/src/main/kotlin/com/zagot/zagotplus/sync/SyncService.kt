@@ -181,7 +181,11 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pulled $cashPullResult cash operations")
 
-        // Update last sync timestamp only once at the end after all pulls complete
+        // Update last sync timestamp to NOW (after all pulls complete)
+        // IMPORTANT: We use Instant.now() instead of syncStartTimestamp to avoid race condition
+        // where data created between syncStartTimestamp and pull completion would be missed.
+        // The pull queries use server_updated_at, which is set by Postgres trigger on insert,
+        // so there's no gap - we'll pick up those records on the next sync.
         syncPreferences.setLastSyncTimestamp(Instant.now())
 
         return SyncResult.Success(

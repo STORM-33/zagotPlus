@@ -127,6 +127,9 @@ dependencies {
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Security
+    implementation(libs.androidx.security.crypto)
+
     // Supabase
     implementation(libs.supabase.postgrest.kt)
     implementation(libs.supabase.realtime.kt)

@@ -14,9 +14,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.zagot.zagotplus.R
 
 @Composable
 fun PinScreen(
@@ -44,9 +46,9 @@ fun PinScreen(
         ) {
             Text(
                 text = when (uiState.mode) {
-                    PinMode.SET_PIN -> "Встановіть PIN-код"
-                    PinMode.CONFIRM_PIN -> "Підтвердіть PIN-код"
-                    PinMode.VERIFY_PIN -> "Введіть PIN-код"
+                    PinMode.SET_PIN -> stringResource(R.string.pin_set_title)
+                    PinMode.CONFIRM_PIN -> stringResource(R.string.pin_confirm_title)
+                    PinMode.VERIFY_PIN -> stringResource(R.string.pin_verify_title)
                 },
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 32.dp)
@@ -153,7 +155,7 @@ private fun PinKeypad(
             ) {
                 Icon(
                     Icons.Default.Backspace,
-                    contentDescription = "Видалити",
+                    contentDescription = stringResource(R.string.pin_backspace),
                     modifier = Modifier.size(36.dp)
                 )
             }

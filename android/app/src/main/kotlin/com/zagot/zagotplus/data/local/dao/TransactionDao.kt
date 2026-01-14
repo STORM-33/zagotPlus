@@ -50,8 +50,10 @@ interface TransactionDao {
 
     /**
      * Get all transactions as Flow (reactive for UI).
-     * WARNING: Loads all transactions into memory. Use getAllPaginatedFlow for large datasets.
+     * @deprecated Use getAllPaginatedFlow for large datasets to avoid OOM.
+     * This method loads ALL transactions into memory which can crash on large datasets.
      */
+    @Deprecated("Use getAllPaginatedFlow with pagination instead", ReplaceWith("getAllPaginatedFlow(limit, offset)"))
     @Query("SELECT * FROM transactions ORDER BY created_at DESC")
     fun getAllFlow(): Flow<List<TransactionEntity>>
 

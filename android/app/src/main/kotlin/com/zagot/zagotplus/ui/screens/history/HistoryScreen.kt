@@ -553,7 +553,7 @@ private fun TransactionRow(
 ) {
     val pricePerKg = transaction.totalAmount?.let { amount ->
         val weight = transaction.weightKg.abs()
-        if (weight > java.math.BigDecimal.ZERO) {
+        if (weight.compareTo(java.math.BigDecimal.ZERO) > 0) {
             amount.abs().divide(weight, 2, java.math.RoundingMode.HALF_UP)
         } else null
     }

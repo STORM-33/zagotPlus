@@ -143,7 +143,12 @@ interface CashOperationDao {
     fun getRecentByLocation(locationId: UUID, limit: Int): Flow<List<CashOperationEntity>>
 
     // Global operations (across all locations)
-    @Query("SELECT * FROM cash_operations ORDER BY created_at DESC")
+    /**
+     * @deprecated Use getRecentOperations(limit) or getOperationsPaged for large datasets.
+     * This method loads ALL operations into memory which can cause OOM on large datasets.
+     */
+    @Deprecated("Use getRecentOperations(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperations(100)"))
+    @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT 1000")
     fun getAllOperations(): Flow<List<CashOperationEntity>>
 
     @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT :limit")

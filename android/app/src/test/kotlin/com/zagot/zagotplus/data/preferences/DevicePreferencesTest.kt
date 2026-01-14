@@ -63,8 +63,9 @@ class DevicePreferencesTest {
         verify { editor.putString("device_id", any()) }
         verify { editor.apply() }
         assertEquals(result, capturedId.captured)
-        // Should be a valid UUID format
-        assertDoesNotThrow { UUID.fromString(result) }
+        // New format: {androidId}_{random8chars} - should be at least 10 chars with underscore
+        assertTrue(result.contains("_"))
+        assertTrue(result.length >= 10)
     }
 
     @Test

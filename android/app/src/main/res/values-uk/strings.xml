@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Загот+</string>
+    
+    <!-- PIN Screen -->
+    <string name="pin_set_title">Встановіть PIN-код</string>
+    <string name="pin_confirm_title">Підтвердіть PIN-код</string>
+    <string name="pin_verify_title">Введіть PIN-код</string>
+    <string name="pin_backspace">Видалити</string>
+    
+    <!-- Cash Screen -->
+    <string name="cash_deposit">Поповнення</string>
+    <string name="cash_withdraw">Виведення</string>
+    <string name="cash_payment">Оплата</string>
+    <string name="cash_balance">Баланс</string>
+    <string name="cash_insufficient_funds">Недостатньо коштів</string>
+    
+    <!-- Common -->
+    <string name="save">Зберегти</string>
+    <string name="cancel">Скасувати</string>
+    <string name="delete">Видалити</string>
+    <string name="edit">Редагувати</string>
+    <string name="error_loading">Помилка завантаження</string>
+    <string name="error_saving">Помилка збереження</string>
+    <string name="synced">Синхронізовано</string>
+    <string name="back">Назад</string>
 </resources>

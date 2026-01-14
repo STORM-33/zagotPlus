@@ -3,8 +3,10 @@ package com.zagot.zagotplus.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,11 +30,12 @@ interface AuthPreferences {
 
 /**
  * Manages authentication preferences using SharedPreferences.
- * Stores salted PIN hash for access control with lockout protection.
+ * Stores PIN hash using PBKDF2 for access control with lockout protection.
  *
  * Security notes:
- * - PIN is hashed with salted SHA-256 (not PBKDF2, but acceptable for 4-digit PIN
- *   with 30-second lockout after 3 attempts)
+ * - PIN is hashed with PBKDF2-HMAC-SHA256 (10,000 iterations)
+ * - 16-byte random salt per PIN
+ * - 30-second lockout after 3 failed attempts
  * - Session expires on app process death (in-memory flag)
  */
 @Singleton
@@ -54,25 +57,43 @@ class AuthPreferencesImpl @Inject constructor(
 
     override fun setPin(pin: String) {
         val salt = generateSalt()
-        val hash = hashPinWithSalt(pin, salt)
+        val hash = hashPinWithPbkdf2(pin, salt)
         prefs.edit()
-            .putString(KEY_PIN_SALT, salt)
+            .putString(KEY_PIN_SALT, Base64.getEncoder().encodeToString(salt))
             .putString(KEY_PIN_HASH, hash)
+            .putInt(KEY_HASH_VERSION, CURRENT_HASH_VERSION)
             .apply()
         clearLockout()
     }
 
     override fun verifyPin(pin: String): Boolean {
         val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
-        val storedSalt = prefs.getString(KEY_PIN_SALT, null) ?: return false
-        val inputHash = hashPinWithSalt(pin, storedSalt)
-        return storedHash == inputHash
+        val storedSaltBase64 = prefs.getString(KEY_PIN_SALT, null) ?: return false
+        val hashVersion = prefs.getInt(KEY_HASH_VERSION, 1)
+        
+        return if (hashVersion >= 2) {
+            // PBKDF2 hash (version 2+)
+            val salt = Base64.getDecoder().decode(storedSaltBase64)
+            val inputHash = hashPinWithPbkdf2(pin, salt)
+            storedHash == inputHash
+        } else {
+            // Legacy SHA-256 hash (version 1) - migrate on successful verify
+            val inputHash = hashPinWithSha256Legacy(pin, storedSaltBase64)
+            if (storedHash == inputHash) {
+                // Migrate to PBKDF2
+                setPin(pin)
+                true
+            } else {
+                false
+            }
+        }
     }
 
     override fun clearPin() {
         prefs.edit()
             .remove(KEY_PIN_HASH)
             .remove(KEY_PIN_SALT)
+            .remove(KEY_HASH_VERSION)
             .apply()
     }
 
@@ -114,15 +135,30 @@ class AuthPreferencesImpl @Inject constructor(
 
     // === Private Helpers ===
 
-    private fun generateSalt(): String {
-        val bytes = ByteArray(16)
+    private fun generateSalt(): ByteArray {
+        val bytes = ByteArray(SALT_LENGTH)
         SecureRandom().nextBytes(bytes)
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes
     }
 
-    private fun hashPinWithSalt(pin: String, salt: String): String {
+    /**
+     * Hash PIN using PBKDF2-HMAC-SHA256.
+     * More secure than simple SHA-256 for password/PIN storage.
+     */
+    private fun hashPinWithPbkdf2(pin: String, salt: ByteArray): String {
+        val spec = PBEKeySpec(pin.toCharArray(), salt, PBKDF2_ITERATIONS, HASH_LENGTH_BITS)
+        val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
+        val hash = factory.generateSecret(spec).encoded
+        spec.clearPassword()
+        return Base64.getEncoder().encodeToString(hash)
+    }
+
+    /**
+     * Legacy SHA-256 hash for migration purposes.
+     */
+    private fun hashPinWithSha256Legacy(pin: String, salt: String): String {
         val combined = salt + pin
-        val bytes = MessageDigest.getInstance("SHA-256").digest(combined.toByteArray())
+        val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(combined.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
@@ -140,10 +176,19 @@ class AuthPreferencesImpl @Inject constructor(
         private const val PREFS_NAME = "zagot_auth_prefs"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
+        private const val KEY_HASH_VERSION = "hash_version"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
 
         private const val MAX_ATTEMPTS = 3
+        /** Lockout duration in milliseconds (30 seconds) */
         private const val LOCKOUT_DURATION_MS = 30_000L
+        
+        // PBKDF2 parameters
+        private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
+        private const val PBKDF2_ITERATIONS = 10_000
+        private const val HASH_LENGTH_BITS = 256
+        private const val SALT_LENGTH = 16
+        private const val CURRENT_HASH_VERSION = 2
     }
 }

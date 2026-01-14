@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Zagot+</string>
+    
+    <!-- PIN Screen -->
+    <string name="pin_set_title">Set PIN code</string>
+    <string name="pin_confirm_title">Confirm PIN code</string>
+    <string name="pin_verify_title">Enter PIN code</string>
+    <string name="pin_backspace">Delete</string>
+    
+    <!-- Cash Screen -->
+    <string name="cash_deposit">Deposit</string>
+    <string name="cash_withdraw">Withdraw</string>
+    <string name="cash_payment">Payment</string>
+    <string name="cash_balance">Balance</string>
+    <string name="cash_insufficient_funds">Insufficient funds</string>
+    
+    <!-- Common -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="error_loading">Loading error</string>
+    <string name="error_saving">Saving error</string>
+    <string name="synced">Synced</string>
+    <string name="back">Back</string>
 </resources>

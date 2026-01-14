@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.junit.Assert.*
 import org.junit.Before
@@ -53,7 +54,9 @@ class AuthPreferencesTest {
         
         authPreferences.setPin(pin)
         
-        verify { editor.putString("pin_hash", match { it != pin && it.length == 64 }) }
+        // PBKDF2 produces Base64 hash, not hex
+        verify { editor.putString("pin_hash", match { it != pin && it.isNotEmpty() }) }
+        verify { editor.putInt("hash_version", 2) }
         verify { editor.apply() }
     }
 
@@ -61,14 +64,18 @@ class AuthPreferencesTest {
     fun `verifyPin returns true for correct PIN`() {
         val pin = "1234"
         
-        val storedHash = mutableListOf<String>()
-        val storedSalt = mutableListOf<String>()
-        every { editor.putString("pin_hash", capture(storedHash)) } returns editor
-        every { editor.putString("pin_salt", capture(storedSalt)) } returns editor
+        val hashSlot = slot<String>()
+        val saltSlot = slot<String>()
+        val versionSlot = slot<Int>()
+        every { editor.putString("pin_hash", capture(hashSlot)) } returns editor
+        every { editor.putString("pin_salt", capture(saltSlot)) } returns editor
+        every { editor.putInt("hash_version", capture(versionSlot)) } returns editor
+        
         authPreferences.setPin(pin)
         
-        every { sharedPreferences.getString("pin_hash", null) } returns storedHash.first()
-        every { sharedPreferences.getString("pin_salt", null) } returns storedSalt.first()
+        every { sharedPreferences.getString("pin_hash", null) } returns hashSlot.captured
+        every { sharedPreferences.getString("pin_salt", null) } returns saltSlot.captured
+        every { sharedPreferences.getInt("hash_version", 1) } returns versionSlot.captured
         
         assertTrue(authPreferences.verifyPin(pin))
     }
@@ -77,14 +84,18 @@ class AuthPreferencesTest {
     fun `verifyPin returns false for incorrect PIN`() {
         val correctPin = "1234"
         
-        val storedHash = mutableListOf<String>()
-        val storedSalt = mutableListOf<String>()
-        every { editor.putString("pin_hash", capture(storedHash)) } returns editor
-        every { editor.putString("pin_salt", capture(storedSalt)) } returns editor
+        val hashSlot = slot<String>()
+        val saltSlot = slot<String>()
+        val versionSlot = slot<Int>()
+        every { editor.putString("pin_hash", capture(hashSlot)) } returns editor
+        every { editor.putString("pin_salt", capture(saltSlot)) } returns editor
+        every { editor.putInt("hash_version", capture(versionSlot)) } returns editor
+        
         authPreferences.setPin(correctPin)
         
-        every { sharedPreferences.getString("pin_hash", null) } returns storedHash.first()
-        every { sharedPreferences.getString("pin_salt", null) } returns storedSalt.first()
+        every { sharedPreferences.getString("pin_hash", null) } returns hashSlot.captured
+        every { sharedPreferences.getString("pin_salt", null) } returns saltSlot.captured
+        every { sharedPreferences.getInt("hash_version", 1) } returns versionSlot.captured
         
         assertFalse(authPreferences.verifyPin("9999"))
     }
@@ -112,7 +123,8 @@ class AuthPreferencesTest {
         
         authPreferences.setPin(pin)
         
-        verify { editor.putString("pin_salt", match { it.length == 32 }) }
+        // Salt is now Base64 encoded (16 bytes = ~24 chars in Base64)
+        verify { editor.putString("pin_salt", match { it.isNotEmpty() }) }
     }
 
     @Test
@@ -120,6 +132,7 @@ class AuthPreferencesTest {
         val pin = "1234"
         val capturedHashes = mutableListOf<String>()
         every { editor.putString("pin_hash", capture(capturedHashes)) } returns editor
+        every { editor.putInt("hash_version", any()) } returns editor
         
         authPreferences.setPin(pin)
         authPreferences.setPin(pin)
@@ -130,11 +143,12 @@ class AuthPreferencesTest {
     }
 
     @Test
-    fun `clearPin removes both hash and salt`() {
+    fun `clearPin removes hash salt and version`() {
         authPreferences.clearPin()
         
         verify { editor.remove("pin_hash") }
         verify { editor.remove("pin_salt") }
+        verify { editor.remove("hash_version") }
     }
 
     // === Lockout Persistence Tests ===

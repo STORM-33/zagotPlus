@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,6 +17,14 @@ class SyncManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val workManager = WorkManager.getInstance(context)
+    
+    // Rate limiting: prevent sync spam
+    private val lastManualSyncTime = AtomicLong(0L)
+
+    companion object {
+        /** Minimum interval between manual syncs in milliseconds */
+        private const val MIN_SYNC_INTERVAL_MS = 5_000L // 5 seconds
+    }
 
     /**
      * Initialize periodic sync. Should be called once from Application.onCreate().
@@ -48,8 +57,24 @@ class SyncManager @Inject constructor(
     /**
      * Trigger immediate one-time sync (e.g., from "Sync Now" button).
      * Uses same constraints as periodic sync.
+     * Rate-limited to prevent spam (minimum 5 seconds between syncs).
+     * 
+     * @return true if sync was enqueued, false if rate-limited
      */
-    fun triggerManualSync() {
+    fun triggerManualSync(): Boolean {
+        val now = System.currentTimeMillis()
+        val lastSync = lastManualSyncTime.get()
+        
+        if (now - lastSync < MIN_SYNC_INTERVAL_MS) {
+            // Rate limited - too soon since last sync
+            return false
+        }
+        
+        if (!lastManualSyncTime.compareAndSet(lastSync, now)) {
+            // Another thread triggered sync, skip
+            return false
+        }
+        
         val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
@@ -59,6 +84,7 @@ class SyncManager @Inject constructor(
             .build()
 
         workManager.enqueue(syncRequest)
+        return true
     }
 
     /**

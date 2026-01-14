@@ -27,6 +27,9 @@ hiltWork = "1.1.0"
 # WorkManager
 workManager = "2.9.0"
 
+# Security
+securityCrypto = "1.1.0-alpha06"
+
 # Supabase
 supabase = "2.0.3"
 ktor = "2.3.7"
@@ -86,6 +89,9 @@ hilt-work-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.
 
 # WorkManager
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+
+# Security
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 # Supabase
 supabase-postgrest-kt = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt", version.ref = "supabase" }
