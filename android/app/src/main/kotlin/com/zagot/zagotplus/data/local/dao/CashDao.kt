@@ -203,6 +203,7 @@ interface CashOperationDao {
      * Get unified cash history with pagination.
      * Combines individual cash_operations with daily aggregates of purchase_batches and sale_batches.
      * Purchases and sales are grouped by day to avoid hundreds of entries per day.
+     * Includes location info for display in totals view.
      */
     @Query("""
         SELECT 
@@ -214,7 +215,9 @@ interface CashOperationDao {
             item_count,
             weight_kg,
             created_at,
-            batch_count
+            batch_count,
+            location_id,
+            location_name
         FROM (
             SELECT 
                 CAST(co.id AS TEXT) as id,
@@ -225,37 +228,46 @@ interface CashOperationDao {
                 NULL as item_count,
                 NULL as weight_kg,
                 co.created_at,
-                NULL as batch_count
+                NULL as batch_count,
+                CAST(co.location_id AS TEXT) as location_id,
+                l.name as location_name
             FROM cash_operations co
             LEFT JOIN expense_categories ec ON co.category_id = ec.id
+            LEFT JOIN locations l ON co.location_id = l.id
             UNION ALL
             SELECT 
-                'purchase_' || date(created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase_' || pb.location_id || '_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
                 'purchase' as type,
-                SUM(total_amount) as amount,
+                SUM(pb.total_amount) as amount,
                 NULL as notes,
                 NULL as category_name,
-                SUM(item_count) as item_count,
-                SUM(total_weight_kg) as weight_kg,
-                MAX(created_at) as created_at,
-                COUNT(*) as batch_count
-            FROM purchase_batches
-            WHERE total_amount IS NOT NULL
-            GROUP BY date(created_at / 1000, 'unixepoch', 'localtime')
+                SUM(pb.item_count) as item_count,
+                SUM(pb.total_weight_kg) as weight_kg,
+                MAX(pb.created_at) as created_at,
+                COUNT(*) as batch_count,
+                CAST(pb.location_id AS TEXT) as location_id,
+                l.name as location_name
+            FROM purchase_batches pb
+            LEFT JOIN locations l ON pb.location_id = l.id
+            WHERE pb.total_amount IS NOT NULL
+            GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
             UNION ALL
             SELECT 
-                'sale_' || date(created_at / 1000, 'unixepoch', 'localtime') as id,
+                'sale_' || sb.location_id || '_' || date(sb.created_at / 1000, 'unixepoch', 'localtime') as id,
                 'sale' as type,
-                SUM(total_amount) as amount,
+                SUM(sb.total_amount) as amount,
                 NULL as notes,
                 NULL as category_name,
-                SUM(item_count) as item_count,
-                SUM(total_weight_kg) as weight_kg,
-                MAX(created_at) as created_at,
-                COUNT(*) as batch_count
-            FROM sale_batches
-            WHERE total_amount IS NOT NULL
-            GROUP BY date(created_at / 1000, 'unixepoch', 'localtime')
+                SUM(sb.item_count) as item_count,
+                SUM(sb.total_weight_kg) as weight_kg,
+                MAX(sb.created_at) as created_at,
+                COUNT(*) as batch_count,
+                CAST(sb.location_id AS TEXT) as location_id,
+                l.name as location_name
+            FROM sale_batches sb
+            LEFT JOIN locations l ON sb.location_id = l.id
+            WHERE sb.total_amount IS NOT NULL
+            GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
         )
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
@@ -263,13 +275,97 @@ interface CashOperationDao {
     suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryProjection>
 
     /**
-     * Get total count of all cash history items (operations + unique days of batches).
+     * Get cash history filtered by location with pagination.
+     */
+    @Query("""
+        SELECT 
+            id,
+            type,
+            amount,
+            notes,
+            category_name,
+            item_count,
+            weight_kg,
+            created_at,
+            batch_count,
+            location_id,
+            location_name
+        FROM (
+            SELECT 
+                CAST(co.id AS TEXT) as id,
+                co.type,
+                co.amount,
+                co.notes,
+                ec.name as category_name,
+                NULL as item_count,
+                NULL as weight_kg,
+                co.created_at,
+                NULL as batch_count,
+                CAST(co.location_id AS TEXT) as location_id,
+                l.name as location_name
+            FROM cash_operations co
+            LEFT JOIN expense_categories ec ON co.category_id = ec.id
+            LEFT JOIN locations l ON co.location_id = l.id
+            WHERE co.location_id = :locationId
+            UNION ALL
+            SELECT 
+                'purchase_' || pb.location_id || '_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase' as type,
+                SUM(pb.total_amount) as amount,
+                NULL as notes,
+                NULL as category_name,
+                SUM(pb.item_count) as item_count,
+                SUM(pb.total_weight_kg) as weight_kg,
+                MAX(pb.created_at) as created_at,
+                COUNT(*) as batch_count,
+                CAST(pb.location_id AS TEXT) as location_id,
+                l.name as location_name
+            FROM purchase_batches pb
+            LEFT JOIN locations l ON pb.location_id = l.id
+            WHERE pb.total_amount IS NOT NULL AND pb.location_id = :locationId
+            GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
+            UNION ALL
+            SELECT 
+                'sale_' || sb.location_id || '_' || date(sb.created_at / 1000, 'unixepoch', 'localtime') as id,
+                'sale' as type,
+                SUM(sb.total_amount) as amount,
+                NULL as notes,
+                NULL as category_name,
+                SUM(sb.item_count) as item_count,
+                SUM(sb.total_weight_kg) as weight_kg,
+                MAX(sb.created_at) as created_at,
+                COUNT(*) as batch_count,
+                CAST(sb.location_id AS TEXT) as location_id,
+                l.name as location_name
+            FROM sale_batches sb
+            LEFT JOIN locations l ON sb.location_id = l.id
+            WHERE sb.total_amount IS NOT NULL AND sb.location_id = :locationId
+            GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
+        )
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getCashHistoryByLocationPaged(locationId: UUID, limit: Int, offset: Int): List<CashHistoryProjection>
+
+    /**
+     * Get total count of all cash history items (operations + unique location-day combinations of batches).
      */
     @Query("""
         SELECT 
             (SELECT COUNT(*) FROM cash_operations) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL)
+            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL) +
+            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL)
     """)
     suspend fun getTotalHistoryCount(): Int
+
+    /**
+     * Get count of cash history items for a specific location.
+     */
+    @Query("""
+        SELECT 
+            (SELECT COUNT(*) FROM cash_operations WHERE location_id = :locationId) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND location_id = :locationId) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND location_id = :locationId)
+    """)
+    suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int
 }

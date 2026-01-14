@@ -83,7 +83,11 @@ data class CashHistoryProjection(
     @ColumnInfo(name = "created_at")
     val createdAt: Instant,
     @ColumnInfo(name = "batch_count")
-    val batchCount: Int? // Number of batches in aggregated entry
+    val batchCount: Int?, // Number of batches in aggregated entry
+    @ColumnInfo(name = "location_id")
+    val locationId: String?, // UUID of location (null for older records without location)
+    @ColumnInfo(name = "location_name")
+    val locationName: String? // Name of location for display in totals view
 )
 
 @Entity(
