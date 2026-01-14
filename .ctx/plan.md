@@ -8,9 +8,9 @@ Make cash operations location-specific. Each location has its own cash balance. 
 
 ## Progress
 - Total sessions: 3
-- Completed: 1
+- Completed: 3
 - Blocked: 0
-- Remaining: 2
+- Remaining: 0
 
 ## Historical Context
 
@@ -32,8 +32,8 @@ Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
 | 1 | cash-dao-location | medium | completed | none |
-| 2 | cash-viewmodel-location | medium | pending | cash-dao-location |
-| 3 | cash-ui-tabs | medium | pending | cash-viewmodel-location |
+| 2 | cash-viewmodel-location | medium | completed | cash-dao-location |
+| 3 | cash-ui-tabs | medium | completed | cash-viewmodel-location |
 
 ## Dependencies Graph
 ```

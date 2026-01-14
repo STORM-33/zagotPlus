@@ -955,3 +955,9 @@ Added 33 unit tests for HistoryViewModel, InventoryViewModel, ReportsViewModel.
 
 ### 2026-01-14T15:14 - completed: cash-dao-location
 Added location_id/location_name to CashHistoryProjection, updated getCashHistoryPaged with location JOINs, added getCashHistoryByLocationPaged and getTotalHistoryCountByLocation. Build passes.
+
+### 2026-01-14T15:30 - completed: cash-viewmodel-location
+Added location filtering support to CashViewModel/CashRepository with selectLocation and selectTotalView methods.
+
+### 2026-01-14T15:35 - completed: cash-ui-tabs
+Added TabRow with location tabs + Всього tab to CashScreen. History items show location in totals view. Action buttons disabled in totals view.
