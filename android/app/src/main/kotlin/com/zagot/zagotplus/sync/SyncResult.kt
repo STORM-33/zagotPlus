@@ -12,13 +12,15 @@ sealed class SyncResult {
     /** Both push and pull completed successfully */
     data class Success(
         val pushed: Int,
-        val pulled: Int
+        val pulled: Int,
+        val warnings: List<String> = emptyList()
     ) : SyncResult()
 
     /** Push succeeded, pull failed. Data is on server but we couldn't fetch updates. */
     data class Partial(
         val pushed: Int,
-        val pullError: String
+        val pullError: String,
+        val warnings: List<String> = emptyList()
     ) : SyncResult()
 
     /** Sync failed. No transactions were pushed. */
@@ -38,6 +40,18 @@ sealed class SyncResult {
     /** Whether the sync was at least partially successful (some data pushed) */
     val isAtLeastPartial: Boolean
         get() = this is Success || this is Partial
+
+    /** Non-fatal warnings that occurred during sync (e.g., reference data pull failures) */
+    val warningMessages: List<String>
+        get() = when (this) {
+            is Success -> warnings
+            is Partial -> warnings
+            is Failure -> emptyList()
+        }
+
+    /** Whether there are warnings to display */
+    val hasWarnings: Boolean
+        get() = warningMessages.isNotEmpty()
 }
 
 /** Phase where sync failed */

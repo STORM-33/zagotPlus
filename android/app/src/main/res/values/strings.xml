@@ -7,6 +7,11 @@
     <string name="pin_confirm_title">Confirm PIN code</string>
     <string name="pin_verify_title">Enter PIN code</string>
     <string name="pin_backspace">Delete</string>
+    <string name="pin_error_mismatch">PINs don\'t match. Try again.</string>
+    <string name="pin_error_wrong">Wrong PIN. Attempts remaining: %d</string>
+    <string name="pin_error_locked_seconds">Too many failed attempts. Wait %d seconds.</string>
+    <string name="pin_error_locked_minutes">Too many failed attempts. Wait %d minutes.</string>
+    <string name="pin_min_length_error">PIN must be at least %d digits</string>
     
     <!-- Cash Screen -->
     <string name="cash_deposit">Deposit</string>
@@ -14,14 +19,63 @@
     <string name="cash_payment">Payment</string>
     <string name="cash_balance">Balance</string>
     <string name="cash_insufficient_funds">Insufficient funds</string>
+    <string name="cash_deposit_error">Deposit error</string>
+    <string name="cash_withdraw_error">Withdrawal error</string>
+    <string name="cash_payment_error">Payment error</string>
+    <string name="cash_category_create_error">Category creation error</string>
+    <string name="cash_category_delete_error">Category deletion error</string>
+    <string name="cash_title">Cash Register</string>
+    <string name="cash_deposit_action">Deposit</string>
+    <string name="cash_withdraw_action">Withdraw</string>
+    <string name="cash_payment_action">Pay</string>
+    <string name="cash_history_title">Transaction History</string>
+    <string name="cash_no_operations">No operations</string>
+    <string name="cash_all_loaded">All operations loaded</string>
+    <string name="cash_today">Today: %1$s</string>
+    <string name="cash_deposit_dialog_title">Cash Deposit</string>
+    <string name="cash_withdraw_dialog_title">Cash Withdrawal</string>
+    <string name="cash_payment_dialog_title">Pay Expense</string>
+    <string name="cash_categories_title">Expense Categories</string>
+    <string name="cash_amount_label">Amount</string>
+    <string name="cash_notes_label">Notes (optional)</string>
+    <string name="cash_category_label">Category</string>
+    <string name="cash_no_category">No category</string>
+    <string name="cash_new_category_label">New category</string>
+    <string name="cash_no_categories">No categories</string>
+    <string name="cash_available">Available: %1$s</string>
+    <string name="cash_close">Close</string>
+    <string name="cash_history_deposit">Deposit</string>
+    <string name="cash_history_withdrawal">Withdrawal</string>
+    <string name="cash_history_payment">Payment</string>
+    <string name="cash_history_purchase">Purchases</string>
+    <string name="cash_history_sale">Sales</string>
+    
+    <!-- Sync -->
+    <string name="sync_partial_warning">Data saved, but not all updates downloaded</string>
+    <string name="sync_offline_mode">Offline mode - data not syncing</string>
     
     <!-- Common -->
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
+    <string name="confirm">Confirm</string>
     <string name="error_loading">Loading error</string>
     <string name="error_saving">Saving error</string>
+    <string name="error_refresh">Refresh error</string>
     <string name="synced">Synced</string>
     <string name="back">Back</string>
+    <string name="unknown_location">Unknown location</string>
+    <string name="unknown_product">Unknown product</string>
+    
+    <!-- History -->
+    <string name="history_empty_title">No transactions</string>
+    <string name="history_empty_description">Transactions will appear here after purchases or sales</string>
+    <string name="history_filter_no_results">No results</string>
+    <string name="history_filter_try_different">Try changing filters</string>
+    <string name="history_clear_filters">Clear filters</string>
+    
+    <!-- Undo -->
+    <string name="operation_completed">Operation completed</string>
+    <string name="undo">Undo</string>
 </resources>

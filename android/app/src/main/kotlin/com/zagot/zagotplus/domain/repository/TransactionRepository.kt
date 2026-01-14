@@ -25,8 +25,10 @@ interface TransactionRepository {
 
     /**
      * Get all transactions as reactive Flow.
-     * WARNING: Loads all transactions into memory. Use getPaginatedTransactions for large datasets.
+     * @deprecated Use getPaginatedTransactions for large datasets to avoid OOM.
+     * This method loads ALL transactions into memory which can crash on large datasets.
      */
+    @Deprecated("Use getPaginatedTransactions with pagination instead", ReplaceWith("getPaginatedTransactions(100, 0)"))
     fun getAllTransactions(): Flow<List<Transaction>>
 
     /**

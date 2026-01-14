@@ -39,6 +39,8 @@ class TransactionRepositoryImpl @Inject constructor(
     private val syncManager: SyncManager
 ) : TransactionRepository {
 
+    @Deprecated("Use getPaginatedTransactions with pagination instead", ReplaceWith("getPaginatedTransactions(100, 0)"))
+    @Suppress("DEPRECATION")
     override fun getAllTransactions(): Flow<List<Transaction>> =
         transactionDao.getAllFlow().map { entities ->
             entities.map { it.toDomain() }

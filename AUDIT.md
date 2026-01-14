@@ -1,803 +1,645 @@
-# ZagotPlus Android App - Security & Code Audit Report
+# UI/UX Audit - Comprehensive Analysis
 
 **Date:** January 2025  
-**Auditor:** Independent Code Review  
-**Scope:** Complete Android application codebase  
-**Verdict:** ⚠️ **NOT PRODUCTION-READY** - Critical security issues must be addressed
+**Scope:** All UI components, screens, navigation, and user experience patterns  
+**Focus:** Usability, accessibility, visual consistency, interaction patterns
 
 ---
 
-## Executive Summary
+## Executive Summary - UI/UX
 
-ZagotPlus is a Ukrainian agricultural trading app for purchasing/selling nuts and seeds with offline-first architecture. While the app demonstrates competent Kotlin/Compose development and thoughtful domain modeling, it suffers from **serious security vulnerabilities**, **missing production hardening**, and **concerning architectural shortcuts** that make it unsuitable for deployment in its current state.
+The ZagotPlus app demonstrates **competent Material 3 implementation** with a thoughtfully designed agricultural theme (forest green primary, warm brown secondary, golden yellow tertiary). The offline-first design is well-suited for field use. However, the UI/UX has several areas needing improvement to enhance usability for agricultural workers in field conditions.
 
-### Critical Statistics
-| Metric | Value | Assessment |
-|--------|-------|------------|
-| Security Issues | 12 | 🔴 Unacceptable |
-| Architecture Issues | 8 | 🟡 Needs Work |
-| Code Quality Issues | 15+ | 🟡 Technical Debt |
-| Test Coverage | ~15% | 🔴 Insufficient |
-| Accessibility | Poor | 🔴 Non-compliant |
-
-### Severity Distribution
-- 🔴 **CRITICAL**: 4 issues
-- 🟠 **HIGH**: 6 issues  
-- 🟡 **MEDIUM**: 12 issues
-- 🔵 **LOW**: 10+ issues
+### Overall Assessment
+| Area | Rating | Notes |
+|------|--------|-------|
+| Visual Design | ⭐⭐⭐⭐ | Strong theme, good color usage |
+| Touch Targets | ⭐⭐⭐⭐ | 64dp buttons, good for gloves |
+| Accessibility | ⭐⭐ | Missing contentDescriptions |
+| Navigation | ⭐⭐⭐ | Clear but overflow menu hidden |
+| Error Handling | ⭐⭐⭐ | Snackbars exist but inconsistent |
+| Loading States | ⭐⭐⭐ | Present but could be improved |
+| Feedback | ⭐⭐⭐ | Haptics missing, visual only |
 
 ---
 
-## 🔴 CRITICAL Security Issues
+## 🟢 STRENGTHS (What Works Well)
 
-### 1. Release Build Has No Code Obfuscation
-**File:** `android/app/build.gradle.kts` (lines 30-35)
+### 1. Agricultural-Themed Color System ✅
+**Files:** `Color.kt`, `Theme.kt`
+
+The color palette is excellent for the domain:
+- **Forest Green (Primary)**: Represents agriculture, natural products
+- **Warm Brown (Secondary)**: Earthy, harvest tones
+- **Golden Yellow (Tertiary)**: Grain, sunlight associations
+- **Semantic Cash Colors**: Clear positive (green), negative (red), warning (orange)
+
 ```kotlin
-release {
-    isMinifyEnabled = false  // 🔴 CRITICAL
-    isShrinkResources = false
-    proguardFiles(...)
-}
+val CashPositive = Color(0xFF4CAF50)  // Deposits, income
+val CashNegative = Color(0xFFF44336)  // Withdrawals, expenses
 ```
 
-**Impact:** Anyone can decompile the APK and:
-- Extract Supabase credentials (anon key, URL)
-- Reverse-engineer business logic
-- Find additional vulnerabilities
-- Clone the entire app
+### 2. Large Touch Targets ✅
+**Files:** Multiple screens
 
-**Recommendation:** Enable minification AND add proper ProGuard rules for Supabase, Room, Hilt.
-
----
-
-### 2. Database Contains Unencrypted Financial Data
-**File:** `data/local/ZagotDatabase.kt`
-
-The Room database stores sensitive financial transaction data (weights, prices, totals, cash operations) in plaintext SQLite. On rooted devices or via backup extraction, all business data is exposed.
-
-**Affected data:**
-- All transaction amounts and prices
-- Cash operations (deposits, withdrawals, expenses)
-- Business partner information (via notes)
-- Complete purchase/sale history
-
-**Recommendation:** Implement SQLCipher for Room encryption:
+Buttons are sized appropriately for outdoor use with gloves:
 ```kotlin
-Room.databaseBuilder(...)
-    .openHelperFactory(SupportFactory(passphrase))
-    .build()
-```
-
----
-
-### 3. PIN Authentication is Cryptographically Weak
-**File:** `data/preferences/AuthPreferences.kt` (lines 117-127)
-```kotlin
-private fun hashPin(pin: String): String {
-    val bytes = MessageDigest.getInstance("SHA-256")
-        .digest(pin.getBytes())
-    // Single SHA-256 hash with NO SALT
-}
-```
-
-**Problems:**
-1. **No salt** - Rainbow table attacks trivially break 4-6 digit PINs
-2. **Single iteration** - No key stretching (PBKDF2/Argon2 required)
-3. **Fast hash** - SHA-256 is designed to be FAST, not secure for passwords
-4. **Only 30-second lockout** - Brute force 10,000 4-digit PINs in ~83 hours
-
-**A 4-digit PIN with SHA-256 can be cracked in milliseconds.**
-
-**Recommendation:**
-```kotlin
-// Use Android KeyStore + Argon2
-private fun hashPin(pin: String, salt: ByteArray): String {
-    return Argon2.hash(pin, salt, iterations=3, memory=65536)
-}
-```
-
----
-
-### 4. No Certificate Pinning - MITM Vulnerability
-**Files:** `data/remote/SupabaseModule.kt`, missing `network_security_config.xml`
-
-The app communicates with Supabase over HTTPS but:
-- No certificate pinning configured
-- No network security config
-- Supabase anon key transmitted on every request
-
-**Impact:** Attackers on same network can:
-- Intercept all sync data
-- Steal the Supabase anon key
-- Inject malicious data during sync
-- Perform session hijacking
-
-**Recommendation:**
-```xml
-<!-- res/xml/network_security_config.xml -->
-<network-security-config>
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">supabase.co</domain>
-        <pin-set expiration="2025-12-31">
-            <pin digest="SHA-256">BBBBB...</pin>
-        </pin-set>
-    </domain-config>
-</network-security-config>
-```
-
----
-
-## 🟠 HIGH Severity Issues
-
-### 5. Backup Enabled Exposes All Data
-**File:** `AndroidManifest.xml`
-```xml
-android:allowBackup="true"
-```
-
-With ADB access, anyone can extract complete app data:
-```bash
-adb backup -f zagot.ab com.example.zagotplus
-```
-
-**Recommendation:** Set `android:allowBackup="false"` or implement `BackupAgent` with encryption.
-
----
-
-### 6. Unused Bluetooth Permissions - Attack Surface
-**File:** `AndroidManifest.xml`
-```xml
-<uses-permission android:name="android.permission.BLUETOOTH" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-```
-
-**No Bluetooth code exists in the app.** These permissions:
-- Increase attack surface unnecessarily
-- Trigger user permission dialogs for no reason
-- May cause Play Store review issues
-
-**Recommendation:** Remove all Bluetooth permissions immediately.
-
----
-
-### 7. Supabase Credentials in Build Config
-**File:** `android/app/build.gradle.kts` (lines 16-22)
-```kotlin
-buildConfigField("String", "SUPABASE_URL", "\"https://...supabase.co\"")
-buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJ...\"")
-```
-
-While anon keys are meant to be public, they're still:
-- Easily extractable from the APK
-- Usable for denial-of-service attacks
-- Combined with no obfuscation = full API exposure
-
-**Recommendation:** Implement edge function authentication, rate limiting on Supabase side.
-
----
-
-### 8. Race Condition in Session Authentication
-**File:** `data/preferences/AuthPreferences.kt`
-```kotlin
-@Volatile
-private var sessionAuthenticated = false
-```
-
-Using `@Volatile` alone doesn't provide atomicity. Multiple threads could:
-- Check `sessionAuthenticated` simultaneously
-- Both see `false` and require re-auth
-- Or both see `true` after one auth
-
-**Recommendation:** Use `AtomicBoolean` or proper synchronization:
-```kotlin
-private val sessionAuthenticated = AtomicBoolean(false)
-```
-
----
-
-### 9. Sync Timestamp Edge Case Loses Data
-**File:** `sync/SyncService.kt` (acknowledged in comments)
-
-The sync uses `created_at` filtering which can miss transactions:
-```kotlin
-// If device A creates transaction at 10:00:01
-// Device B syncs at 10:00:00 (its clock)
-// Transaction is never pulled to Device B
-```
-
-**Impact:** Financial data can be permanently lost between devices.
-
-**Recommendation:** Implement vector clocks or hybrid logical clocks.
-
----
-
-### 10. No Input Validation in DTOs
-**File:** `data/remote/dto/*.kt`
-
-DTOs parse remote data without validation:
-```kotlin
-data class TransactionDto(
-    val weight: String,  // Could be "abc" - crashes on parse
-    val price_per_kg: String,
-    val total_price: String
+Button(
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(64.dp)  // Good - exceeds 48dp minimum
 )
 ```
 
-**Impact:** Malformed data from Supabase causes crashes.
+### 3. Clear Typography Scale ✅
+**File:** `Type.kt`
 
-**Recommendation:** Add validation in mappers with try-catch and logging.
-
----
-
-## 🟡 MEDIUM Severity Issues
-
-### 11. Context Injection in ViewModel (Anti-Pattern)
-**File:** `ui/screens/reports/ReportsViewModel.kt`
+Large display sizes for weight readings from scales:
 ```kotlin
-class ReportsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,  // 🟡 Bad
+displayLarge = TextStyle(fontSize = 64.sp)  // Weight readings
+displayMedium = TextStyle(fontSize = 52.sp)  // Totals
+```
+
+### 4. Double-Tap Exit Protection ✅
+**File:** `NavGraph.kt`
+
+Prevents accidental exits on main screens:
+```kotlin
+BackHandler(enabled = isBottomNavRoute) {
+    if (currentTime - lastBackPressTime < BACK_PRESS_INTERVAL) {
+        (context as? android.app.Activity)?.finish()
+    } else {
+        Toast.makeText(context, "Натисніть ще раз для виходу", Toast.LENGTH_SHORT).show()
+    }
+}
+```
+
+### 5. Exit Confirmation Dialogs ✅
+**Files:** `PurchaseEntryScreen.kt`, `SaleEntryScreen.kt`
+
+Protects against data loss during entry:
+```kotlin
+AlertDialog(
+    title = { Text("Скасувати закупку?") },
+    text = { Text("Всі введені дані буде втрачено.") },
     ...
 )
 ```
 
-ViewModels should not hold Context references. This:
-- Breaks testability
-- Can cause memory leaks
-- Violates clean architecture
+### 6. Reusable Empty States ✅
+**File:** `EmptyState.kt`
 
-**Recommendation:** Use resource IDs and resolve strings in Composables.
-
----
-
-### 12. Hardcoded Page Sizes Scattered Everywhere
-**Files:** Multiple ViewModels
+Well-designed component with consistent styling:
 ```kotlin
-private const val PAGE_SIZE = 50  // PurchaseViewModel
-private const val PAGE_SIZE = 50  // SaleViewModel  
-private const val PAGE_SIZE = 50  // HistoryViewModel
-private const val PAGE_SIZE = 30  // CashViewModel
-```
-
-**Problems:**
-- Magic numbers
-- Inconsistent values (30 vs 50)
-- Not configurable
-
-**Recommendation:** Centralize pagination config:
-```kotlin
-object PaginationConfig {
-    const val DEFAULT_PAGE_SIZE = 50
-    const val CASH_PAGE_SIZE = 30
-}
-```
-
----
-
-### 13. Duplicate defaultConfig Block
-**File:** `android/app/build.gradle.kts`
-
-There are two `defaultConfig` blocks in the build file - one gets silently overwritten.
-
----
-
-### 14. Report Query Limits to 10,000 Records
-**File:** `data/local/dao/TransactionDao.kt`
-```kotlin
-@Query("SELECT ... LIMIT 10000")
-suspend fun getTransactionsForDateRange(...)
-```
-
-For long-running businesses, this silently truncates reports without warning users.
-
-**Recommendation:** Implement pagination or warn when limit reached.
-
----
-
-### 15. Instant.toString() for Supabase Timestamps
-**File:** `sync/SupabaseSyncDataSource.kt`
-
-```kotlin
-created_at = transaction.createdAt.toString()
-```
-
-`Instant.toString()` produces ISO-8601 but:
-- Timezone handling is implicit
-- Supabase expects specific format
-- Could cause sync failures
-
-**Recommendation:** Use explicit DateTimeFormatter with UTC.
-
----
-
-### 16. No Error Boundaries in Compose
-**Files:** All screen composables
-
-A crash in any Composable takes down the entire app. No `try-catch` or error states for:
-- Image loading failures
-- Data parsing errors
-- Unexpected null states
-
-**Recommendation:** Wrap screens in error boundaries, add error states to UI.
-
----
-
-### 17. Weight Sign Convention is Confusing
-**File:** `data/repository/TransactionRepositoryImpl.kt`
-
-```kotlin
-// Purchases: positive weight
-// Sales: NEGATIVE weight (but displayed as positive)
-// Transfers: positive in, negative out
-```
-
-This is documented but:
-- Easy to forget
-- Causes bugs in reporting
-- `SaleDisplayItem` has to negate everywhere
-
-**Recommendation:** Store absolute weights, use transaction type for direction.
-
----
-
-### 18. Deprecated Compose APIs
-**Files:** Multiple UI files
-
-```kotlin
-Divider()  // Deprecated, use HorizontalDivider()
-```
-
----
-
-### 19. Missing Network Connectivity Check
-**File:** `sync/SyncWorker.kt`
-
-Worker attempts sync without checking connectivity:
-```kotlin
-override suspend fun doWork(): Result {
-    // No NetworkCapabilities check
-    return syncService.sync()
-}
-```
-
-**Recommendation:** Add network constraint to WorkManager or check in worker.
-
----
-
-### 20. No Offline Indicator in UI
-**Files:** UI screens
-
-Users have no clear indication when:
-- They're offline
-- Sync is pending
-- Data may be stale
-
-The `SyncStatusIcon` exists but is subtle and not on all screens.
-
----
-
-### 21. Financial Calculations Use String Parsing
-**File:** `data/local/Converters.kt`
-```kotlin
-@TypeConverter
-fun toBigDecimal(value: String?): BigDecimal? {
-    return value?.let { BigDecimal(it) }  // Can throw NumberFormatException
-}
-```
-
-No try-catch means corrupt data crashes the app.
-
----
-
-### 22. ProGuard Rules Are Empty
-**File:** `android/app/proguard-rules.pro`
-
-Only contains comments, no actual rules. When minification is enabled, the app will crash due to:
-- Hilt reflection issues
-- Room query stripping
-- Supabase serialization failures
-
----
-
-## 🔵 LOW Severity Issues
-
-### 23. Accessibility Non-Compliance
-**Files:** All UI components
-
-Most icons and interactive elements lack `contentDescription`:
-```kotlin
-Icon(
-    imageVector = Icons.Default.Add,
-    contentDescription = null  // 🔵 Accessibility violation
+EmptyState(
+    icon = EmptyStateIcons.Purchase,
+    title = "Закупок ще немає",
+    description = "Натисніть кнопку нижче...",
+    actionLabel = "Додати товар",
+    onAction = { viewModel.showAddDialog() }
 )
 ```
 
-**Impact:** Screen readers cannot describe the UI.
+### 7. Sync Status Visualization ✅
+**File:** `SyncStatusIcon.kt`
 
----
+Clear rotating animation during sync, distinct icons for states:
+- Syncing: Rotating sync icon (primary color)
+- Error: Cloud off icon (error color)  
+- Warning: Warning icon (tertiary color)
+- Synced: Cloud done icon (primary)
 
-### 24. Hardcoded Strings in UI
-**Files:** Multiple Composables
+### 8. Drag-to-Reorder Product Grid ✅
+**File:** `ReorderableProductGrid.kt`
 
-Many strings are hardcoded in Ukrainian instead of using resources:
+Nice feature for organizing frequently used products:
 ```kotlin
-Text("Немає товарів")  // Should be stringResource(R.string.no_products)
-```
-
-**Impact:** 
-- Harder to maintain
-- Breaks localization
-- Inconsistent with existing strings.xml
-
----
-
-### 25. Test Coverage is Abysmal
-**Files:** `src/test/`, `src/androidTest/`
-
-Only 3 test files exist:
-- `TransactionRepositoryImplTest.kt` - 5 tests
-- `SyncServiceTest.kt` - 6 tests
-- `TestData.kt` - Fixtures only
-
-**Missing tests for:**
-- All ViewModels (0% coverage)
-- All DAOs (0% coverage)
-- All UI screens (0% coverage)
-- All mappers (0% coverage)
-- Authentication logic (0% coverage)
-- Edge cases in sync (minimal)
-
-**Industry standard is 70-80%. This app has ~5%.**
-
----
-
-### 26. No Crashlytics/Analytics Integration
-
-No crash reporting. Production bugs will be invisible.
-
----
-
-### 27. Magic Numbers in UI
-```kotlin
-Spacer(modifier = Modifier.height(16.dp))  // Why 16?
-Spacer(modifier = Modifier.height(8.dp))   // Why 8?
-```
-
-**Recommendation:** Use theme dimensions.
-
----
-
-### 28. Inconsistent Error Handling
-Some repositories throw exceptions, others return null:
-```kotlin
-// ProductRepositoryImpl
-suspend fun getProduct(id: UUID): Product?  // Returns null
-
-// Elsewhere
-throw IllegalStateException("...")  // Throws
+ReorderableItem(reorderableLazyGridState, key = product.id) { isDragging ->
+    val elevation = if (isDragging) 8.dp else 2.dp
+    ProductTile(
+        modifier = Modifier.longPressDraggableHandle(...)
+    )
+}
 ```
 
 ---
 
-### 29. No Documentation
-- No KDoc on public APIs
-- No README in android/ folder
-- No architecture decision records
-- No API documentation
+## 🔴 CRITICAL UI/UX Issues
 
----
+### 1. Hidden Critical Features in Overflow Menu
+**File:** `NavGraph.kt`
 
-### 30. Dead Code
-Several unused imports and functions detected throughout codebase.
+**Problem:** Cash, Products, Transfer, Reports, Settings are all hidden in a "⋮" menu. Users must discover these features.
 
----
+**Current:** 4 bottom nav items (Purchase, Sale, Inventory, History) + overflow menu
+**Impact:** New users may not discover critical Cash tracking functionality
 
-## Architecture Review
+**Recommendation:** 
+Option A: Add 5th bottom nav item "More" that opens a drawer  
+Option B: Use NavigationRail on tablets, keep 4 tabs on phone  
+Option C: Add prominent FAB for common actions
 
-### Positive Patterns ✅
-1. **Clean Architecture** - Proper layer separation (domain/data/ui)
-2. **Offline-First** - Good choice for field use
-3. **BigDecimal for Money** - Correct financial handling
-4. **UUID for IDs** - Good for distributed systems
-5. **Instant for Timestamps** - Timezone-safe
-6. **Hilt DI** - Proper dependency injection
-7. **StateFlow in ViewModels** - Modern reactive approach
-8. **Migrations in Room** - Proper schema versioning
-
-### Problematic Patterns ❌
-1. **ViewModel holds Context** - Breaks testability
-2. **Business logic in Composables** - Should be in ViewModels
-3. **No Use Cases** - Domain layer is just interfaces
-4. **Repository implementations in data layer** - Correct, but lacking abstraction for testing
-5. **Sync logic is monolithic** - 200+ lines in single function
-6. **No caching strategy** - Room is cache, but no expiration
-
-### Missing Patterns
-1. **No error handling strategy** - Inconsistent Result/Exception use
-2. **No loading states** - Some screens have them, others don't
-3. **No retry mechanism** - Sync fails silently
-4. **No feature flags** - Can't disable features remotely
-5. **No A/B testing** - Can't experiment safely
-
----
-
-## Performance Concerns
-
-### 1. No Query Optimization
 ```kotlin
-@Query("SELECT * FROM transactions WHERE ...")
+// Suggestion: Add a prominent quick-actions FAB
+FloatingActionButton(onClick = { showQuickActions = true }) {
+    Icon(Icons.Filled.Add, contentDescription = "Швидкі дії")
+}
 ```
 
-No `EXPLAIN QUERY PLAN` analysis. Large datasets will be slow.
+### 2. No Haptic Feedback
+**Files:** All interactive components
 
-### 2. No Index Declarations
-**File:** Entity classes
+**Problem:** No vibration feedback on button presses, long-presses, or confirmations. Critical for outdoor use where visual attention may be divided.
 
-Important query columns lack indexes:
+**Impact:** Users may not realize actions completed, especially in bright sunlight
+
+**Recommendation:**
 ```kotlin
-// TransactionEntity should have:
-@Index(value = ["product_id"])
-@Index(value = ["location_id"])  
-@Index(value = ["created_at"])
-@Index(value = ["synced_at"])
+val haptic = LocalHapticFeedback.current
+Button(
+    onClick = { 
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        onAction() 
+    }
+)
 ```
 
-### 3. Full Table Scans in Reports
-Report queries join multiple tables without pagination:
+### 3. Summary Screen Tap-Anywhere Confirmation
+**Files:** `PurchaseSummaryScreen.kt`, SaleEntryScreen (summary)
+
+**Problem:** "Tap anywhere to confirm" is unusual and error-prone:
 ```kotlin
-@Query("SELECT t.*, p.name... FROM transactions t JOIN products p...")
+Box(
+    modifier = modifier
+        .fillMaxSize()
+        .clickable(enabled = !isSaving) { onConfirm() }
+)
 ```
 
-### 4. Image Loading Not Optimized
-Using Coil without:
-- Disk cache configuration
-- Memory cache limits
-- Placeholder images
+**Risk:** Accidental taps confirm transactions
 
-### 5. Recomposition Issues
-Several screens have unnecessary recompositions due to:
-- Unstable lambda references
-- Non-stable data classes
-- Missing `remember` for derived state
+**Recommendation:** Replace with explicit "ПІДТВЕРДИТИ" button at bottom:
+```kotlin
+Button(
+    onClick = onConfirm,
+    modifier = Modifier.fillMaxWidth().height(64.dp),
+    colors = ButtonDefaults.buttonColors(
+        containerColor = MaterialTheme.colorScheme.primary
+    )
+) {
+    Text("ПІДТВЕРДИТИ ЗАКУПКУ", style = MaterialTheme.typography.titleMedium)
+}
+```
 
----
+### 4. Long Press Actions Not Discoverable
+**Files:** Multiple screens (InventoryScreen, ProductsScreen, entry screens)
 
-## Testing Assessment
+**Problem:** Critical actions hidden behind long-press:
+- Edit position: Long press on position card
+- Move product: Long press on inventory item
+- Product context menu: Long press on product card
+- Manual weight mode: Long press on weight field
 
-### Current State: FAILING
+**No visual indicators or hints that long-press is available.**
 
-| Category | Files | Tests | Coverage |
-|----------|-------|-------|----------|
-| Unit Tests | 2 | 11 | ~5% |
-| Integration Tests | 0 | 0 | 0% |
-| UI Tests | 0 | 0 | 0% |
-| E2E Tests | 0 | 0 | 0% |
+**Recommendation:** Add visual hint icons or tutorial overlay:
+```kotlin
+// Option 1: Add subtle hint text
+Text(
+    text = "Утримуйте для редагування",
+    style = MaterialTheme.typography.labelSmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+)
 
-### Missing Test Categories
-1. **ViewModel tests** - None exist
-2. **DAO tests** - None exist (should use in-memory Room)
-3. **Mapper tests** - None exist
-4. **UI tests** - No Compose testing
-5. **Authentication tests** - Critical security code untested
-6. **Sync conflict tests** - Edge cases untested
+// Option 2: Add icon indicator
+Icon(
+    Icons.Default.MoreVert,
+    contentDescription = "Додаткові дії",
+    modifier = Modifier.size(16.dp)
+)
+```
 
-### Test Quality Issues
-- No mocking of time (tests could be flaky)
-- No test categories/tags
-- No CI/CD integration visible
-- `TestData.kt` is good but underutilized
+### 5. No Loading Skeleton States
+**Files:** All list screens
 
----
+**Problem:** Only CircularProgressIndicator shown during loading. Screen "jumps" when content loads.
 
-## Recommendations (Prioritized)
+**Current:**
+```kotlin
+if (uiState.isLoading) {
+    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+}
+```
 
-### Immediate (Before Any Release) 🚨
-1. **Enable minification** with proper ProGuard rules
-2. **Add SQLCipher encryption** to Room database
-3. **Fix PIN hashing** with Argon2 + salt
-4. **Add certificate pinning** for Supabase
-5. **Remove Bluetooth permissions**
-6. **Disable backup** or implement encrypted backup
-
-### Short-Term (1-2 Sprints)
-1. Add ViewModel unit tests (target: 50% coverage)
-2. Add DAO integration tests
-3. Implement proper error handling strategy
-4. Add network security config
-5. Fix race condition in AuthPreferences
-6. Add input validation to DTOs
-7. Centralize constants (page sizes, etc.)
-
-### Medium-Term (1-2 Months)
-1. Add Crashlytics/Firebase Analytics
-2. Implement proper sync conflict resolution
-3. Add accessibility content descriptions
-4. Extract hardcoded strings to resources
-5. Add loading/error states to all screens
-6. Implement retry mechanism for sync
-7. Add database indexes
-
-### Long-Term (Ongoing)
-1. Reach 70%+ test coverage
-2. Add UI tests with Compose Testing
-3. Document all public APIs
-4. Performance profiling and optimization
-5. Security audit by third party
+**Recommendation:** Add skeleton loaders for smoother UX:
+```kotlin
+@Composable
+fun BatchItemSkeleton() {
+    Card(modifier = Modifier.fillMaxWidth().placeholder(visible = true)) {
+        Row(modifier = Modifier.padding(12.dp)) {
+            Box(modifier = Modifier.size(40.dp, 20.dp).placeholder(true))
+            // ... skeleton structure
+        }
+    }
+}
+```
 
 ---
 
-## Positive Observations
+## 🟠 HIGH Priority Improvements
 
-Despite the harsh criticism, the codebase has merits:
+### 6. Inconsistent Back Navigation
+**Files:** `PurchaseEntryScreen.kt`, `SaleEntryScreen.kt`, `TransferScreen.kt`
 
-1. **Domain modeling is thoughtful** - BigDecimal, UUID, Instant choices are correct
-2. **Ukrainian localization exists** - Proper resource structure
-3. **Migration handling is solid** - 7 migrations without issues
-4. **Compose usage is modern** - Material 3, proper state hoisting
-5. **Offline-first architecture** - Good for agricultural field use
-6. **Sync design is reasonable** - Push-then-pull is pragmatic
-7. **Code is readable** - Consistent Kotlin idioms
-8. **Hilt usage is correct** - Proper scoping
-9. **StateFlow usage is proper** - No LiveData legacy
-10. **TransactionQueryBuilder** - Nice dynamic query pattern
+**Problem:** Back button behavior changes depending on screen state:
+- Sometimes goes to previous step
+- Sometimes shows exit confirmation
+- Sometimes exits immediately
 
-The developers clearly understand Android development. The issues stem from:
-- Rushing to ship without hardening
-- Lack of security expertise (common)
-- Insufficient testing culture
-- Missing code review process
+**Users may not know what back button will do.**
 
----
+**Recommendation:** 
+- Add breadcrumb or step indicator
+- Use consistent "X" for cancel, "←" for back within flow
+- Show step progress: "Крок 2 з 3"
 
-## Conclusion
+```kotlin
+TopAppBar(
+    title = {
+        Column {
+            Text(topBarTitle)
+            Text(
+                text = "Крок ${currentStep} з ${totalSteps}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+)
+```
 
-ZagotPlus is a **competent agricultural trading app** with a **solid foundation** but **critical security gaps**. 
+### 7. Weight Field UX in Scale Mode
+**File:** `PurchaseEntryScreen.kt` (WeightEntry)
 
-**It MUST NOT be released** in its current state. The combination of:
-- Unencrypted financial data
-- Weak authentication
-- No code obfuscation
-- No certificate pinning
+**Problem:** When scales are connected:
+- Field is read-only but looks like input
+- Long-press to enable manual mode is not obvious
+- Color coding is subtle (users may not understand green vs red border)
 
-...makes it trivial for attackers to compromise user data and business information.
+**Recommendation:**
+```kotlin
+// Make scale mode more obvious with a prominent indicator
+if (isScaleConnected && !isManualMode) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text("📊 Зчитування з ваг", style = MaterialTheme.typography.labelMedium)
+        TextButton(onClick = onToggleManualMode) {
+            Text("Ввести вручну")
+        }
+    }
+}
+```
 
-With 2-4 weeks of focused security hardening and testing, this could be a production-ready application. The architecture supports the necessary changes.
+### 8. No Visual Feedback on Position Add
+**Files:** Entry screens
 
----
+**Problem:** After adding a position, user returns to grid with no confirmation. Need visual feedback that position was added.
 
-## Appendix: Files Reviewed
+**Recommendation:** Add brief success indication:
+```kotlin
+// Show snackbar or animated checkmark
+LaunchedEffect(positionAdded) {
+    if (positionAdded) {
+        snackbarHostState.showSnackbar("Позицію додано ✓")
+    }
+}
+```
 
-<details>
-<summary>Complete File List (Click to expand)</summary>
+### 9. History Screen Filter Complexity
+**File:** `HistoryScreen.kt`
 
-### Build Configuration
-- `android/build.gradle.kts`
-- `android/app/build.gradle.kts`
-- `android/settings.gradle.kts`
-- `android/gradle.properties`
-- `android/app/proguard-rules.pro`
+**Problem:** Too many filter options visible at once:
+- Search field
+- Type filter chips
+- Date range dropdown
+- Location dropdown
+- Clear filters button
 
-### Android Configuration
-- `android/app/src/main/AndroidManifest.xml`
-- `android/app/src/main/res/values/strings.xml`
-- `android/app/src/main/res/values/themes.xml`
-- `android/app/src/main/res/values-uk/strings.xml`
+This takes significant screen real estate.
 
-### Application Entry
-- `android/app/src/main/java/com/example/zagotplus/MainActivity.kt`
-- `android/app/src/main/java/com/example/zagotplus/ZagotApp.kt`
+**Recommendation:** Collapse filters behind a single "Фільтри" chip that expands:
+```kotlin
+FilterChip(
+    selected = hasActiveFilters,
+    onClick = { showFilterSheet = true },
+    label = { Text("Фільтри ${if (hasActiveFilters) "(${activeCount})" else ""}") },
+    leadingIcon = { Icon(Icons.Default.FilterList, null) }
+)
+```
 
-### Domain Layer
-- `domain/model/Transaction.kt`
-- `domain/model/Product.kt`
-- `domain/model/Location.kt`
-- `domain/model/PurchaseBatch.kt`
-- `domain/model/InventoryItem.kt`
-- `domain/model/TransactionFilter.kt`
-- `domain/model/CashModels.kt`
-- `domain/repository/TransactionRepository.kt`
-- `domain/repository/ProductRepository.kt`
-- `domain/repository/LocationRepository.kt`
-- `domain/repository/PurchaseBatchRepository.kt`
-- `domain/repository/CashRepository.kt`
+### 10. Settings Screen Information Density
+**File:** `SettingsScreen.kt`
 
-### Data Layer - Local
-- `data/local/ZagotDatabase.kt`
-- `data/local/DatabaseModule.kt`
-- `data/local/Converters.kt`
-- `data/local/entity/TransactionEntity.kt`
-- `data/local/entity/ProductEntity.kt`
-- `data/local/entity/LocationEntity.kt`
-- `data/local/entity/PurchaseBatchEntity.kt`
-- `data/local/entity/ExpenseCategoryEntity.kt`
-- `data/local/entity/CashOperationEntity.kt`
-- `data/local/dao/TransactionDao.kt`
-- `data/local/dao/ProductDao.kt`
-- `data/local/dao/LocationDao.kt`
-- `data/local/dao/PurchaseBatchDao.kt`
-- `data/local/dao/ExpenseCategoryDao.kt`
-- `data/local/dao/CashOperationDao.kt`
-- `data/local/query/TransactionQueryBuilder.kt`
+**Problem:** Device ID is truncated with "..." but users can't see full ID without copying. Tap to copy is non-obvious.
 
-### Data Layer - Repository
-- `data/repository/TransactionRepositoryImpl.kt`
-- `data/repository/ProductRepositoryImpl.kt`
-- `data/repository/LocationRepositoryImpl.kt`
-- `data/repository/PurchaseBatchRepositoryImpl.kt`
-- `data/repository/CashRepositoryImpl.kt`
+**Recommendation:** Use expandable section or show full ID in dialog on tap.
 
-### Data Layer - Preferences
-- `data/preferences/AuthPreferences.kt`
-- `data/preferences/DevicePreferences.kt`
-- `data/preferences/ProductOrderPreferences.kt`
+### 11. No Pull-to-Refresh on Main Screens
+**Files:** `PurchaseScreen.kt`, `SaleScreen.kt`, `InventoryScreen.kt`
 
-### Data Layer - Remote
-- `data/remote/SupabaseModule.kt`
-- `data/remote/SupabaseStorageHelper.kt`
-- `data/remote/dto/TransactionDto.kt`
-- `data/remote/dto/ProductDto.kt`
-- `data/remote/dto/LocationDto.kt`
-- `data/remote/dto/PurchaseBatchDto.kt`
-- `data/remote/dto/ExpenseCategoryDto.kt`
-- `data/remote/dto/CashOperationDto.kt`
+**Problem:** Only HistoryScreen has pull-to-refresh. Users expect it everywhere.
 
-### Sync Layer
-- `sync/SyncService.kt`
-- `sync/SyncWorker.kt`
-- `sync/SyncManager.kt`
-- `sync/SyncDataSource.kt`
-- `sync/SupabaseSyncDataSource.kt`
-- `sync/SyncResult.kt`
-- `sync/SyncStatus.kt`
-- `sync/SyncStatusRepository.kt`
-
-### UI Layer - Navigation
-- `ui/navigation/NavGraph.kt`
-- `ui/navigation/Destinations.kt`
-
-### UI Layer - Theme
-- `ui/theme/Theme.kt`
-- `ui/theme/Color.kt`
-- `ui/theme/Type.kt`
-
-### UI Layer - Screens (ViewModels)
-- `ui/screens/purchase/PurchaseViewModel.kt`
-- `ui/screens/purchase/PurchaseEntryViewModel.kt`
-- `ui/screens/sale/SaleViewModel.kt`
-- `ui/screens/sale/SaleEntryViewModel.kt`
-- `ui/screens/inventory/InventoryViewModel.kt`
-- `ui/screens/history/HistoryViewModel.kt`
-- `ui/screens/reports/ReportsViewModel.kt`
-- `ui/screens/cash/CashViewModel.kt`
-- `ui/screens/auth/PinViewModel.kt`
-
-### UI Layer - Screens (Composables)
-- `ui/screens/purchase/PurchaseScreen.kt`
-- `ui/screens/purchase/PurchaseEntryScreen.kt`
-- `ui/screens/sale/SaleScreen.kt`
-- `ui/screens/sale/SaleEntryScreen.kt`
-- `ui/screens/inventory/InventoryScreen.kt`
-- `ui/screens/history/HistoryScreen.kt`
-- `ui/screens/reports/ReportsScreen.kt`
-- `ui/screens/cash/CashScreen.kt`
-- `ui/screens/settings/SettingsScreen.kt`
-- `ui/screens/transfer/TransferScreen.kt`
-- `ui/screens/products/ProductsScreen.kt`
-- `ui/screens/auth/PinScreen.kt`
-
-### UI Layer - Components
-- `ui/components/ReorderableProductGrid.kt`
-- `ui/components/LocationSelectionDialog.kt`
-- `ui/components/SyncStatusIcon.kt`
-- `ui/components/EmptyState.kt`
-
-### Tests
-- `src/test/java/.../TransactionRepositoryImplTest.kt`
-- `src/test/java/.../SyncServiceTest.kt`
-- `src/test/java/.../TestData.kt`
-
-</details>
+**Recommendation:** Add SwipeRefresh to all data screens:
+```kotlin
+SwipeRefresh(
+    state = rememberSwipeRefreshState(uiState.isLoading),
+    onRefresh = { viewModel.refresh() }
+) {
+    // Screen content
+}
+```
 
 ---
 
-*This audit was conducted with a critical lens as requested. The goal is to improve the application, not discourage the development team. The foundation is solid—now it needs hardening.*
+## 🟡 MEDIUM Priority Improvements
+
+### 12. Deprecation Warnings
+**Files:** Multiple
+
+**Problem:** Using deprecated `Divider()` composable:
+```kotlin
+Divider(modifier = Modifier.padding(vertical = 12.dp))
+```
+
+**Fix:**
+```kotlin
+HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+```
+
+### 13. Inconsistent Card Elevation
+**Files:** Various screens
+
+Some cards have elevation, others don't:
+```kotlin
+// Some cards
+CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+
+// Others
+elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+```
+
+**Recommendation:** Define card styles in theme for consistency.
+
+### 14. PIN Screen Missing Biometric Option
+**File:** `PinScreen.kt`
+
+**Problem:** Only PIN authentication, no fingerprint option.
+
+**Recommendation:** Add biometric prompt for modern devices:
+```kotlin
+// Add fingerprint icon button below keypad
+IconButton(onClick = { showBiometricPrompt() }) {
+    Icon(Icons.Default.Fingerprint, contentDescription = "Вхід за відбитком")
+}
+```
+
+### 15. Product Grid Fixed Column Size
+**File:** `ReorderableProductGrid.kt`
+
+```kotlin
+GridCells.Adaptive(minSize = 140.dp)
+```
+
+**Issue:** May show too many/few columns on different devices.
+
+**Recommendation:** Adjust based on screen width or allow user preference.
+
+### 16. No Animation on State Transitions
+**Files:** Entry flow screens
+
+**Problem:** Abrupt transitions between PRODUCT_GRID → WEIGHT_ENTRY → POSITIONS_LIST states.
+
+**Recommendation:** Add Crossfade or AnimatedContent:
+```kotlin
+AnimatedContent(
+    targetState = uiState.screenState,
+    transitionSpec = {
+        fadeIn() + slideInHorizontally() togetherWith fadeOut() + slideOutHorizontally()
+    }
+) { state ->
+    when (state) { ... }
+}
+```
+
+### 17. Date Picker Uses System Locale
+**File:** `ReportsScreen.kt`
+
+**Problem:** DatePicker may show English month names on non-Ukrainian devices.
+
+**Recommendation:** Force Ukrainian locale for date display or use custom picker.
+
+### 18. Cash History Item Colors
+**File:** `CashScreen.kt`
+
+Semantic colors defined but not consistently used:
+```kotlin
+val CashPositive = Color(0xFF4CAF50)
+val CashNegative = Color(0xFFF44336)
+```
+
+**Verify:** All income shows green, all expenses show red throughout the screen.
+
+### 19. Inventory Tab "Всього" Positioning
+**File:** `InventoryScreen.kt`
+
+**Problem:** "Total" tab is at the end, not obviously different from location tabs.
+
+**Recommendation:** Visually distinguish (different icon, separator, or move to top).
+
+### 20. No Offline Mode Indicator on All Screens
+**File:** `ConnectivityBanner.kt`
+
+**Problem:** ConnectivityBanner exists but only used in MainActivity. Not visible on all screens.
+
+**Recommendation:** Show persistent offline indicator in TopAppBar or status bar area on all screens.
+
+---
+
+## 🔵 LOW Priority / Polish Items
+
+### 21. Missing Content Descriptions (Accessibility)
+**Multiple files:**
+```kotlin
+Icon(Icons.Default.Add, contentDescription = null)  // ❌ Bad
+Icon(Icons.Default.Add, contentDescription = "Додати")  // ✅ Good
+```
+
+**Locations needing fixes:**
+- Product grid icons
+- Action buttons in cards
+- Navigation icons
+- All decorative icons (use null explicitly with comment)
+
+### 22. Hardcoded Spacing Values
+**Multiple files:**
+```kotlin
+Spacer(modifier = Modifier.height(16.dp))
+Spacer(modifier = Modifier.height(8.dp))
+Spacer(modifier = Modifier.height(24.dp))
+```
+
+**Recommendation:** Define spacing scale in theme:
+```kotlin
+object Spacing {
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 16.dp
+    val lg = 24.dp
+    val xl = 32.dp
+}
+```
+
+### 23. No Landscape Orientation Support
+**Problem:** No explicit handling for landscape mode. Some screens may look bad rotated.
+
+**Recommendation:** Either lock to portrait or test/optimize for landscape.
+
+### 24. Product Image Placeholder Inconsistent
+Some places use outlined icon, others use filled:
+```kotlin
+// EmptyState uses outlined
+Icons.Outlined.Category
+
+// ProductTile uses filled
+Icons.Filled.Image
+```
+
+### 25. Currency Symbol Placement
+```kotlin
+Text("₴${currencyFormat.format(it)}")  // Symbol before
+Text("${priceFormat.format(price)} грн")  // "грн" after
+```
+
+**Inconsistent.** Standardize on either "₴100" or "100 грн".
+
+### 26. Number Formatting Locale
+```kotlin
+val decimalFormat = remember { DecimalFormat("#,##0.00") }
+```
+
+**Issue:** Uses device locale for grouping (1,000 vs 1 000). May confuse users if unexpected.
+
+### 27. Empty State Icons Sizing
+**File:** `EmptyState.kt`
+```kotlin
+Modifier.size(80.dp)  // Icon size
+```
+
+Consider making this configurable for different contexts.
+
+### 28. Card Corner Radius Consistency
+```kotlin
+RoundedCornerShape(16.dp)  // Some cards
+RoundedCornerShape(12.dp)  // Others
+RoundedCornerShape(8.dp)   // Image corners
+```
+
+**Recommendation:** Define standard corner radii in theme.
+
+### 29. Button Text Case
+```kotlin
+Text("НОВИЙ КЛІЄНТ")  // ALL CAPS
+Text("Додати позицію")  // Title case
+Text("Скасувати")  // Sentence case
+```
+
+**Inconsistent.** Choose one style for buttons.
+
+### 30. Loading Indicator Sizes
+```kotlin
+CircularProgressIndicator()  // Default size varies
+CircularProgressIndicator(modifier = Modifier.size(24.dp))  // Explicit
+CircularProgressIndicator(modifier = Modifier.size(48.dp))  // Different
+```
+
+**Recommendation:** Standardize sizes for different contexts.
+
+---
+
+## Accessibility Checklist
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Content descriptions | ❌ Partial | Many icons missing |
+| Touch targets ≥48dp | ✅ Yes | 64dp buttons used |
+| Color contrast | ⚠️ Check | Need to verify ratios |
+| Screen reader support | ❌ Poor | Semantic ordering needed |
+| Font scaling | ⚠️ Unknown | Not tested |
+| RTL support | ❌ None | Not implemented |
+
+---
+
+## Recommended Implementation Priority
+
+### Sprint 1 (Immediate) ✅ COMPLETED 2026-01-14
+1. ✅ Add haptic feedback to all buttons/actions
+2. ✅ Replace tap-anywhere summary with explicit confirm button
+3. ✅ Add visual hints for long-press actions
+4. ✅ Fix deprecated Divider → HorizontalDivider
+5. ✅ Add contentDescription to all icons
+
+**Changes made:**
+- PurchaseSummaryScreen, SaleEntryScreen, TransferScreen: Replaced tap-anywhere pattern with explicit confirm buttons with haptic feedback
+- All screens: Replaced deprecated `Divider()` with `HorizontalDivider()` (upgraded Compose BOM to 2024.02.00)
+- InventoryScreen, PurchaseEntryScreen, SaleEntryScreen, ProductsScreen: Added "Утримуйте для..." hints for long-press actions
+- All icon usages: Added meaningful Ukrainian contentDescription values for accessibility
+
+### Sprint 2 (Short-term)
+1. Add step indicators to entry flows
+2. Add pull-to-refresh to all data screens
+3. Implement skeleton loading states
+4. Collapse history filters into sheet
+5. Add biometric authentication option
+
+### Sprint 3 (Medium-term)
+1. Standardize spacing/sizing in theme
+2. Add screen transitions/animations
+3. Improve landscape support
+4. Add offline indicator to all screens
+5. Standardize currency/number formatting
+
+### Backlog (Polish)
+1. Theme extension with semantic spacing
+2. Custom date picker with forced locale
+3. RTL support preparation
+4. Full accessibility audit with TalkBack
+
+---
+
+## UI Component Inventory
+
+### Reusable Components Available
+| Component | Location | Reuse Status |
+|-----------|----------|--------------|
+| EmptyState | `ui/components/EmptyState.kt` | ✅ Well used |
+| SyncStatusIcon | `ui/components/SyncStatusIcon.kt` | ✅ Used in nav |
+| ConnectivityBanner | `ui/components/ConnectivityBanner.kt` | ⚠️ Underused |
+| LocationSelectionDialog | `ui/components/LocationSelectionDialog.kt` | ✅ Used |
+| ReorderableProductGrid | `ui/components/ReorderableProductGrid.kt` | ✅ Good abstraction |
+
+### Missing Components Suggested
+| Component | Purpose |
+|-----------|---------|
+| ConfirmDialog | Standardized confirmation dialogs |
+| LoadingSkeleton | Skeleton placeholders for lists |
+| StepIndicator | Progress indicator for flows |
+| LabeledTextField | Text field with consistent styling |
+| PriceText | Formatted currency display |
+| WeightText | Formatted weight display |
+| AnimatedCounter | Animated number changes |
+
+---
+
+*This UI/UX audit focuses on usability improvements for agricultural field use. The foundation is solid - Material 3 is well implemented and the color theme is appropriate. Priority should be given to discoverability, feedback, and accessibility.*

@@ -48,8 +48,10 @@ class SyncWorker @AssistedInject constructor(
 
                 is SyncResult.Partial -> {
                     // Partial success - data was pushed, but pull failed
-                    // Mark as idle (not error) since push succeeded
-                    syncStatusRepository.setIdle()
+                    // Set warning status so user knows data might be incomplete
+                    syncStatusRepository.setWarning(
+                        "Дані збережено, але не всі оновлення завантажені"
+                    )
                     Log.w(TAG, "Sync partial: pushed=${result.pushed}, pull failed: ${result.pullError}")
                     // Return success - we'll try pull again on next sync
                     Result.success()

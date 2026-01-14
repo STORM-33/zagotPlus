@@ -14,6 +14,31 @@
     <string name="cash_payment">Оплата</string>
     <string name="cash_balance">Баланс</string>
     <string name="cash_insufficient_funds">Недостатньо коштів</string>
+    <string name="cash_title">Каса</string>
+    <string name="cash_deposit_action">Внести</string>
+    <string name="cash_withdraw_action">Вивести</string>
+    <string name="cash_payment_action">Оплатити</string>
+    <string name="cash_history_title">Історія операцій</string>
+    <string name="cash_no_operations">Немає операцій</string>
+    <string name="cash_all_loaded">Усі операції завантажено</string>
+    <string name="cash_today">Сьогодні: %1$s</string>
+    <string name="cash_deposit_dialog_title">Поповнення каси</string>
+    <string name="cash_withdraw_dialog_title">Виведення з каси</string>
+    <string name="cash_payment_dialog_title">Оплата витрат</string>
+    <string name="cash_categories_title">Категорії витрат</string>
+    <string name="cash_amount_label">Сума</string>
+    <string name="cash_notes_label">Примітка (опціонально)</string>
+    <string name="cash_category_label">Категорія</string>
+    <string name="cash_no_category">Без категорії</string>
+    <string name="cash_new_category_label">Нова категорія</string>
+    <string name="cash_no_categories">Немає категорій</string>
+    <string name="cash_available">Доступно: %1$s</string>
+    <string name="cash_close">Закрити</string>
+    <string name="cash_history_deposit">Поповнення</string>
+    <string name="cash_history_withdrawal">Виведення</string>
+    <string name="cash_history_payment">Оплата</string>
+    <string name="cash_history_purchase">Закупки</string>
+    <string name="cash_history_sale">Продажі</string>
     
     <!-- Common -->
     <string name="save">Зберегти</string>

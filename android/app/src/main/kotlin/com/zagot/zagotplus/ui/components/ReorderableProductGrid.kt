@@ -176,7 +176,7 @@ private fun ProductTile(
                 } else {
                     Icon(
                         imageVector = Icons.Filled.Image,
-                        contentDescription = null,
+                        contentDescription = "Фото товару",
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

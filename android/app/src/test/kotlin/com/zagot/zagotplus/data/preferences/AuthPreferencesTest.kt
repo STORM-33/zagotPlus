@@ -163,8 +163,9 @@ class AuthPreferencesTest {
     }
 
     @Test
-    fun `lockout is set after 3 failed attempts`() {
-        every { sharedPreferences.getInt("failed_attempts", 0) } returns 2
+    fun `lockout is set after 4 failed attempts`() {
+        // Lockout starts after 4 attempts (exponential backoff: 1-3 = no lockout, 4+ = lockout)
+        every { sharedPreferences.getInt("failed_attempts", 0) } returns 3
         
         authPreferences.recordFailedAttempt()
         

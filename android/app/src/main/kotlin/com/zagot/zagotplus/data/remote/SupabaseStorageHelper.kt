@@ -38,6 +38,9 @@ class SupabaseStorageHelper @Inject constructor(
         private const val MAX_COMPRESSED_SIZE_KB = 500 // 500KB after compression
         private const val MAX_IMAGE_WIDTH = 1080
     }
+    
+    // Cache for URL check results to avoid repeated string operations
+    private val urlCheckCache = mutableMapOf<String, Boolean>()
 
     /**
      * Upload an image from a content:// or file:// URI to Supabase Storage.
@@ -156,9 +159,13 @@ class SupabaseStorageHelper @Inject constructor(
 
     /**
      * Check if the URI is a Supabase Storage URL.
+     * Results are cached to avoid repeated string operations.
      */
     fun isSupabaseUrl(uri: String?): Boolean {
-        return uri?.contains("/storage/v1/object/public/$BUCKET_NAME/") == true
+        if (uri == null) return false
+        return urlCheckCache.getOrPut(uri) { 
+            uri.contains("/storage/v1/object/public/$BUCKET_NAME/") 
+        }
     }
 
     /**

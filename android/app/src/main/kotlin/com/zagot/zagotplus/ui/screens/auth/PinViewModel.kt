@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.AuthPreferences
+import com.zagot.zagotplus.data.preferences.AuthPreferencesImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +28,9 @@ class PinViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             mode = if (isSettingPin) PinMode.SET_PIN else PinMode.VERIFY_PIN,
             isLockedOut = isLockedOut,
-            failedAttempts = failedAttempts
+            failedAttempts = failedAttempts,
+            minPinLength = AuthPreferencesImpl.MIN_PIN_LENGTH,
+            maxPinLength = AuthPreferencesImpl.MAX_PIN_LENGTH
         )
         
         if (isLockedOut) {
@@ -37,7 +40,7 @@ class PinViewModel @Inject constructor(
 
     fun onDigitPressed(digit: Int) {
         val currentState = _uiState.value
-        if (currentState.currentPin.length >= 4 || currentState.isLockedOut) return
+        if (currentState.currentPin.length >= currentState.maxPinLength || currentState.isLockedOut) return
 
         val newPin = currentState.currentPin + digit.toString()
         _uiState.value = currentState.copy(
@@ -45,11 +48,11 @@ class PinViewModel @Inject constructor(
             errorMessage = null
         )
 
-        if (newPin.length == 4) {
-            when (currentState.mode) {
-                PinMode.SET_PIN -> handleSetPinComplete(newPin)
-                PinMode.CONFIRM_PIN -> handleConfirmPinComplete(newPin)
-                PinMode.VERIFY_PIN -> handleVerifyPinComplete(newPin)
+        // Auto-submit when PIN reaches expected length for verification
+        if (currentState.mode == PinMode.VERIFY_PIN && newPin.length >= currentState.minPinLength) {
+            // Try to verify - but only auto-submit at max length
+            if (newPin.length == currentState.maxPinLength) {
+                handleVerifyPinComplete(newPin)
             }
         }
     }
@@ -62,6 +65,28 @@ class PinViewModel @Inject constructor(
             currentPin = currentPin.dropLast(1),
             errorMessage = null
         )
+    }
+
+    /**
+     * Called when user presses the confirm/submit button.
+     * Required for variable-length PINs.
+     */
+    fun onConfirmPressed() {
+        val currentState = _uiState.value
+        val pin = currentState.currentPin
+        
+        if (pin.length < currentState.minPinLength) {
+            _uiState.value = currentState.copy(
+                errorMessage = "PIN має бути мінімум ${currentState.minPinLength} цифр"
+            )
+            return
+        }
+        
+        when (currentState.mode) {
+            PinMode.SET_PIN -> handleSetPinComplete(pin)
+            PinMode.CONFIRM_PIN -> handleConfirmPinComplete(pin)
+            PinMode.VERIFY_PIN -> handleVerifyPinComplete(pin)
+        }
     }
 
     private fun handleSetPinComplete(pin: String) {
@@ -98,19 +123,26 @@ class PinViewModel @Inject constructor(
             authPreferences.recordFailedAttempt()
             val failedAttempts = authPreferences.getFailedAttempts()
             val isLockedOut = authPreferences.isLockedOut()
+            val lockoutSeconds = authPreferences.getLockoutRemainingSeconds()
             
             if (isLockedOut) {
+                val lockoutMessage = if (lockoutSeconds >= 60) {
+                    "Забагато невдалих спроб. Зачекайте ${lockoutSeconds / 60} хв."
+                } else {
+                    "Забагато невдалих спроб. Зачекайте ${lockoutSeconds} сек."
+                }
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
-                    errorMessage = "Забагато невдалих спроб. Зачекайте 30 секунд.",
+                    errorMessage = lockoutMessage,
                     failedAttempts = failedAttempts,
                     isLockedOut = true
                 )
                 startLockoutCountdown()
             } else {
+                val attemptsRemaining = 5 - failedAttempts
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
-                    errorMessage = "Неправильний PIN. Спроб залишилось: ${3 - failedAttempts}",
+                    errorMessage = "Неправильний PIN. Спроб залишилось: $attemptsRemaining",
                     failedAttempts = failedAttempts
                 )
             }
@@ -139,8 +171,13 @@ data class PinUiState(
     val errorMessage: String? = null,
     val failedAttempts: Int = 0,
     val isLockedOut: Boolean = false,
-    val isAuthenticated: Boolean = false
-)
+    val isAuthenticated: Boolean = false,
+    val minPinLength: Int = 4,
+    val maxPinLength: Int = 4
+) {
+    val canSubmit: Boolean
+        get() = currentPin.length >= minPinLength && !isLockedOut
+}
 
 enum class PinMode {
     SET_PIN,      // First-time PIN setup

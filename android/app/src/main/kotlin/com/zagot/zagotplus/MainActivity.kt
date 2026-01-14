@@ -1,8 +1,12 @@
 package com.zagot.zagotplus
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import java.util.Locale
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,6 +46,15 @@ class MainActivity : ComponentActivity() {
     private var isAuthenticated by mutableStateOf(false)
     private var needsLocationSelection by mutableStateOf(false)
 
+    override fun attachBaseContext(newBase: Context) {
+        // Force Ukrainian locale
+        val ukrainianLocale = Locale("uk")
+        Locale.setDefault(ukrainianLocale)
+        val config = Configuration(newBase.resources.configuration)
+        config.setLocale(ukrainianLocale)
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -49,6 +62,9 @@ class MainActivity : ComponentActivity() {
         isAuthenticated = authPreferences.isAuthenticated()
         // Check if location selection is needed (first install or location cleared)
         needsLocationSelection = isAuthenticated && devicePreferences.getSelectedLocationId() == null
+        
+        // Set FLAG_SECURE initially if not authenticated (prevents screenshots of PIN screen)
+        updateSecureFlag()
 
         setContent {
             ZagotPlusTheme {
@@ -64,6 +80,8 @@ class MainActivity : ComponentActivity() {
                                     isAuthenticated = true
                                     // Check if location needs to be selected after PIN setup
                                     needsLocationSelection = devicePreferences.getSelectedLocationId() == null
+                                    // Remove FLAG_SECURE after authentication
+                                    updateSecureFlag()
                                 }
                             )
                         }
@@ -98,6 +116,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+    
+    /**
+     * Updates FLAG_SECURE based on authentication state.
+     * When not authenticated (showing PIN screen), prevents screenshots/screen recording.
+     */
+    private fun updateSecureFlag() {
+        if (!isAuthenticated) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 }

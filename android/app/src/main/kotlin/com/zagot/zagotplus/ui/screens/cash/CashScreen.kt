@@ -60,16 +60,21 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.R
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import com.zagot.zagotplus.ui.theme.CashInfo
+import com.zagot.zagotplus.ui.theme.CashNegative
+import com.zagot.zagotplus.ui.theme.CashPositive
+import com.zagot.zagotplus.ui.theme.CashWarning
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
 import java.time.format.DateTimeFormatter
@@ -94,15 +99,15 @@ fun CashScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Каса") },
+                title = { Text(stringResource(R.string.cash_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.showCategoriesDialog() }) {
-                        Icon(Icons.Filled.Category, contentDescription = "Категорії")
+                        Icon(Icons.Filled.Category, contentDescription = stringResource(R.string.cash_categories_title))
                     }
                 }
             )
@@ -150,7 +155,7 @@ fun CashScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Історія операцій",
+                        text = stringResource(R.string.cash_history_title),
                         style = MaterialTheme.typography.titleMedium
                     )
                     if (uiState.totalItemsCount > 0) {
@@ -216,7 +221,7 @@ fun CashScreen(
                     if (uiState.historyItems.isEmpty() && !uiState.isLoading) {
                         item {
                             Text(
-                                text = "Немає операцій",
+                                text = stringResource(R.string.cash_no_operations),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
@@ -228,7 +233,7 @@ fun CashScreen(
                     if (!uiState.hasMoreItems && uiState.historyItems.isNotEmpty()) {
                         item {
                             Text(
-                                text = "Усі операції завантажено",
+                                text = stringResource(R.string.cash_all_loaded),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
@@ -311,7 +316,7 @@ private fun BalanceCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Каса",
+                text = stringResource(R.string.cash_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -327,13 +332,13 @@ private fun BalanceCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val changeColor = when {
-                    dailyChange > BigDecimal.ZERO -> Color(0xFF4CAF50)
-                    dailyChange < BigDecimal.ZERO -> Color(0xFFF44336)
+                    dailyChange > BigDecimal.ZERO -> CashPositive
+                    dailyChange < BigDecimal.ZERO -> CashNegative
                     else -> MaterialTheme.colorScheme.onPrimaryContainer
                 }
                 val changePrefix = if (dailyChange > BigDecimal.ZERO) "+" else ""
                 Text(
-                    text = "Сьогодні: $changePrefix${dailyChange.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = changeColor
                 )
@@ -361,29 +366,29 @@ private fun ActionButtons(
                 onClick = onDeposit,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50)
+                    containerColor = CashPositive
                 )
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Add, contentDescription = "Поповнення", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Внести")
+                Text(stringResource(R.string.cash_deposit_action))
             }
             OutlinedButton(
                 onClick = onWithdraw,
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Remove, contentDescription = "Видача", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Вивести")
+                Text(stringResource(R.string.cash_withdraw_action))
             }
         }
         Button(
             onClick = onPayment,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Filled.Payment, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.Payment, contentDescription = "Витрати", modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Оплатити")
+            Text(stringResource(R.string.cash_payment_action))
         }
     }
 }
@@ -393,33 +398,37 @@ private fun HistoryItem(
     item: CashHistoryItem,
     modifier: Modifier = Modifier
 ) {
-    val blueColor = Color(0xFF2196F3) // Blue for purchases and sales
+    val depositLabel = stringResource(R.string.cash_history_deposit)
+    val withdrawalLabel = stringResource(R.string.cash_history_withdrawal)
+    val paymentLabel = stringResource(R.string.cash_history_payment)
+    val purchaseLabel = stringResource(R.string.cash_history_purchase)
+    val saleLabel = stringResource(R.string.cash_history_sale)
     
     val (icon, color, label) = when (item.type) {
         CashHistoryItemType.DEPOSIT -> Triple(
             Icons.Filled.ArrowDownward,
-            Color(0xFF4CAF50),
-            "Поповнення"
+            CashPositive,
+            depositLabel
         )
         CashHistoryItemType.WITHDRAWAL -> Triple(
             Icons.Filled.ArrowUpward,
-            Color(0xFFF44336),
-            "Виведення"
+            CashNegative,
+            withdrawalLabel
         )
         CashHistoryItemType.PAYMENT -> Triple(
             Icons.Filled.Payment,
-            Color(0xFFFF9800),
-            item.categoryName ?: "Оплата"
+            CashWarning,
+            item.categoryName ?: paymentLabel
         )
         CashHistoryItemType.PURCHASE -> Triple(
             Icons.Filled.Remove,
-            blueColor,
-            "Закупки"
+            CashInfo,
+            purchaseLabel
         )
         CashHistoryItemType.SALE -> Triple(
             Icons.Filled.Add,
-            blueColor,
-            "Продажі"
+            CashInfo,
+            saleLabel
         )
     }
 
@@ -447,7 +456,7 @@ private fun HistoryItem(
             ) {
                 Icon(
                     imageVector = icon,
-                    contentDescription = null,
+                    contentDescription = "Тип операції",
                     tint = color,
                     modifier = Modifier.size(24.dp)
                 )
@@ -522,13 +531,13 @@ private fun DepositDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Поповнення каси") },
+        title = { Text(stringResource(R.string.cash_deposit_dialog_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -541,7 +550,7 @@ private fun DepositDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -558,13 +567,13 @@ private fun DepositDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Внести")
+                    Text(stringResource(R.string.cash_deposit_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -584,11 +593,11 @@ private fun WithdrawDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Виведення з каси") },
+        title = { Text(stringResource(R.string.cash_withdraw_dialog_title)) },
         text = {
             Column {
                 Text(
-                    text = "Доступно: ${balance.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -596,7 +605,7 @@ private fun WithdrawDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -609,7 +618,7 @@ private fun WithdrawDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -626,13 +635,13 @@ private fun WithdrawDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Вивести")
+                    Text(stringResource(R.string.cash_withdraw_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -659,11 +668,11 @@ private fun PaymentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Оплата витрат") },
+        title = { Text(stringResource(R.string.cash_payment_dialog_title)) },
         text = {
             Column {
                 Text(
-                    text = "Доступно: ${balance.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -671,7 +680,7 @@ private fun PaymentDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -682,15 +691,16 @@ private fun PaymentDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val noCategoryLabel = stringResource(R.string.cash_no_category)
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedCategory?.name ?: "Без категорії",
+                        value = selectedCategory?.name ?: noCategoryLabel,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Категорія") },
+                        label = { Text(stringResource(R.string.cash_category_label)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -701,7 +711,7 @@ private fun PaymentDialog(
                         onDismissRequest = { expanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Без категорії") },
+                            text = { Text(noCategoryLabel) },
                             onClick = {
                                 onCategorySelect(null)
                                 expanded = false
@@ -723,7 +733,7 @@ private fun PaymentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -740,13 +750,13 @@ private fun PaymentDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Оплатити")
+                    Text(stringResource(R.string.cash_payment_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -763,7 +773,7 @@ private fun CategoriesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Категорії витрат") },
+        title = { Text(stringResource(R.string.cash_categories_title)) },
         text = {
             Column {
                 Row(
@@ -773,7 +783,7 @@ private fun CategoriesDialog(
                     OutlinedTextField(
                         value = newCategoryName,
                         onValueChange = onNewCategoryNameChange,
-                        label = { Text("Нова категорія") },
+                        label = { Text(stringResource(R.string.cash_new_category_label)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -782,7 +792,7 @@ private fun CategoriesDialog(
                         onClick = onAddCategory,
                         enabled = newCategoryName.isNotBlank()
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Додати")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.save))
                     }
                 }
 
@@ -790,7 +800,7 @@ private fun CategoriesDialog(
 
                 if (categories.isEmpty()) {
                     Text(
-                        text = "Немає категорій",
+                        text = stringResource(R.string.cash_no_categories),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -812,7 +822,7 @@ private fun CategoriesDialog(
                             ) {
                                 Icon(
                                     Icons.Filled.Delete,
-                                    contentDescription = "Видалити",
+                                    contentDescription = stringResource(R.string.delete),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -823,7 +833,7 @@ private fun CategoriesDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Закрити")
+                Text(stringResource(R.string.cash_close))
             }
         }
     )

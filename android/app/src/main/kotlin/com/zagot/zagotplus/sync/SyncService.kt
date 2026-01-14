@@ -55,6 +55,12 @@ class SyncService @Inject constructor(
 
         // Capture the sync timestamp ONCE at the start for all pull operations
         val syncStartTimestamp = syncPreferences.getLastSyncTimestamp()
+        
+        // Track non-fatal warnings for reference data pull failures
+        val warnings = mutableListOf<String>()
+        
+        // Track max server_updated_at from all pulled records
+        val maxServerUpdatedAt = MaxTimestampTracker()
 
         // Step 1: Push pending products (before other entities due to FK)
         val productPushResult = try {
@@ -69,7 +75,8 @@ class SyncService @Inject constructor(
         Log.d(TAG, "Pushed ${productPushResult.successCount} products (${productPushResult.failedCount} failed)")
 
         // Step 2: Pull reference data (non-critical, log and continue on failure)
-        pullReferenceData()
+        val refDataWarnings = pullReferenceData()
+        warnings.addAll(refDataWarnings)
 
         // Step 3: Push pending expense categories (before cash operations due to FK)
         val categoryPushResult = try {
@@ -133,7 +140,7 @@ class SyncService @Inject constructor(
 
         // Step 7: Pull new expense categories
         val categoryPullResult = try {
-            pullNewExpenseCategories(syncStartTimestamp)
+            pullNewExpenseCategories(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Expense category pull failed after successful push", e)
             0
@@ -142,7 +149,7 @@ class SyncService @Inject constructor(
 
         // Step 8: Pull new batches
         val batchPullResult = try {
-            pullNewBatches(syncStartTimestamp)
+            pullNewBatches(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Batch pull failed after successful push", e)
             // Continue to transaction pull
@@ -152,7 +159,7 @@ class SyncService @Inject constructor(
 
         // Step 8b: Pull new sale batches
         val saleBatchPullResult = try {
-            pullNewSaleBatches(syncStartTimestamp)
+            pullNewSaleBatches(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Sale batch pull failed after successful push", e)
             0
@@ -161,37 +168,61 @@ class SyncService @Inject constructor(
 
         // Step 9: Pull new transactions
         val pullResult = try {
-            pullNewTransactions(syncStartTimestamp)
+            pullNewTransactions(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
             return SyncResult.Partial(
                 pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
-                pullError = e.message ?: "Pull failed"
+                pullError = e.message ?: "Pull failed",
+                warnings = warnings
             )
         }
         Log.d(TAG, "Pulled $pullResult transactions")
 
         // Step 10: Pull new cash operations
         val cashPullResult = try {
-            pullNewCashOperations(syncStartTimestamp)
+            pullNewCashOperations(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Cash operations pull failed after successful push", e)
             0
         }
         Log.d(TAG, "Pulled $cashPullResult cash operations")
 
-        // Update last sync timestamp to NOW (after all pulls complete)
-        // IMPORTANT: We use Instant.now() instead of syncStartTimestamp to avoid race condition
-        // where data created between syncStartTimestamp and pull completion would be missed.
-        // The pull queries use server_updated_at, which is set by Postgres trigger on insert,
-        // so there's no gap - we'll pick up those records on the next sync.
-        syncPreferences.setLastSyncTimestamp(Instant.now())
+        // Update last sync timestamp using the maximum server_updated_at from pulled records
+        // minus 1 second to avoid missing records created at the exact same timestamp.
+        // This prevents the race condition where data created on server during sync might be missed.
+        val newTimestamp = maxServerUpdatedAt.getMaxTimestamp()?.minusSeconds(1) ?: Instant.now()
+        syncPreferences.setLastSyncTimestamp(newTimestamp)
+        Log.d(TAG, "Updated last sync timestamp to $newTimestamp")
 
         return SyncResult.Success(
             pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
-            pulled = pullResult + batchPullResult + saleBatchPullResult + categoryPullResult + cashPullResult
+            pulled = pullResult + batchPullResult + saleBatchPullResult + categoryPullResult + cashPullResult,
+            warnings = warnings
         )
+    }
+    
+    /**
+     * Helper class to track the maximum server_updated_at timestamp across all pulled records.
+     */
+    private class MaxTimestampTracker {
+        private var maxTimestamp: Instant? = null
+        
+        fun update(timestamp: String?) {
+            if (timestamp == null) return
+            try {
+                val instant = Instant.parse(timestamp)
+                val current = maxTimestamp
+                if (current == null || instant.isAfter(current)) {
+                    maxTimestamp = instant
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse server_updated_at: $timestamp", e)
+            }
+        }
+        
+        fun getMaxTimestamp(): Instant? = maxTimestamp
     }
 
     /**
@@ -249,9 +280,10 @@ class SyncService @Inject constructor(
      * not when the client created it.
      *
      * @param since Timestamp to filter transactions updated after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewTransactions(since: Instant): Int {
+    private suspend fun pullNewTransactions(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling transactions created after $since")
 
         val remoteDtos = syncDataSource.pullTransactions(since)
@@ -266,6 +298,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this transaction
                 val existing = transactionDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -358,9 +393,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter batches created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewBatches(since: Instant): Int {
+    private suspend fun pullNewBatches(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling batches created after $since")
 
         val remoteDtos = syncDataSource.pullBatches(since)
@@ -375,6 +411,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this batch
                 val existing = purchaseBatchDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -432,9 +471,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter sale batches created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewSaleBatches(since: Instant): Int {
+    private suspend fun pullNewSaleBatches(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling sale batches created after $since")
 
         val remoteDtos = syncDataSource.pullSaleBatches(since)
@@ -449,6 +489,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this batch
                 val existing = saleBatchDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -471,8 +514,12 @@ class SyncService @Inject constructor(
      * These are master data managed on server, pulled to local DB.
      * Uses upsert logic to handle existing records with child FK references.
      * Each type is pulled independently so one failure doesn't block the other.
+     * 
+     * @return List of warning messages for failed pulls (empty if all succeeded)
      */
-    private suspend fun pullReferenceData() {
+    private suspend fun pullReferenceData(): List<String> {
+        val warnings = mutableListOf<String>()
+        
         // Pull locations
         try {
             val locations = syncDataSource.pullLocations()
@@ -489,6 +536,7 @@ class SyncService @Inject constructor(
             Log.d(TAG, "Pulled ${locations.size} locations")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull locations", e)
+            warnings.add("Failed to update locations: ${e.message}")
         }
 
         // Pull products (independent of locations)
@@ -507,7 +555,10 @@ class SyncService @Inject constructor(
             Log.d(TAG, "Pulled ${products.size} products")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull products", e)
+            warnings.add("Failed to update products: ${e.message}")
         }
+        
+        return warnings
     }
 
     /**
@@ -583,9 +634,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter expense categories created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewExpenseCategories(since: Instant): Int {
+    private suspend fun pullNewExpenseCategories(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling expense categories created after $since")
 
         val remoteDtos = syncDataSource.pullExpenseCategories(since)
@@ -600,6 +652,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 val existing = expenseCategoryDao.getByLocalId(dto.localId)
                 if (existing == null) {
                     val entity = dto.toEntity()
@@ -619,9 +674,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter cash operations created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewCashOperations(since: Instant): Int {
+    private suspend fun pullNewCashOperations(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling cash operations created after $since")
 
         val remoteDtos = syncDataSource.pullCashOperations(since)
@@ -636,6 +692,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 val existing = cashOperationDao.getByLocalId(dto.localId)
                 if (existing == null) {
                     val entity = dto.toEntity()

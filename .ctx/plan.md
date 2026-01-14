@@ -1,53 +1,82 @@
-# Plan: Increase Test Coverage
+# Plan: Location-based Cash Operations
 
-Created: 2026-01-12
-Status: completed
-Archived: 2026-01-12T17:25:00Z → history/2026-01-12_test-coverage/
+Created: 2026-01-14
+Status: active
 
 ## Overview
-Increase test coverage from ~20% to higher level by adding unit tests for repositories and ViewModels.
+Make cash operations location-specific. Each location has its own cash balance. Add Totals view with combined history showing location indicators.
 
 ## Progress
-- Total sessions: 2
-- Completed: 2
+- Total sessions: 3
+- Completed: 0
 - Blocked: 0
-- Remaining: 0
+- Remaining: 3
+
+## Historical Context
+
+**Similar past work:**
+- Phase 2/screen-inventory: Location tabs pattern with TabRow
+- Pattern: TabRow with location tabs + "Всього" (Total) tab
+
+**Relevant decisions:**
+- Location tabs (Phase 2): TabRow with selectedTabIndex for location switching
+- Negative inventory display: Red color + warning icon
 
 ## Phases
 
-### Phase: Test Coverage
-Status: completed
-Add unit tests for critical business logic components.
+### Phase: Location Cash
+Status: pending
+Add location awareness to cash operations with totals view.
 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | repository-tests | medium | completed | none |
-| 2 | viewmodel-tests | medium | completed | none |
+| 1 | cash-dao-location | medium | pending | none |
+| 2 | cash-viewmodel-location | medium | pending | cash-dao-location |
+| 3 | cash-ui-tabs | medium | pending | cash-viewmodel-location |
 
 ## Dependencies Graph
 ```
-repository-tests (independent)
-viewmodel-tests (independent)
+cash-dao-location -> cash-viewmodel-location -> cash-ui-tabs
 ```
 
 ## Session Details
 
-### 1. repository-tests
-Add unit tests for repository implementations:
-- LocationRepositoryImpl
-- ProductRepositoryImpl  
-- PurchaseBatchRepositoryImpl
+### 1. cash-dao-location
+**Complexity:** medium
 
-Focus on testing the mapping logic between entities and domain models.
+Update CashDao to support location-specific queries:
+- Add `getCashHistoryByLocationPaged(locationId, limit, offset)` 
+- Add `getTotalHistoryCountByLocation(locationId)`
+- Include location_id in CashHistoryProjection for totals view
+- Update history UNION query to filter by location or include all with location info
 
-### 2. viewmodel-tests
-Add unit tests for ViewModels without test coverage:
-- HistoryViewModel (filtering logic, date handling)
-- InventoryViewModel (inventory computation)
-- ReportsViewModel (aggregation, summary calculation)
+**Files:** CashDao.kt, CashEntity.kt (if projection needs location)
+
+### 2. cash-viewmodel-location
+**Complexity:** medium
+
+Update CashViewModel and CashRepository:
+- Add location list loading (from LocationRepository)
+- Add selectedLocation state (null = totals view)
+- Add location-filtered history and balance loading
+- Operations (deposit/withdraw/payment) require locationId (no longer nullable in UI context)
+
+**Files:** CashViewModel.kt, CashRepository.kt, CashRepositoryImpl.kt
+
+### 3. cash-ui-tabs
+**Complexity:** medium
+
+Update CashScreen to show location tabs:
+- Add TabRow with location tabs + "Всього" (Totals) tab
+- Pass selectedLocation to ViewModel methods
+- In totals view: show combined balance, history items display location name
+- Update CashHistoryItem to include locationName for display
+
+**Files:** CashScreen.kt, CashModels.kt (add locationName to CashHistoryItem)
 
 ## Notes
-- Sessions can run in parallel (no dependencies)
-- Pattern: MockK for repositories, runTest for coroutines (per history)
-- Existing test examples: PurchaseViewModelTest, ProductsViewModelTest
+- Pattern: Copy InventoryScreen location tabs implementation
+- Purchases/sales already have location_id from transaction (no change needed)
+- location_id already exists in cash_operations table (Supabase schema ready)
+- deposit/withdraw/payment will require location selection in UI

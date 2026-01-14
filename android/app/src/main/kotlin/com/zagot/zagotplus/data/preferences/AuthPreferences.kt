@@ -35,9 +35,10 @@ interface AuthPreferences {
  * Stores PIN hash using PBKDF2 for access control with lockout protection.
  *
  * Security notes:
+ * - PIN must be 4 digits
  * - PIN is hashed with PBKDF2-HMAC-SHA256 (10,000 iterations)
  * - 16-byte random salt per PIN
- * - 30-second lockout after 3 failed attempts
+ * - Exponential lockout: 30s after 4 attempts, 5min after 6+ attempts
  * - Session expires after 4 hours or on app process death
  */
 @Singleton
@@ -62,12 +63,18 @@ class AuthPreferencesImpl @Inject constructor(
     }
 
     override fun setPin(pin: String) {
+        require(pin.length in MIN_PIN_LENGTH..MAX_PIN_LENGTH) {
+            "PIN must be $MIN_PIN_LENGTH-$MAX_PIN_LENGTH digits"
+        }
+        require(pin.all { it.isDigit() }) { "PIN must contain only digits" }
+        
         val salt = generateSalt()
         val hash = hashPinWithPbkdf2(pin, salt)
         prefs.edit()
             .putString(KEY_PIN_SALT, Base64.getEncoder().encodeToString(salt))
             .putString(KEY_PIN_HASH, hash)
             .putInt(KEY_HASH_VERSION, CURRENT_HASH_VERSION)
+            .putInt(KEY_PIN_LENGTH, pin.length)
             .apply()
         clearLockout()
     }
@@ -100,6 +107,7 @@ class AuthPreferencesImpl @Inject constructor(
             .remove(KEY_PIN_HASH)
             .remove(KEY_PIN_SALT)
             .remove(KEY_HASH_VERSION)
+            .remove(KEY_PIN_LENGTH)
             .apply()
     }
 
@@ -109,8 +117,15 @@ class AuthPreferencesImpl @Inject constructor(
         
         val editor = prefs.edit().putInt(KEY_FAILED_ATTEMPTS, newAttempts)
         
-        if (newAttempts >= MAX_ATTEMPTS) {
-            val lockoutUntil = System.currentTimeMillis() + LOCKOUT_DURATION_MS
+        // Exponential backoff lockout
+        val lockoutDuration = when (newAttempts) {
+            in 1..3 -> 0L // No lockout for first 3 attempts
+            in 4..5 -> LOCKOUT_DURATION_SHORT_MS // 30 seconds
+            else -> LOCKOUT_DURATION_LONG_MS // 5 minutes after 6+ attempts
+        }
+        
+        if (lockoutDuration > 0) {
+            val lockoutUntil = System.currentTimeMillis() + lockoutDuration
             editor.putLong(KEY_LOCKOUT_UNTIL, lockoutUntil)
         }
         
@@ -137,6 +152,13 @@ class AuthPreferencesImpl @Inject constructor(
             .putInt(KEY_FAILED_ATTEMPTS, 0)
             .putLong(KEY_LOCKOUT_UNTIL, 0)
             .apply()
+    }
+    
+    /**
+     * Get the expected PIN length (for UI hints).
+     */
+    fun getExpectedPinLength(): Int {
+        return prefs.getInt(KEY_PIN_LENGTH, MIN_PIN_LENGTH)
     }
 
     // === Private Helpers ===
@@ -202,10 +224,19 @@ class AuthPreferencesImpl @Inject constructor(
         private const val KEY_HASH_VERSION = "hash_version"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+        private const val KEY_PIN_LENGTH = "pin_length"
 
-        private const val MAX_ATTEMPTS = 3
-        /** Lockout duration in milliseconds (30 seconds) */
-        private const val LOCKOUT_DURATION_MS = 30_000L
+        /** Minimum PIN length */
+        const val MIN_PIN_LENGTH = 4
+        /** Maximum PIN length */
+        const val MAX_PIN_LENGTH = 4
+        
+        /** Maximum attempts before initial lockout */
+        private const val MAX_ATTEMPTS = 5
+        /** Short lockout duration in milliseconds (30 seconds) */
+        private const val LOCKOUT_DURATION_SHORT_MS = 30_000L
+        /** Long lockout duration in milliseconds (5 minutes) */
+        private const val LOCKOUT_DURATION_LONG_MS = 5 * 60_000L
         
         /** Session timeout in milliseconds (4 hours) */
         private const val SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000L

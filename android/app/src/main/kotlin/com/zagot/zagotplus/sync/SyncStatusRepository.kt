@@ -30,6 +30,11 @@ class SyncStatusRepository @Inject constructor(
         _syncStatus.value = SyncStatus.idle(lastSync.takeIf { it != Instant.EPOCH })
     }
     
+    fun setWarning(message: String) {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        _syncStatus.value = SyncStatus.warning(message, lastSync.takeIf { it != Instant.EPOCH })
+    }
+    
     fun setError(message: String) {
         _syncStatus.value = SyncStatus.error(message)
     }

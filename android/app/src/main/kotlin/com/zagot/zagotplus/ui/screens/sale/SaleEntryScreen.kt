@@ -37,7 +37,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,7 +59,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -427,9 +429,9 @@ private fun WeighingScreen(
             enabled = canAddBatch,
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Додати зважування", style = MaterialTheme.typography.titleMedium)
+            Icon(Icons.Filled.Add, contentDescription = "Додати")
+              Spacer(modifier = Modifier.width(8.dp))
+              Text("Додати зважування", style = MaterialTheme.typography.titleMedium)
         }
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -551,7 +553,7 @@ private fun PositionReviewScreen(
                     Text("-${decimalFormat.format(totalTareWeight)} кг", color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Нетто:", fontWeight = FontWeight.Bold)
@@ -593,7 +595,7 @@ private fun PositionReviewScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                    Icon(Icons.Filled.Warning, contentDescription = "Попередження", tint = MaterialTheme.colorScheme.onErrorContainer)
                     Text(
                         text = "Перевищує залишок (${decimalFormat.format(availableWeight)} кг)!",
                         color = MaterialTheme.colorScheme.onErrorContainer,
@@ -676,7 +678,7 @@ private fun PositionsListScreen(
                     onClick = onAddAnother,
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Icon(Icons.Filled.Add, contentDescription = "Додати ще")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Додати ще товар")
                 }
@@ -700,7 +702,7 @@ private fun PositionsListScreen(
         Column(
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(16.dp)
         ) {
-            Divider()
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -758,39 +760,47 @@ private fun SalePositionItem(
             ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = position.product.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${decimalFormat.format(position.netWeight)} кг × ₴${decimalFormat.format(position.pricePerKg)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "(брутто ${decimalFormat.format(position.grossWeight)} - тара ${decimalFormat.format(position.totalTareWeight)})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                
                 Text(
-                    text = position.product.name,
+                    text = "₴${decimalFormat.format(position.totalAmount)}",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    text = "${decimalFormat.format(position.netWeight)} кг × ₴${decimalFormat.format(position.pricePerKg)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "(брутто ${decimalFormat.format(position.grossWeight)} - тара ${decimalFormat.format(position.totalTareWeight)})",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Filled.Close, contentDescription = "Видалити", tint = MaterialTheme.colorScheme.error)
+                }
             }
-            
             Text(
-                text = "₴${decimalFormat.format(position.totalAmount)}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                text = "Утримуйте для редагування",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
             )
-            
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Close, contentDescription = "Видалити", tint = MaterialTheme.colorScheme.error)
-            }
         }
     }
 }
@@ -863,7 +873,7 @@ private fun EditSalePositionDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Divider()
+                HorizontalDivider()
 
                 // Preview calculations
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -919,16 +929,16 @@ fun SaleSummaryOverlay(
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val currencyFormat = remember { DecimalFormat("#,##0.00") }
+    val haptic = LocalHapticFeedback.current
     
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
-            .clickable(enabled = !isSaving) { onConfirm() },
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)),
         contentAlignment = Alignment.Center
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(0.9f).clickable(enabled = !isSaving) { onConfirm() },
+            modifier = Modifier.fillMaxWidth(0.9f),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -945,7 +955,7 @@ fun SaleSummaryOverlay(
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Positions list
@@ -959,7 +969,7 @@ fun SaleSummaryOverlay(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Totals
@@ -980,7 +990,7 @@ fun SaleSummaryOverlay(
                 
                 if (notes.isNotBlank()) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider()
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Примітки:",
@@ -994,16 +1004,28 @@ fun SaleSummaryOverlay(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
+                // Confirm button with haptic feedback
                 if (isSaving) {
                     CircularProgressIndicator()
                 } else {
-                    Text(
-                        text = "(торкніться для підтвердження)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onConfirm()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = "ПІДТВЕРДИТИ ПРОДАЖ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -1034,3 +1056,4 @@ private fun SummaryPositionItem(
         }
     }
 }
+

@@ -62,7 +62,7 @@ fun EmptyState(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = null, // Decorative icon, described by title text
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.outline
         )

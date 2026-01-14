@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup rules for Android Auto Backup.
+    Excludes sensitive authentication data from being backed up to Google Drive.
+-->
+<full-backup-content>
+    <!-- Include the Room database (transactions can be restored) -->
+    <include domain="database" path="zagot_database"/>
+    
+    <!-- Include general shared preferences -->
+    <include domain="sharedpref" path="."/>
+    
+    <!-- Exclude encrypted shared preferences containing PIN hash and device credentials -->
+    <exclude domain="sharedpref" path="zagot_device_prefs_encrypted.xml"/>
+    <exclude domain="sharedpref" path="zagot_auth_prefs.xml"/>
+    
+    <!-- Exclude sync preferences (timestamps can cause duplicate sync issues) -->
+    <exclude domain="sharedpref" path="zagot_sync_prefs.xml"/>
+</full-backup-content>

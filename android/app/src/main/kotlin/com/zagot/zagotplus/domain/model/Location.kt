@@ -1,11 +1,15 @@
 package com.zagot.zagotplus.domain.model
 
+import androidx.compose.runtime.Stable
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Domain model for a location.
+ * 
+ * Marked @Stable for Compose recomposition optimization.
  */
+@Stable
 data class Location(
     val id: UUID,
     val name: String,

@@ -12,7 +12,8 @@ hilt = "2.48.1"
 
 # AndroidX versions
 activityCompose = "1.8.2"
-composeBom = "2023.10.01"
+appcompat = "1.6.1"
+composeBom = "2024.02.00"
 coreKtx = "1.12.0"
 lifecycleRuntimeKtx = "2.7.0"
 navigationCompose = "2.7.6"
@@ -46,6 +47,15 @@ coil = "2.5.0"
 # Reorderable
 reorderable = "2.3.0"
 
+# Biometric
+biometric = "1.1.0"
+
+# App Update
+playAppUpdate = "2.1.0"
+
+# SwipeRefresh (Accompanist)
+accompanist = "0.32.0"
+
 # Testing
 junit = "4.13.2"
 mockk = "1.13.8"
@@ -60,6 +70,7 @@ composeTest = "1.5.4"
 [libraries]
 # AndroidX Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 
@@ -110,6 +121,16 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 # Reorderable
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
+
+# Biometric
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+
+# App Update
+play-app-update = { group = "com.google.android.play", name = "app-update", version.ref = "playAppUpdate" }
+play-app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "playAppUpdate" }
+
+# SwipeRefresh
+accompanist-swiperefresh = { group = "com.google.accompanist", name = "accompanist-swiperefresh", version.ref = "accompanist" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

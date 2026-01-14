@@ -57,7 +57,7 @@ class PinViewModelTest {
     }
 
     @Test
-    fun `entering 4 digits in SET_PIN switches to CONFIRM_PIN`() {
+    fun `entering 4 digits and confirming in SET_PIN switches to CONFIRM_PIN`() {
         every { authPreferences.isPinSet() } returns false
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
@@ -67,6 +67,7 @@ class PinViewModelTest {
         viewModel.onDigitPressed(2)
         viewModel.onDigitPressed(3)
         viewModel.onDigitPressed(4)
+        viewModel.onConfirmPressed()
         
         assertEquals(PinMode.CONFIRM_PIN, viewModel.uiState.value.mode)
         assertEquals("", viewModel.uiState.value.currentPin)
@@ -85,12 +86,14 @@ class PinViewModelTest {
         viewModel.onDigitPressed(2)
         viewModel.onDigitPressed(3)
         viewModel.onDigitPressed(4)
+        viewModel.onConfirmPressed()
         
         // Confirm PIN
         viewModel.onDigitPressed(1)
         viewModel.onDigitPressed(2)
         viewModel.onDigitPressed(3)
         viewModel.onDigitPressed(4)
+        viewModel.onConfirmPressed()
         
         verify { authPreferences.setPin("1234") }
         assertTrue(viewModel.uiState.value.isAuthenticated)
@@ -108,12 +111,14 @@ class PinViewModelTest {
         viewModel.onDigitPressed(2)
         viewModel.onDigitPressed(3)
         viewModel.onDigitPressed(4)
+        viewModel.onConfirmPressed()
         
         // Wrong confirmation
         viewModel.onDigitPressed(9)
         viewModel.onDigitPressed(9)
         viewModel.onDigitPressed(9)
         viewModel.onDigitPressed(9)
+        viewModel.onConfirmPressed()
         
         assertEquals(PinMode.SET_PIN, viewModel.uiState.value.mode)
         assertNotNull(viewModel.uiState.value.errorMessage)

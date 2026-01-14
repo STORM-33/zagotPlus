@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -54,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.TransactionType
@@ -108,12 +110,18 @@ fun HistoryScreen(
             onClearFilters = viewModel::clearFilters
         )
 
-        Divider()
+        HorizontalDivider()
 
-        // Content
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Content with pull-to-refresh
+        val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
+        
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
+        ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading && uiState.batches.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -214,7 +222,7 @@ private fun FilterSection(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Пошук за назвою товару") },
             leadingIcon = {
-                Icon(Icons.Filled.Search, contentDescription = null)
+                Icon(Icons.Filled.Search, contentDescription = "Пошук")
             },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -271,7 +279,7 @@ private fun FilterSection(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Clear,
-                    contentDescription = null,
+                    contentDescription = "Очистити фільтри",
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
@@ -449,7 +457,7 @@ private fun ExpandableBatchCard(
                 ) {
                     Icon(
                         imageVector = typeIcon,
-                        contentDescription = null,
+                        contentDescription = "Тип операції",
                         tint = typeColor,
                         modifier = Modifier.size(24.dp)
                     )
@@ -513,7 +521,7 @@ private fun ExpandableBatchCard(
 
             // Expanded content
             if (isExpanded) {
-                Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
                 when {
                     isLoadingTransactions -> {

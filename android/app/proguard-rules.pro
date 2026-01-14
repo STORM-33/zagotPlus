@@ -39,3 +39,11 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# Keep DTOs and domain models for reflection/serialization
+-keep class com.zagot.zagotplus.data.remote.dto.** { *; }
+-keep class com.zagot.zagotplus.domain.model.** { *; }
+-keep class com.zagot.zagotplus.data.local.entity.** { *; }
+
+# Keep Coil image loading
+-keep class coil.** { *; }

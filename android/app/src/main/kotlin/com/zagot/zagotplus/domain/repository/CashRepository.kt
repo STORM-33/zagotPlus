@@ -27,6 +27,11 @@ interface CashRepository {
     fun getRecentOperations(locationId: UUID, limit: Int = 50): Flow<List<CashOperation>>
     
     // Global cash operations (all locations)
+    /**
+     * @deprecated Use getRecentOperationsGlobal(limit) or getOperationsPaged for large datasets.
+     * This method loads ALL operations into memory which can cause OOM on large datasets.
+     */
+    @Deprecated("Use getRecentOperationsGlobal(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperationsGlobal(100)"))
     fun getAllOperations(): Flow<List<CashOperation>>
     fun getRecentOperationsGlobal(limit: Int = 50): Flow<List<CashOperation>>
     

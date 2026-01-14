@@ -277,36 +277,46 @@ private fun InventoryItemCard(
             ),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = item.productName,
-                style = MaterialTheme.typography.titleMedium,
-                color = contentColor,
-                modifier = Modifier.weight(1f)
-            )
-            
+        Column {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isNegative) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = "Від'ємний залишок",
-                        tint = MaterialTheme.colorScheme.error
+                Text(
+                    text = item.productName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isNegative) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = "Від'ємний залишок",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Text(
+                        text = weightText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                     )
                 }
+            }
+            if (showMoveOption) {
                 Text(
-                    text = weightText,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    text = "Утримуйте для переміщення",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
                 )
             }
         }

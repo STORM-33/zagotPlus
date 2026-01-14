@@ -94,6 +94,7 @@ android {
 dependencies {
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
 
@@ -144,6 +145,16 @@ dependencies {
 
     // Reorderable Grid
     implementation(libs.reorderable)
+    
+    // Biometric Authentication
+    implementation(libs.androidx.biometric)
+    
+    // App Update
+    implementation(libs.play.app.update)
+    implementation(libs.play.app.update.ktx)
+    
+    // SwipeRefresh
+    implementation(libs.accompanist.swiperefresh)
 
     // Testing
     testImplementation(libs.junit)

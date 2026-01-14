@@ -51,9 +51,10 @@ class SyncStatusTest {
     fun `State enum contains all expected values`() {
         val states = SyncStatus.State.values()
 
-        assertEquals(3, states.size)
+        assertEquals(4, states.size)
         assertTrue(states.contains(SyncStatus.State.IDLE))
         assertTrue(states.contains(SyncStatus.State.SYNCING))
+        assertTrue(states.contains(SyncStatus.State.WARNING))
         assertTrue(states.contains(SyncStatus.State.ERROR))
     }
 
@@ -62,6 +63,7 @@ class SyncStatusTest {
         val states = listOf(
             SyncStatus.idle(),
             SyncStatus.syncing(),
+            SyncStatus.warning("partial sync"),
             SyncStatus.error("test")
         )
 
@@ -69,6 +71,7 @@ class SyncStatusTest {
             val description = when (status.state) {
                 SyncStatus.State.IDLE -> "idle"
                 SyncStatus.State.SYNCING -> "syncing"
+                SyncStatus.State.WARNING -> "warning"
                 SyncStatus.State.ERROR -> "error"
             }
             assertNotNull(description)

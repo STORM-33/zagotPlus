@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,13 @@ fun SyncStatusIcon(
                     imageVector = Icons.Filled.CloudOff,
                     contentDescription = "Помилка синхронізації",
                     tint = MaterialTheme.colorScheme.error
+                )
+            }
+            SyncStatus.State.WARNING -> {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = syncStatus.warningMessage ?: "Часткова синхронізація",
+                    tint = MaterialTheme.colorScheme.tertiary
                 )
             }
             SyncStatus.State.IDLE -> {

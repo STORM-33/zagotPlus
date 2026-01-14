@@ -89,6 +89,8 @@ class CashRepositoryImpl @Inject constructor(
 
     // ========== Global Cash Operations ==========
 
+    @Deprecated("Use getRecentOperationsGlobal(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperationsGlobal(100)"))
+    @Suppress("DEPRECATION")
     override fun getAllOperations(): Flow<List<CashOperation>> =
         cashOperationDao.getAllOperations().map { entities ->
             enrichWithCategories(entities)

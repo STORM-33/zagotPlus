@@ -29,7 +29,7 @@ import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -124,11 +124,13 @@ fun SettingsScreen(
                                     }
                                 }
                                 SyncStatus.State.SYNCING -> "Синхронізація..."
+                                SyncStatus.State.WARNING -> uiState.syncStatus.warningMessage ?: "Часткова синхронізація"
                                 SyncStatus.State.ERROR -> "Помилка"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = when (uiState.syncStatus.state) {
                                 SyncStatus.State.ERROR -> MaterialTheme.colorScheme.error
+                                SyncStatus.State.WARNING -> MaterialTheme.colorScheme.tertiary
                                 SyncStatus.State.SYNCING -> MaterialTheme.colorScheme.primary
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
@@ -144,7 +146,7 @@ fun SettingsScreen(
                         SyncStatus.State.ERROR -> {
                             Icon(
                                 imageVector = Icons.Filled.Error,
-                                contentDescription = null,
+                                contentDescription = "Помилка синхронізації",
                                 tint = MaterialTheme.colorScheme.error
                             )
                         }
@@ -186,7 +188,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = null,
+                            contentDescription = "Синхронізувати",
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -195,7 +197,7 @@ fun SettingsScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Device section
             SettingsSection(title = "Пристрій", icon = Icons.Filled.Smartphone) {
@@ -273,7 +275,7 @@ fun SettingsScreen(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Data section
             SettingsSection(title = "Дані", icon = Icons.Filled.Category) {
@@ -291,13 +293,13 @@ fun SettingsScreen(
                     )
                     Icon(
                         imageVector = Icons.Filled.ChevronRight,
-                        contentDescription = null,
+                        contentDescription = "Перейти до товарів",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             // About section
             SettingsSection(title = "Про програму", icon = Icons.Filled.Info) {
@@ -327,7 +329,7 @@ private fun SettingsSection(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = title,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )

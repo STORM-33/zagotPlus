@@ -348,55 +348,67 @@ abstract class ZagotDatabase : RoomDatabase() {
          * Renames transaction_id column to batch_id and updates FK reference.
          * This fixes the bug where purchase payments were incorrectly referencing batch IDs
          * as transaction IDs, causing FK constraint failures.
+         * 
+         * CRITICAL: Uses transaction for atomic migration to prevent data loss on crash.
          */
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // SQLite doesn't support altering FK constraints, so we need to recreate the table
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS cash_operations_new (
-                        id TEXT NOT NULL PRIMARY KEY,
-                        local_id TEXT NOT NULL,
-                        location_id TEXT,
-                        type TEXT NOT NULL,
-                        amount TEXT NOT NULL,
-                        category_id TEXT,
-                        batch_id TEXT,
-                        notes TEXT,
-                        device_id TEXT,
-                        created_at INTEGER NOT NULL,
-                        synced_at INTEGER,
-                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
-                        FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
-                        FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                // Copy data from old table (transaction_id becomes batch_id)
-                db.execSQL("""
-                    INSERT INTO cash_operations_new (
-                        id, local_id, location_id, type, amount, category_id,
-                        batch_id, notes, device_id, created_at, synced_at
-                    )
-                    SELECT 
-                        id, local_id, location_id, type, amount, category_id,
-                        transaction_id, notes, device_id, created_at, synced_at
-                    FROM cash_operations
-                """)
-                
-                // Drop old table
-                db.execSQL("DROP TABLE cash_operations")
-                
-                // Rename new table
-                db.execSQL("ALTER TABLE cash_operations_new RENAME TO cash_operations")
-                
-                // Recreate all indexes
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_batch_id ON cash_operations(batch_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
+                // Disable FK constraints temporarily for atomic migration
+                db.execSQL("PRAGMA foreign_keys=off")
+                db.beginTransaction()
+                try {
+                    // SQLite doesn't support altering FK constraints, so we need to recreate the table
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS cash_operations_new (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            local_id TEXT NOT NULL,
+                            location_id TEXT,
+                            type TEXT NOT NULL,
+                            amount TEXT NOT NULL,
+                            category_id TEXT,
+                            batch_id TEXT,
+                            notes TEXT,
+                            device_id TEXT,
+                            created_at INTEGER NOT NULL,
+                            synced_at INTEGER,
+                            FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                            FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+                            FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE CASCADE
+                        )
+                    """)
+                    
+                    // Copy data from old table (transaction_id becomes batch_id)
+                    db.execSQL("""
+                        INSERT INTO cash_operations_new (
+                            id, local_id, location_id, type, amount, category_id,
+                            batch_id, notes, device_id, created_at, synced_at
+                        )
+                        SELECT 
+                            id, local_id, location_id, type, amount, category_id,
+                            transaction_id, notes, device_id, created_at, synced_at
+                        FROM cash_operations
+                    """)
+                    
+                    // Drop old table
+                    db.execSQL("DROP TABLE cash_operations")
+                    
+                    // Rename new table
+                    db.execSQL("ALTER TABLE cash_operations_new RENAME TO cash_operations")
+                    
+                    // Recreate all indexes
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_batch_id ON cash_operations(batch_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
+                    
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                    db.execSQL("PRAGMA foreign_keys=on")
+                }
             }
         }
     }

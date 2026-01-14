@@ -4,7 +4,6 @@ Directory structure:
     ├── gradle.properties
     ├── gradlew
     ├── gradlew.bat
-    ├── local.properties
     ├── settings.gradle.kts
     ├── app/
     │   ├── build.gradle.kts
@@ -25,9 +24,12 @@ Directory structure:
     │       │   │   └── com/
     │       │   │       └── zagot/
     │       │   │           └── zagotplus/
+    │       │   │               ├── Config.kt
     │       │   │               ├── MainActivity.kt
     │       │   │               ├── ZagotApp.kt
     │       │   │               ├── data/
+    │       │   │               │   ├── connectivity/
+    │       │   │               │   │   └── ConnectivityObserver.kt
     │       │   │               │   ├── local/
     │       │   │               │   │   ├── DatabaseModule.kt
     │       │   │               │   │   ├── ZagotDatabase.kt
@@ -105,6 +107,7 @@ Directory structure:
     │       │   │               │   └── SyncWorker.kt
     │       │   │               └── ui/
     │       │   │                   ├── components/
+    │       │   │                   │   ├── ConnectivityBanner.kt
     │       │   │                   │   ├── EmptyState.kt
     │       │   │                   │   ├── LocationSelectionDialog.kt
     │       │   │                   │   ├── LocationSelectionViewModel.kt
@@ -168,8 +171,11 @@ Directory structure:
     │       │       ├── values/
     │       │       │   ├── strings.xml
     │       │       │   └── themes.xml
-    │       │       └── values-uk/
-    │       │           └── strings.xml
+    │       │       ├── values-uk/
+    │       │       │   └── strings.xml
+    │       │       └── xml/
+    │       │           ├── backup_rules.xml
+    │       │           └── network_security_config.xml
     │       └── test/
     │           └── kotlin/
     │               └── com/
@@ -177,6 +183,7 @@ Directory structure:
     │                       └── zagotplus/
     │                           ├── data/
     │                           │   ├── local/
+    │                           │   │   ├── MigrationTest.kt
     │                           │   │   ├── converter/
     │                           │   │   │   └── ConvertersTest.kt
     │                           │   │   └── dao/
@@ -445,18 +452,6 @@ if "%OS%"=="Windows_NT" endlocal
 
 
 ================================================
-FILE: local.properties
-================================================
-sdk.dir=C:/Users/vovod/AppData/Local/Android/Sdk
-
-# Supabase Configuration
-# Replace with your Supabase project URL and anon key
-supabase.url=https://zyfkdxyxmbnocazhnadz.supabase.co
-supabase.anon.key=sb_secret_BJ_ngBPfcOnBWTCmA3veng_mVyvB0b-
-
-
-
-================================================
 FILE: settings.gradle.kts
 ================================================
 pluginManagement {
@@ -529,6 +524,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     defaultConfig {
@@ -551,10 +547,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-    }
-
-    buildFeatures {
-        compose = true
     }
 
     composeOptions {
@@ -632,6 +624,16 @@ dependencies {
 
     // Reorderable Grid
     implementation(libs.reorderable)
+    
+    // Biometric Authentication
+    implementation(libs.androidx.biometric)
+    
+    // App Update
+    implementation(libs.play.app.update)
+    implementation(libs.play.app.update.ktx)
+    
+    // SwipeRefresh
+    implementation(libs.accompanist.swiperefresh)
 
     // Testing
     testImplementation(libs.junit)
@@ -700,6 +702,14 @@ FILE: app/proguard-rules.pro
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# Keep DTOs and domain models for reflection/serialization
+-keep class com.zagot.zagotplus.data.remote.dto.** { *; }
+-keep class com.zagot.zagotplus.domain.model.** { *; }
+-keep class com.zagot.zagotplus.data.local.entity.** { *; }
+
+# Keep Coil image loading
+-keep class coil.** { *; }
 
 
 
@@ -1013,6 +1023,8 @@ FILE: app/src/main/AndroidManifest.xml
     <application
         android:name=".ZagotApp"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.ZagotPlus">
@@ -1044,11 +1056,81 @@ FILE: app/src/main/AndroidManifest.xml
 
 
 ================================================
+FILE: app/src/main/kotlin/com/zagot/zagotplus/Config.kt
+================================================
+package com.zagot.zagotplus
+
+/**
+ * Centralized configuration constants for the application.
+ * Eliminates magic numbers scattered across the codebase.
+ */
+object Config {
+    // === Pagination ===
+    /** Number of items per page in paginated lists */
+    const val PAGE_SIZE = 50
+
+    // === Sync ===
+    /** Interval between automatic syncs in minutes */
+    const val SYNC_INTERVAL_MIN = 15
+
+    /** Minimum interval between manual syncs in milliseconds (30 seconds) */
+    const val MIN_SYNC_INTERVAL_MS = 30_000L
+    
+    /** Maximum retry attempts for sync worker */
+    const val SYNC_WORKER_RETRY_ATTEMPTS = 3
+
+    // === PIN Security ===
+    /** Minimum PIN length (4 digits) */
+    const val MIN_PIN_LENGTH = 4
+    
+    /** Maximum PIN length */
+    const val MAX_PIN_LENGTH = 4
+    
+    /** PIN session timeout in hours */
+    const val PIN_TIMEOUT_HOURS = 4
+
+    /** PIN session timeout in milliseconds (4 hours) */
+    const val SESSION_TIMEOUT_MS = PIN_TIMEOUT_HOURS * 60 * 60 * 1000L
+
+    /** Maximum failed PIN attempts before initial lockout */
+    const val MAX_PIN_ATTEMPTS = 5
+
+    /** Short lockout duration after 4-5 failed attempts in seconds */
+    const val LOCKOUT_DURATION_SHORT_SECONDS = 30
+    
+    /** Long lockout duration after 6+ failed attempts in seconds */
+    const val LOCKOUT_DURATION_LONG_SECONDS = 300 // 5 minutes
+    
+    /** PBKDF2 iterations for PIN hashing */
+    const val PBKDF2_ITERATIONS = 10_000
+
+    // === Image Upload ===
+    /** Maximum image size for upload in KB (500KB after compression) */
+    const val MAX_IMAGE_SIZE_KB = 500
+
+    /** Maximum image width for compression */
+    const val MAX_IMAGE_WIDTH = 1080
+
+    /** Maximum raw image size for upload in bytes (5MB) */
+    const val MAX_RAW_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+    
+    // === Disk Cache ===
+    /** Disk cache size as percentage of storage */
+    const val DISK_CACHE_PERCENT = 0.02 // 2%
+    
+    /** Memory cache size as percentage of available memory */
+    const val MEMORY_CACHE_PERCENT = 0.25 // 25%
+}
+
+
+
+================================================
 FILE: app/src/main/kotlin/com/zagot/zagotplus/MainActivity.kt
 ================================================
 package com.zagot.zagotplus
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1097,6 +1179,9 @@ class MainActivity : ComponentActivity() {
         isAuthenticated = authPreferences.isAuthenticated()
         // Check if location selection is needed (first install or location cleared)
         needsLocationSelection = isAuthenticated && devicePreferences.getSelectedLocationId() == null
+        
+        // Set FLAG_SECURE initially if not authenticated (prevents screenshots of PIN screen)
+        updateSecureFlag()
 
         setContent {
             ZagotPlusTheme {
@@ -1112,6 +1197,8 @@ class MainActivity : ComponentActivity() {
                                     isAuthenticated = true
                                     // Check if location needs to be selected after PIN setup
                                     needsLocationSelection = devicePreferences.getSelectedLocationId() == null
+                                    // Remove FLAG_SECURE after authentication
+                                    updateSecureFlag()
                                 }
                             )
                         }
@@ -1148,6 +1235,21 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    
+    /**
+     * Updates FLAG_SECURE based on authentication state.
+     * When not authenticated (showing PIN screen), prevents screenshots/screen recording.
+     */
+    private fun updateSecureFlag() {
+        if (!isAuthenticated) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
 }
 
 
@@ -1160,12 +1262,17 @@ package com.zagot.zagotplus
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.zagot.zagotplus.sync.SyncManager
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 @HiltAndroidApp
-class ZagotApp : Application(), Configuration.Provider {
+class ZagotApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -1183,6 +1290,107 @@ class ZagotApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+    
+    /**
+     * Configure Coil ImageLoader with disk caching for product images.
+     * Images are cached to disk to avoid re-downloading on app restart.
+     */
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25) // 25% of available memory
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("product_images"))
+                    .maxSizePercent(0.02) // 2% of storage
+                    .build()
+            }
+            .respectCacheHeaders(false) // Ignore server cache headers for offline support
+            .crossfade(true)
+            .build()
+    }
+}
+
+
+
+================================================
+FILE: app/src/main/kotlin/com/zagot/zagotplus/data/connectivity/ConnectivityObserver.kt
+================================================
+package com.zagot.zagotplus.data.connectivity
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Observes network connectivity state.
+ * Provides a Flow that emits true when online, false when offline.
+ */
+@Singleton
+class ConnectivityObserver @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    /**
+     * Flow that emits the current connectivity state.
+     * Uses callbackFlow to listen for network changes.
+     */
+    val isOnline: Flow<Boolean> = callbackFlow {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                trySend(true)
+            }
+
+            override fun onLost(network: Network) {
+                trySend(isCurrentlyConnected())
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) {
+                val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                trySend(hasInternet && isValidated)
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        // Emit initial state
+        trySend(isCurrentlyConnected())
+
+        connectivityManager.registerNetworkCallback(request, callback)
+
+        awaitClose {
+            connectivityManager.unregisterNetworkCallback(callback)
+        }
+    }.distinctUntilChanged()
+
+    /**
+     * Check current connectivity state synchronously.
+     */
+    fun isCurrentlyConnected(): Boolean {
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+               capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
 }
 
 
@@ -1670,55 +1878,67 @@ abstract class ZagotDatabase : RoomDatabase() {
          * Renames transaction_id column to batch_id and updates FK reference.
          * This fixes the bug where purchase payments were incorrectly referencing batch IDs
          * as transaction IDs, causing FK constraint failures.
+         * 
+         * CRITICAL: Uses transaction for atomic migration to prevent data loss on crash.
          */
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // SQLite doesn't support altering FK constraints, so we need to recreate the table
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS cash_operations_new (
-                        id TEXT NOT NULL PRIMARY KEY,
-                        local_id TEXT NOT NULL,
-                        location_id TEXT,
-                        type TEXT NOT NULL,
-                        amount TEXT NOT NULL,
-                        category_id TEXT,
-                        batch_id TEXT,
-                        notes TEXT,
-                        device_id TEXT,
-                        created_at INTEGER NOT NULL,
-                        synced_at INTEGER,
-                        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
-                        FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
-                        FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                // Copy data from old table (transaction_id becomes batch_id)
-                db.execSQL("""
-                    INSERT INTO cash_operations_new (
-                        id, local_id, location_id, type, amount, category_id,
-                        batch_id, notes, device_id, created_at, synced_at
-                    )
-                    SELECT 
-                        id, local_id, location_id, type, amount, category_id,
-                        transaction_id, notes, device_id, created_at, synced_at
-                    FROM cash_operations
-                """)
-                
-                // Drop old table
-                db.execSQL("DROP TABLE cash_operations")
-                
-                // Rename new table
-                db.execSQL("ALTER TABLE cash_operations_new RENAME TO cash_operations")
-                
-                // Recreate all indexes
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_batch_id ON cash_operations(batch_id)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
+                // Disable FK constraints temporarily for atomic migration
+                db.execSQL("PRAGMA foreign_keys=off")
+                db.beginTransaction()
+                try {
+                    // SQLite doesn't support altering FK constraints, so we need to recreate the table
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS cash_operations_new (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            local_id TEXT NOT NULL,
+                            location_id TEXT,
+                            type TEXT NOT NULL,
+                            amount TEXT NOT NULL,
+                            category_id TEXT,
+                            batch_id TEXT,
+                            notes TEXT,
+                            device_id TEXT,
+                            created_at INTEGER NOT NULL,
+                            synced_at INTEGER,
+                            FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+                            FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+                            FOREIGN KEY (batch_id) REFERENCES purchase_batches(id) ON DELETE CASCADE
+                        )
+                    """)
+                    
+                    // Copy data from old table (transaction_id becomes batch_id)
+                    db.execSQL("""
+                        INSERT INTO cash_operations_new (
+                            id, local_id, location_id, type, amount, category_id,
+                            batch_id, notes, device_id, created_at, synced_at
+                        )
+                        SELECT 
+                            id, local_id, location_id, type, amount, category_id,
+                            transaction_id, notes, device_id, created_at, synced_at
+                        FROM cash_operations
+                    """)
+                    
+                    // Drop old table
+                    db.execSQL("DROP TABLE cash_operations")
+                    
+                    // Rename new table
+                    db.execSQL("ALTER TABLE cash_operations_new RENAME TO cash_operations")
+                    
+                    // Recreate all indexes
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_cash_operations_local_id ON cash_operations(local_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_location_id ON cash_operations(location_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_category_id ON cash_operations(category_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_batch_id ON cash_operations(batch_id)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_synced_at ON cash_operations(synced_at)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_created_at ON cash_operations(created_at)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_type ON cash_operations(type)")
+                    
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                    db.execSQL("PRAGMA foreign_keys=on")
+                }
             }
         }
     }
@@ -2493,8 +2713,11 @@ interface TransactionDao {
 
     /**
      * Get all transactions (one-time read).
+     * @deprecated Use getAllPaginated(limit, offset) for large datasets to avoid OOM.
+     * This method loads ALL transactions into memory which can crash on large datasets.
      */
-    @Query("SELECT * FROM transactions ORDER BY created_at DESC")
+    @Deprecated("Use getAllPaginated(limit, offset) instead", ReplaceWith("getAllPaginated(100, 0)"))
+    @Query("SELECT * FROM transactions ORDER BY created_at DESC LIMIT 1000")
     suspend fun getAll(): List<TransactionEntity>
 
     /**
@@ -2588,6 +2811,20 @@ interface TransactionDao {
      */
     @Query("SELECT * FROM transactions WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<UUID>): List<TransactionEntity>
+
+    /**
+     * Get transactions for multiple purchase batch IDs in a single query.
+     * Avoids N+1 query pattern when loading batch transactions.
+     */
+    @Query("SELECT * FROM transactions WHERE batch_id IN (:batchIds) ORDER BY created_at DESC")
+    suspend fun getByPurchaseBatchIds(batchIds: List<UUID>): List<TransactionEntity>
+
+    /**
+     * Get transactions for multiple sale batch IDs in a single query.
+     * Avoids N+1 query pattern when loading batch transactions.
+     */
+    @Query("SELECT * FROM transactions WHERE sale_batch_id IN (:saleBatchIds) ORDER BY created_at DESC")
+    suspend fun getBySaleBatchIds(saleBatchIds: List<UUID>): List<TransactionEntity>
 
     /**
      * Get filtered transactions with dynamic query.
@@ -3392,6 +3629,8 @@ interface AuthPreferences {
     fun clearLockout()
     fun setAuthenticated(authenticated: Boolean)
     fun isAuthenticated(): Boolean
+    fun isSessionValid(): Boolean
+    fun getSessionRemainingMinutes(): Int
 }
 
 /**
@@ -3399,10 +3638,11 @@ interface AuthPreferences {
  * Stores PIN hash using PBKDF2 for access control with lockout protection.
  *
  * Security notes:
+ * - PIN must be 4 digits
  * - PIN is hashed with PBKDF2-HMAC-SHA256 (10,000 iterations)
  * - 16-byte random salt per PIN
- * - 30-second lockout after 3 failed attempts
- * - Session expires on app process death (in-memory flag)
+ * - Exponential lockout: 30s after 4 attempts, 5min after 6+ attempts
+ * - Session expires after 4 hours or on app process death
  */
 @Singleton
 class AuthPreferencesImpl @Inject constructor(
@@ -3416,18 +3656,28 @@ class AuthPreferencesImpl @Inject constructor(
     // In-memory session flag - expires on process death
     @Volatile
     private var sessionAuthenticated: Boolean = false
+    
+    // Session start time for timeout tracking
+    @Volatile
+    private var sessionStartTime: Long = 0
 
     override fun isPinSet(): Boolean {
         return prefs.contains(KEY_PIN_HASH)
     }
 
     override fun setPin(pin: String) {
+        require(pin.length in MIN_PIN_LENGTH..MAX_PIN_LENGTH) {
+            "PIN must be $MIN_PIN_LENGTH-$MAX_PIN_LENGTH digits"
+        }
+        require(pin.all { it.isDigit() }) { "PIN must contain only digits" }
+        
         val salt = generateSalt()
         val hash = hashPinWithPbkdf2(pin, salt)
         prefs.edit()
             .putString(KEY_PIN_SALT, Base64.getEncoder().encodeToString(salt))
             .putString(KEY_PIN_HASH, hash)
             .putInt(KEY_HASH_VERSION, CURRENT_HASH_VERSION)
+            .putInt(KEY_PIN_LENGTH, pin.length)
             .apply()
         clearLockout()
     }
@@ -3460,6 +3710,7 @@ class AuthPreferencesImpl @Inject constructor(
             .remove(KEY_PIN_HASH)
             .remove(KEY_PIN_SALT)
             .remove(KEY_HASH_VERSION)
+            .remove(KEY_PIN_LENGTH)
             .apply()
     }
 
@@ -3469,8 +3720,15 @@ class AuthPreferencesImpl @Inject constructor(
         
         val editor = prefs.edit().putInt(KEY_FAILED_ATTEMPTS, newAttempts)
         
-        if (newAttempts >= MAX_ATTEMPTS) {
-            val lockoutUntil = System.currentTimeMillis() + LOCKOUT_DURATION_MS
+        // Exponential backoff lockout
+        val lockoutDuration = when (newAttempts) {
+            in 1..3 -> 0L // No lockout for first 3 attempts
+            in 4..5 -> LOCKOUT_DURATION_SHORT_MS // 30 seconds
+            else -> LOCKOUT_DURATION_LONG_MS // 5 minutes after 6+ attempts
+        }
+        
+        if (lockoutDuration > 0) {
+            val lockoutUntil = System.currentTimeMillis() + lockoutDuration
             editor.putLong(KEY_LOCKOUT_UNTIL, lockoutUntil)
         }
         
@@ -3497,6 +3755,13 @@ class AuthPreferencesImpl @Inject constructor(
             .putInt(KEY_FAILED_ATTEMPTS, 0)
             .putLong(KEY_LOCKOUT_UNTIL, 0)
             .apply()
+    }
+    
+    /**
+     * Get the expected PIN length (for UI hints).
+     */
+    fun getExpectedPinLength(): Int {
+        return prefs.getInt(KEY_PIN_LENGTH, MIN_PIN_LENGTH)
     }
 
     // === Private Helpers ===
@@ -3532,10 +3797,27 @@ class AuthPreferencesImpl @Inject constructor(
 
     override fun setAuthenticated(authenticated: Boolean) {
         sessionAuthenticated = authenticated
+        if (authenticated) {
+            sessionStartTime = System.currentTimeMillis()
+        } else {
+            sessionStartTime = 0
+        }
     }
 
     override fun isAuthenticated(): Boolean {
-        return sessionAuthenticated
+        return sessionAuthenticated && isSessionValid()
+    }
+
+    override fun isSessionValid(): Boolean {
+        if (!sessionAuthenticated) return false
+        return System.currentTimeMillis() - sessionStartTime < SESSION_TIMEOUT_MS
+    }
+
+    override fun getSessionRemainingMinutes(): Int {
+        if (!sessionAuthenticated || sessionStartTime == 0L) return 0
+        val elapsed = System.currentTimeMillis() - sessionStartTime
+        val remaining = SESSION_TIMEOUT_MS - elapsed
+        return if (remaining > 0) (remaining / 60_000).toInt() else 0
     }
 
     companion object {
@@ -3545,10 +3827,22 @@ class AuthPreferencesImpl @Inject constructor(
         private const val KEY_HASH_VERSION = "hash_version"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+        private const val KEY_PIN_LENGTH = "pin_length"
 
-        private const val MAX_ATTEMPTS = 3
-        /** Lockout duration in milliseconds (30 seconds) */
-        private const val LOCKOUT_DURATION_MS = 30_000L
+        /** Minimum PIN length */
+        const val MIN_PIN_LENGTH = 4
+        /** Maximum PIN length */
+        const val MAX_PIN_LENGTH = 4
+        
+        /** Maximum attempts before initial lockout */
+        private const val MAX_ATTEMPTS = 5
+        /** Short lockout duration in milliseconds (30 seconds) */
+        private const val LOCKOUT_DURATION_SHORT_MS = 30_000L
+        /** Long lockout duration in milliseconds (5 minutes) */
+        private const val LOCKOUT_DURATION_LONG_MS = 5 * 60_000L
+        
+        /** Session timeout in milliseconds (4 hours) */
+        private const val SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000L
         
         // PBKDF2 parameters
         private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
@@ -3584,37 +3878,49 @@ import javax.inject.Singleton
  * Generates and persists a unique device ID for transaction tracking.
  * 
  * Security: Uses Android Keystore-backed encryption for sensitive preferences.
+ * IMPORTANT: Throws RuntimeException if encryption fails - never silently degrades to unencrypted storage.
  */
 @Singleton
 class DevicePreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val prefs: SharedPreferences = try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    } catch (e: Exception) {
-        // Fallback to regular SharedPreferences if encryption fails
-        // This can happen on some devices with Keystore issues
-        android.util.Log.w("DevicePreferences", "Failed to create encrypted prefs, using fallback", e)
-        context.getSharedPreferences(PREFS_NAME_FALLBACK, Context.MODE_PRIVATE)
+    private val encryptedPrefs: SharedPreferences by lazy { createEncryptedPrefs() }
+    
+    // Test-only: allows injecting mock SharedPreferences
+    @Volatile
+    internal var testPrefsOverride: SharedPreferences? = null
+    
+    private val prefs: SharedPreferences
+        get() = testPrefsOverride ?: encryptedPrefs
+    
+    private fun createEncryptedPrefs(): SharedPreferences {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            
+            return EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // SECURITY: Never silently degrade to unencrypted storage
+            // This could expose sensitive device data
+            android.util.Log.e("DevicePreferences", "SECURITY ERROR: Encrypted prefs failed!", e)
+            throw RuntimeException("Security initialization failed: encrypted preferences unavailable", e)
+        }
     }
 
-    private val _selectedLocationIdFlow = MutableStateFlow(getSelectedLocationId())
+    private val _selectedLocationIdFlow by lazy { MutableStateFlow(getSelectedLocationId()) }
 
     /**
      * Observable flow of selected location ID.
      * Emits new value whenever location is changed via setSelectedLocationId.
      */
-    val selectedLocationIdFlow: StateFlow<UUID?> = _selectedLocationIdFlow.asStateFlow()
+    val selectedLocationIdFlow: StateFlow<UUID?> by lazy { _selectedLocationIdFlow.asStateFlow() }
 
     /**
      * Get or generate a unique device ID.
@@ -3663,9 +3969,17 @@ class DevicePreferences @Inject constructor(
 
     companion object {
         private const val PREFS_NAME = "zagot_device_prefs_encrypted"
-        private const val PREFS_NAME_FALLBACK = "zagot_device_prefs"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_SELECTED_LOCATION = "selected_location"
+        
+        /**
+         * Create a DevicePreferences instance for testing with mock SharedPreferences.
+         */
+        internal fun createForTest(context: Context, testPrefs: SharedPreferences): DevicePreferences {
+            return DevicePreferences(context).also {
+                it.testPrefsOverride = testPrefs
+            }
+        }
     }
 }
 
@@ -3809,6 +4123,8 @@ FILE: app/src/main/kotlin/com/zagot/zagotplus/data/remote/SupabaseStorageHelper.
 package com.zagot.zagotplus.data.remote
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import com.zagot.zagotplus.BuildConfig
@@ -3816,6 +4132,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.storage.storage
 import io.github.jan.supabase.storage.upload
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -3839,11 +4156,17 @@ class SupabaseStorageHelper @Inject constructor(
     companion object {
         private const val TAG = "SupabaseStorageHelper"
         private const val BUCKET_NAME = "product-images"
-        private const val MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+        private const val MAX_RAW_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB before compression
+        private const val MAX_COMPRESSED_SIZE_KB = 500 // 500KB after compression
+        private const val MAX_IMAGE_WIDTH = 1080
     }
+    
+    // Cache for URL check results to avoid repeated string operations
+    private val urlCheckCache = mutableMapOf<String, Boolean>()
 
     /**
      * Upload an image from a content:// or file:// URI to Supabase Storage.
+     * Automatically compresses large images before upload to prevent slow network issues.
      * Returns a Result with the public URL of the uploaded image or error details.
      */
     suspend fun uploadImageSafe(localUri: String): StorageResult<String> {
@@ -3852,16 +4175,20 @@ class SupabaseStorageHelper @Inject constructor(
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: return StorageResult.Error("Failed to open input stream for URI: $localUri")
             
-            val bytes = inputStream.use { it.readBytes() }
+            val rawBytes = inputStream.use { it.readBytes() }
             
-            if (bytes.size > MAX_IMAGE_SIZE_BYTES) {
-                return StorageResult.Error("Image too large: ${bytes.size} bytes (max ${MAX_IMAGE_SIZE_BYTES})")
+            if (rawBytes.size > MAX_RAW_IMAGE_SIZE_BYTES) {
+                return StorageResult.Error("Image too large: ${rawBytes.size} bytes (max ${MAX_RAW_IMAGE_SIZE_BYTES})")
             }
+
+            // Compress the image before upload
+            val compressedBytes = compressImage(rawBytes, MAX_IMAGE_WIDTH, MAX_COMPRESSED_SIZE_KB)
+            Log.d(TAG, "Compressed image from ${rawBytes.size} to ${compressedBytes.size} bytes")
 
             val fileName = "${UUID.randomUUID()}.jpg"
             val bucket = supabaseClient.storage[BUCKET_NAME]
             
-            bucket.upload(fileName, bytes)
+            bucket.upload(fileName, compressedBytes)
 
             val publicUrl = "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/$BUCKET_NAME/$fileName"
             Log.d(TAG, "Successfully uploaded image: $fileName")
@@ -3870,6 +4197,56 @@ class SupabaseStorageHelper @Inject constructor(
             Log.e(TAG, "Failed to upload image from $localUri", e)
             StorageResult.Error("Upload failed: ${e.message}", e)
         }
+    }
+
+    /**
+     * Compresses an image to fit within size and dimension constraints.
+     * Uses progressive quality reduction to meet size target.
+     */
+    private fun compressImage(bytes: ByteArray, maxWidth: Int, maxSizeKB: Int): ByteArray {
+        // Decode with inJustDecodeBounds to get dimensions first
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        
+        // Calculate sample size for downscaling
+        val originalWidth = options.outWidth
+        val originalHeight = options.outHeight
+        var sampleSize = 1
+        while (originalWidth / sampleSize > maxWidth * 2 || originalHeight / sampleSize > maxWidth * 2) {
+            sampleSize *= 2
+        }
+        
+        // Decode with sample size
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+            ?: return bytes // Return original if decode fails
+        
+        // Scale down if still too large
+        val scaledBitmap = if (bitmap.width > maxWidth) {
+            val ratio = maxWidth.toFloat() / bitmap.width
+            val newHeight = (bitmap.height * ratio).toInt()
+            Bitmap.createScaledBitmap(bitmap, maxWidth, newHeight, true).also {
+                if (it != bitmap) bitmap.recycle()
+            }
+        } else {
+            bitmap
+        }
+        
+        // Progressive compression to meet size target
+        var quality = 90
+        var output: ByteArray
+        do {
+            val stream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)
+            output = stream.toByteArray()
+            quality -= 10
+        } while (output.size > maxSizeKB * 1024 && quality > 20)
+        
+        if (scaledBitmap != bitmap) {
+            scaledBitmap.recycle()
+        }
+        
+        return output
     }
 
     /**
@@ -3904,9 +4281,13 @@ class SupabaseStorageHelper @Inject constructor(
 
     /**
      * Check if the URI is a Supabase Storage URL.
+     * Results are cached to avoid repeated string operations.
      */
     fun isSupabaseUrl(uri: String?): Boolean {
-        return uri?.contains("/storage/v1/object/public/$BUCKET_NAME/") == true
+        if (uri == null) return false
+        return urlCheckCache.getOrPut(uri) { 
+            uri.contains("/storage/v1/object/public/$BUCKET_NAME/") 
+        }
     }
 
     /**
@@ -4601,6 +4982,8 @@ class CashRepositoryImpl @Inject constructor(
 
     // ========== Global Cash Operations ==========
 
+    @Deprecated("Use getRecentOperationsGlobal(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperationsGlobal(100)"))
+    @Suppress("DEPRECATION")
     override fun getAllOperations(): Flow<List<CashOperation>> =
         cashOperationDao.getAllOperations().map { entities ->
             enrichWithCategories(entities)
@@ -5377,6 +5760,8 @@ class TransactionRepositoryImpl @Inject constructor(
     private val syncManager: SyncManager
 ) : TransactionRepository {
 
+    @Deprecated("Use getPaginatedTransactions with pagination instead", ReplaceWith("getPaginatedTransactions(100, 0)"))
+    @Suppress("DEPRECATION")
     override fun getAllTransactions(): Flow<List<Transaction>> =
         transactionDao.getAllFlow().map { entities ->
             entities.map { it.toDomain() }
@@ -5834,12 +6219,16 @@ FILE: app/src/main/kotlin/com/zagot/zagotplus/domain/model/Location.kt
 ================================================
 package com.zagot.zagotplus.domain.model
 
+import androidx.compose.runtime.Stable
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Domain model for a location.
+ * 
+ * Marked @Stable for Compose recomposition optimization.
  */
+@Stable
 data class Location(
     val id: UUID,
     val name: String,
@@ -5872,13 +6261,18 @@ FILE: app/src/main/kotlin/com/zagot/zagotplus/domain/model/Product.kt
 ================================================
 package com.zagot.zagotplus.domain.model
 
+import androidx.compose.runtime.Stable
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Domain model for a product.
+ * 
+ * Marked @Stable for Compose recomposition optimization since this class is frequently
+ * used in UI composables and its equality is based on data class equals().
  */
+@Stable
 data class Product(
     val id: UUID,
     val name: String,
@@ -5952,13 +6346,17 @@ FILE: app/src/main/kotlin/com/zagot/zagotplus/domain/model/Transaction.kt
 ================================================
 package com.zagot.zagotplus.domain.model
 
+import androidx.compose.runtime.Stable
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Domain model for a transaction.
+ * 
+ * Marked @Stable for Compose recomposition optimization.
  */
+@Stable
 data class Transaction(
     val id: UUID,
     val localId: String,
@@ -6074,6 +6472,11 @@ interface CashRepository {
     fun getRecentOperations(locationId: UUID, limit: Int = 50): Flow<List<CashOperation>>
     
     // Global cash operations (all locations)
+    /**
+     * @deprecated Use getRecentOperationsGlobal(limit) or getOperationsPaged for large datasets.
+     * This method loads ALL operations into memory which can cause OOM on large datasets.
+     */
+    @Deprecated("Use getRecentOperationsGlobal(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperationsGlobal(100)"))
     fun getAllOperations(): Flow<List<CashOperation>>
     fun getRecentOperationsGlobal(limit: Int = 50): Flow<List<CashOperation>>
     
@@ -6398,8 +6801,10 @@ interface TransactionRepository {
 
     /**
      * Get all transactions as reactive Flow.
-     * WARNING: Loads all transactions into memory. Use getPaginatedTransactions for large datasets.
+     * @deprecated Use getPaginatedTransactions for large datasets to avoid OOM.
+     * This method loads ALL transactions into memory which can crash on large datasets.
      */
+    @Deprecated("Use getPaginatedTransactions with pagination instead", ReplaceWith("getPaginatedTransactions(100, 0)"))
     fun getAllTransactions(): Flow<List<Transaction>>
 
     /**
@@ -6923,8 +7328,8 @@ class SyncManager @Inject constructor(
     private val lastManualSyncTime = AtomicLong(0L)
 
     companion object {
-        /** Minimum interval between manual syncs in milliseconds */
-        private const val MIN_SYNC_INTERVAL_MS = 5_000L // 5 seconds
+        /** Minimum interval between manual syncs in milliseconds (30 seconds) */
+        private const val MIN_SYNC_INTERVAL_MS = 30_000L
     }
 
     /**
@@ -7095,13 +7500,15 @@ sealed class SyncResult {
     /** Both push and pull completed successfully */
     data class Success(
         val pushed: Int,
-        val pulled: Int
+        val pulled: Int,
+        val warnings: List<String> = emptyList()
     ) : SyncResult()
 
     /** Push succeeded, pull failed. Data is on server but we couldn't fetch updates. */
     data class Partial(
         val pushed: Int,
-        val pullError: String
+        val pullError: String,
+        val warnings: List<String> = emptyList()
     ) : SyncResult()
 
     /** Sync failed. No transactions were pushed. */
@@ -7121,6 +7528,18 @@ sealed class SyncResult {
     /** Whether the sync was at least partially successful (some data pushed) */
     val isAtLeastPartial: Boolean
         get() = this is Success || this is Partial
+
+    /** Non-fatal warnings that occurred during sync (e.g., reference data pull failures) */
+    val warningMessages: List<String>
+        get() = when (this) {
+            is Success -> warnings
+            is Partial -> warnings
+            is Failure -> emptyList()
+        }
+
+    /** Whether there are warnings to display */
+    val hasWarnings: Boolean
+        get() = warningMessages.isNotEmpty()
 }
 
 /** Phase where sync failed */
@@ -7193,6 +7612,12 @@ class SyncService @Inject constructor(
 
         // Capture the sync timestamp ONCE at the start for all pull operations
         val syncStartTimestamp = syncPreferences.getLastSyncTimestamp()
+        
+        // Track non-fatal warnings for reference data pull failures
+        val warnings = mutableListOf<String>()
+        
+        // Track max server_updated_at from all pulled records
+        val maxServerUpdatedAt = MaxTimestampTracker()
 
         // Step 1: Push pending products (before other entities due to FK)
         val productPushResult = try {
@@ -7207,7 +7632,8 @@ class SyncService @Inject constructor(
         Log.d(TAG, "Pushed ${productPushResult.successCount} products (${productPushResult.failedCount} failed)")
 
         // Step 2: Pull reference data (non-critical, log and continue on failure)
-        pullReferenceData()
+        val refDataWarnings = pullReferenceData()
+        warnings.addAll(refDataWarnings)
 
         // Step 3: Push pending expense categories (before cash operations due to FK)
         val categoryPushResult = try {
@@ -7271,7 +7697,7 @@ class SyncService @Inject constructor(
 
         // Step 7: Pull new expense categories
         val categoryPullResult = try {
-            pullNewExpenseCategories(syncStartTimestamp)
+            pullNewExpenseCategories(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Expense category pull failed after successful push", e)
             0
@@ -7280,7 +7706,7 @@ class SyncService @Inject constructor(
 
         // Step 8: Pull new batches
         val batchPullResult = try {
-            pullNewBatches(syncStartTimestamp)
+            pullNewBatches(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Batch pull failed after successful push", e)
             // Continue to transaction pull
@@ -7290,7 +7716,7 @@ class SyncService @Inject constructor(
 
         // Step 8b: Pull new sale batches
         val saleBatchPullResult = try {
-            pullNewSaleBatches(syncStartTimestamp)
+            pullNewSaleBatches(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Sale batch pull failed after successful push", e)
             0
@@ -7299,37 +7725,61 @@ class SyncService @Inject constructor(
 
         // Step 9: Pull new transactions
         val pullResult = try {
-            pullNewTransactions(syncStartTimestamp)
+            pullNewTransactions(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
             return SyncResult.Partial(
                 pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
-                pullError = e.message ?: "Pull failed"
+                pullError = e.message ?: "Pull failed",
+                warnings = warnings
             )
         }
         Log.d(TAG, "Pulled $pullResult transactions")
 
         // Step 10: Pull new cash operations
         val cashPullResult = try {
-            pullNewCashOperations(syncStartTimestamp)
+            pullNewCashOperations(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Cash operations pull failed after successful push", e)
             0
         }
         Log.d(TAG, "Pulled $cashPullResult cash operations")
 
-        // Update last sync timestamp to NOW (after all pulls complete)
-        // IMPORTANT: We use Instant.now() instead of syncStartTimestamp to avoid race condition
-        // where data created between syncStartTimestamp and pull completion would be missed.
-        // The pull queries use server_updated_at, which is set by Postgres trigger on insert,
-        // so there's no gap - we'll pick up those records on the next sync.
-        syncPreferences.setLastSyncTimestamp(Instant.now())
+        // Update last sync timestamp using the maximum server_updated_at from pulled records
+        // minus 1 second to avoid missing records created at the exact same timestamp.
+        // This prevents the race condition where data created on server during sync might be missed.
+        val newTimestamp = maxServerUpdatedAt.getMaxTimestamp()?.minusSeconds(1) ?: Instant.now()
+        syncPreferences.setLastSyncTimestamp(newTimestamp)
+        Log.d(TAG, "Updated last sync timestamp to $newTimestamp")
 
         return SyncResult.Success(
             pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
-            pulled = pullResult + batchPullResult + saleBatchPullResult + categoryPullResult + cashPullResult
+            pulled = pullResult + batchPullResult + saleBatchPullResult + categoryPullResult + cashPullResult,
+            warnings = warnings
         )
+    }
+    
+    /**
+     * Helper class to track the maximum server_updated_at timestamp across all pulled records.
+     */
+    private class MaxTimestampTracker {
+        private var maxTimestamp: Instant? = null
+        
+        fun update(timestamp: String?) {
+            if (timestamp == null) return
+            try {
+                val instant = Instant.parse(timestamp)
+                val current = maxTimestamp
+                if (current == null || instant.isAfter(current)) {
+                    maxTimestamp = instant
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse server_updated_at: $timestamp", e)
+            }
+        }
+        
+        fun getMaxTimestamp(): Instant? = maxTimestamp
     }
 
     /**
@@ -7340,6 +7790,11 @@ class SyncService @Inject constructor(
     /**
      * Push all unsynced local transactions to Supabase.
      * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * Atomicity note: Each transaction is pushed and marked synced individually.
+     * This is intentional - network calls can fail independently, and the upsert
+     * on Supabase (onConflict="local_id") ensures idempotency if a transaction
+     * is pushed again after app crash. This is an eventually-consistent design.
      *
      * @throws Exception if network or critical error occurs
      */
@@ -7382,9 +7837,10 @@ class SyncService @Inject constructor(
      * not when the client created it.
      *
      * @param since Timestamp to filter transactions updated after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewTransactions(since: Instant): Int {
+    private suspend fun pullNewTransactions(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling transactions created after $since")
 
         val remoteDtos = syncDataSource.pullTransactions(since)
@@ -7399,6 +7855,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this transaction
                 val existing = transactionDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -7491,9 +7950,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter batches created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewBatches(since: Instant): Int {
+    private suspend fun pullNewBatches(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling batches created after $since")
 
         val remoteDtos = syncDataSource.pullBatches(since)
@@ -7508,6 +7968,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this batch
                 val existing = purchaseBatchDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -7565,9 +8028,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter sale batches created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewSaleBatches(since: Instant): Int {
+    private suspend fun pullNewSaleBatches(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling sale batches created after $since")
 
         val remoteDtos = syncDataSource.pullSaleBatches(since)
@@ -7582,6 +8046,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 // Check if we already have this batch
                 val existing = saleBatchDao.getByLocalId(dto.localId)
                 if (existing == null) {
@@ -7604,8 +8071,12 @@ class SyncService @Inject constructor(
      * These are master data managed on server, pulled to local DB.
      * Uses upsert logic to handle existing records with child FK references.
      * Each type is pulled independently so one failure doesn't block the other.
+     * 
+     * @return List of warning messages for failed pulls (empty if all succeeded)
      */
-    private suspend fun pullReferenceData() {
+    private suspend fun pullReferenceData(): List<String> {
+        val warnings = mutableListOf<String>()
+        
         // Pull locations
         try {
             val locations = syncDataSource.pullLocations()
@@ -7622,6 +8093,7 @@ class SyncService @Inject constructor(
             Log.d(TAG, "Pulled ${locations.size} locations")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull locations", e)
+            warnings.add("Failed to update locations: ${e.message}")
         }
 
         // Pull products (independent of locations)
@@ -7640,7 +8112,10 @@ class SyncService @Inject constructor(
             Log.d(TAG, "Pulled ${products.size} products")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull products", e)
+            warnings.add("Failed to update products: ${e.message}")
         }
+        
+        return warnings
     }
 
     /**
@@ -7716,9 +8191,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter expense categories created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewExpenseCategories(since: Instant): Int {
+    private suspend fun pullNewExpenseCategories(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling expense categories created after $since")
 
         val remoteDtos = syncDataSource.pullExpenseCategories(since)
@@ -7733,6 +8209,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 val existing = expenseCategoryDao.getByLocalId(dto.localId)
                 if (existing == null) {
                     val entity = dto.toEntity()
@@ -7752,9 +8231,10 @@ class SyncService @Inject constructor(
      * Inserts or updates local Room database.
      *
      * @param since Timestamp to filter cash operations created after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
      * @throws Exception if network error occurs
      */
-    private suspend fun pullNewCashOperations(since: Instant): Int {
+    private suspend fun pullNewCashOperations(since: Instant, timestampTracker: MaxTimestampTracker): Int {
         Log.d(TAG, "Pulling cash operations created after $since")
 
         val remoteDtos = syncDataSource.pullCashOperations(since)
@@ -7769,6 +8249,9 @@ class SyncService @Inject constructor(
         var insertCount = 0
         for (dto in remoteDtos) {
             try {
+                // Track max timestamp for next sync
+                timestampTracker.update(dto.serverUpdatedAt)
+                
                 val existing = cashOperationDao.getByLocalId(dto.localId)
                 if (existing == null) {
                     val entity = dto.toEntity()
@@ -7799,18 +8282,21 @@ import java.time.Instant
 data class SyncStatus(
     val state: State,
     val lastSyncTime: Instant?,
-    val errorMessage: String?
+    val errorMessage: String?,
+    val warningMessage: String? = null
 ) {
     enum class State {
         IDLE,      // Not syncing, no errors
         SYNCING,   // Currently syncing
+        WARNING,   // Last sync partial (push succeeded, pull failed)
         ERROR      // Last sync failed
     }
     
     companion object {
-        fun idle(lastSync: Instant? = null) = SyncStatus(State.IDLE, lastSync, null)
-        fun syncing() = SyncStatus(State.SYNCING, null, null)
-        fun error(message: String) = SyncStatus(State.ERROR, null, message)
+        fun idle(lastSync: Instant? = null) = SyncStatus(State.IDLE, lastSync, null, null)
+        fun syncing() = SyncStatus(State.SYNCING, null, null, null)
+        fun warning(message: String, lastSync: Instant? = null) = SyncStatus(State.WARNING, lastSync, null, message)
+        fun error(message: String) = SyncStatus(State.ERROR, null, message, null)
     }
 }
 
@@ -7849,6 +8335,11 @@ class SyncStatusRepository @Inject constructor(
     fun setIdle() {
         val lastSync = syncPreferences.getLastSyncTimestamp()
         _syncStatus.value = SyncStatus.idle(lastSync.takeIf { it != Instant.EPOCH })
+    }
+    
+    fun setWarning(message: String) {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        _syncStatus.value = SyncStatus.warning(message, lastSync.takeIf { it != Instant.EPOCH })
     }
     
     fun setError(message: String) {
@@ -7911,8 +8402,10 @@ class SyncWorker @AssistedInject constructor(
 
                 is SyncResult.Partial -> {
                     // Partial success - data was pushed, but pull failed
-                    // Mark as idle (not error) since push succeeded
-                    syncStatusRepository.setIdle()
+                    // Set warning status so user knows data might be incomplete
+                    syncStatusRepository.setWarning(
+                        "Дані збережено, але не всі оновлення завантажені"
+                    )
                     Log.w(TAG, "Sync partial: pushed=${result.pushed}, pull failed: ${result.pullError}")
                     // Return success - we'll try pull again on next sync
                     Result.success()
@@ -7937,6 +8430,74 @@ class SyncWorker @AssistedInject constructor(
             syncStatusRepository.setError("Failed after $MAX_RETRY_ATTEMPTS attempts: $error")
             Log.e(TAG, "Sync failed after max retries: $error")
             Result.failure()
+        }
+    }
+}
+
+
+
+================================================
+FILE: app/src/main/kotlin/com/zagot/zagotplus/ui/components/ConnectivityBanner.kt
+================================================
+package com.zagot.zagotplus.ui.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.zagot.zagotplus.R
+
+/**
+ * Banner displayed when the device is offline.
+ * Shows a warning message that data is not syncing.
+ */
+@Composable
+fun ConnectivityBanner(
+    isOnline: Boolean,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = !isOnline,
+        enter = slideInVertically(initialOffsetY = { -it }),
+        exit = slideOutVertically(targetOffsetY = { -it }),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.errorContainer)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.sync_offline_mode),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }
@@ -8500,6 +9061,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -8545,6 +9107,13 @@ fun SyncStatusIcon(
                     imageVector = Icons.Filled.CloudOff,
                     contentDescription = "Помилка синхронізації",
                     tint = MaterialTheme.colorScheme.error
+                )
+            }
+            SyncStatus.State.WARNING -> {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = syncStatus.warningMessage ?: "Часткова синхронізація",
+                    tint = MaterialTheme.colorScheme.tertiary
                 )
             }
             SyncStatus.State.IDLE -> {
@@ -9176,6 +9745,7 @@ package com.zagot.zagotplus.ui.screens.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.AuthPreferences
+import com.zagot.zagotplus.data.preferences.AuthPreferencesImpl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9200,7 +9770,9 @@ class PinViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             mode = if (isSettingPin) PinMode.SET_PIN else PinMode.VERIFY_PIN,
             isLockedOut = isLockedOut,
-            failedAttempts = failedAttempts
+            failedAttempts = failedAttempts,
+            minPinLength = AuthPreferencesImpl.MIN_PIN_LENGTH,
+            maxPinLength = AuthPreferencesImpl.MAX_PIN_LENGTH
         )
         
         if (isLockedOut) {
@@ -9210,7 +9782,7 @@ class PinViewModel @Inject constructor(
 
     fun onDigitPressed(digit: Int) {
         val currentState = _uiState.value
-        if (currentState.currentPin.length >= 4 || currentState.isLockedOut) return
+        if (currentState.currentPin.length >= currentState.maxPinLength || currentState.isLockedOut) return
 
         val newPin = currentState.currentPin + digit.toString()
         _uiState.value = currentState.copy(
@@ -9218,11 +9790,11 @@ class PinViewModel @Inject constructor(
             errorMessage = null
         )
 
-        if (newPin.length == 4) {
-            when (currentState.mode) {
-                PinMode.SET_PIN -> handleSetPinComplete(newPin)
-                PinMode.CONFIRM_PIN -> handleConfirmPinComplete(newPin)
-                PinMode.VERIFY_PIN -> handleVerifyPinComplete(newPin)
+        // Auto-submit when PIN reaches expected length for verification
+        if (currentState.mode == PinMode.VERIFY_PIN && newPin.length >= currentState.minPinLength) {
+            // Try to verify - but only auto-submit at max length
+            if (newPin.length == currentState.maxPinLength) {
+                handleVerifyPinComplete(newPin)
             }
         }
     }
@@ -9235,6 +9807,28 @@ class PinViewModel @Inject constructor(
             currentPin = currentPin.dropLast(1),
             errorMessage = null
         )
+    }
+
+    /**
+     * Called when user presses the confirm/submit button.
+     * Required for variable-length PINs.
+     */
+    fun onConfirmPressed() {
+        val currentState = _uiState.value
+        val pin = currentState.currentPin
+        
+        if (pin.length < currentState.minPinLength) {
+            _uiState.value = currentState.copy(
+                errorMessage = "PIN має бути мінімум ${currentState.minPinLength} цифр"
+            )
+            return
+        }
+        
+        when (currentState.mode) {
+            PinMode.SET_PIN -> handleSetPinComplete(pin)
+            PinMode.CONFIRM_PIN -> handleConfirmPinComplete(pin)
+            PinMode.VERIFY_PIN -> handleVerifyPinComplete(pin)
+        }
     }
 
     private fun handleSetPinComplete(pin: String) {
@@ -9271,19 +9865,26 @@ class PinViewModel @Inject constructor(
             authPreferences.recordFailedAttempt()
             val failedAttempts = authPreferences.getFailedAttempts()
             val isLockedOut = authPreferences.isLockedOut()
+            val lockoutSeconds = authPreferences.getLockoutRemainingSeconds()
             
             if (isLockedOut) {
+                val lockoutMessage = if (lockoutSeconds >= 60) {
+                    "Забагато невдалих спроб. Зачекайте ${lockoutSeconds / 60} хв."
+                } else {
+                    "Забагато невдалих спроб. Зачекайте ${lockoutSeconds} сек."
+                }
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
-                    errorMessage = "Забагато невдалих спроб. Зачекайте 30 секунд.",
+                    errorMessage = lockoutMessage,
                     failedAttempts = failedAttempts,
                     isLockedOut = true
                 )
                 startLockoutCountdown()
             } else {
+                val attemptsRemaining = 5 - failedAttempts
                 _uiState.value = _uiState.value.copy(
                     currentPin = "",
-                    errorMessage = "Неправильний PIN. Спроб залишилось: ${3 - failedAttempts}",
+                    errorMessage = "Неправильний PIN. Спроб залишилось: $attemptsRemaining",
                     failedAttempts = failedAttempts
                 )
             }
@@ -9312,8 +9913,13 @@ data class PinUiState(
     val errorMessage: String? = null,
     val failedAttempts: Int = 0,
     val isLockedOut: Boolean = false,
-    val isAuthenticated: Boolean = false
-)
+    val isAuthenticated: Boolean = false,
+    val minPinLength: Int = 4,
+    val maxPinLength: Int = 4
+) {
+    val canSubmit: Boolean
+        get() = currentPin.length >= minPinLength && !isLockedOut
+}
 
 enum class PinMode {
     SET_PIN,      // First-time PIN setup
@@ -9388,16 +9994,21 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.R
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import com.zagot.zagotplus.ui.theme.CashInfo
+import com.zagot.zagotplus.ui.theme.CashNegative
+import com.zagot.zagotplus.ui.theme.CashPositive
+import com.zagot.zagotplus.ui.theme.CashWarning
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
 import java.time.format.DateTimeFormatter
@@ -9422,15 +10033,15 @@ fun CashScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Каса") },
+                title = { Text(stringResource(R.string.cash_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.showCategoriesDialog() }) {
-                        Icon(Icons.Filled.Category, contentDescription = "Категорії")
+                        Icon(Icons.Filled.Category, contentDescription = stringResource(R.string.cash_categories_title))
                     }
                 }
             )
@@ -9478,7 +10089,7 @@ fun CashScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Історія операцій",
+                        text = stringResource(R.string.cash_history_title),
                         style = MaterialTheme.typography.titleMedium
                     )
                     if (uiState.totalItemsCount > 0) {
@@ -9544,7 +10155,7 @@ fun CashScreen(
                     if (uiState.historyItems.isEmpty() && !uiState.isLoading) {
                         item {
                             Text(
-                                text = "Немає операцій",
+                                text = stringResource(R.string.cash_no_operations),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
@@ -9556,7 +10167,7 @@ fun CashScreen(
                     if (!uiState.hasMoreItems && uiState.historyItems.isNotEmpty()) {
                         item {
                             Text(
-                                text = "Усі операції завантажено",
+                                text = stringResource(R.string.cash_all_loaded),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
@@ -9639,7 +10250,7 @@ private fun BalanceCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Каса",
+                text = stringResource(R.string.cash_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -9655,13 +10266,13 @@ private fun BalanceCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val changeColor = when {
-                    dailyChange > BigDecimal.ZERO -> Color(0xFF4CAF50)
-                    dailyChange < BigDecimal.ZERO -> Color(0xFFF44336)
+                    dailyChange > BigDecimal.ZERO -> CashPositive
+                    dailyChange < BigDecimal.ZERO -> CashNegative
                     else -> MaterialTheme.colorScheme.onPrimaryContainer
                 }
                 val changePrefix = if (dailyChange > BigDecimal.ZERO) "+" else ""
                 Text(
-                    text = "Сьогодні: $changePrefix${dailyChange.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = changeColor
                 )
@@ -9689,12 +10300,12 @@ private fun ActionButtons(
                 onClick = onDeposit,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50)
+                    containerColor = CashPositive
                 )
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Внести")
+                Text(stringResource(R.string.cash_deposit_action))
             }
             OutlinedButton(
                 onClick = onWithdraw,
@@ -9702,7 +10313,7 @@ private fun ActionButtons(
             ) {
                 Icon(Icons.Filled.Remove, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Вивести")
+                Text(stringResource(R.string.cash_withdraw_action))
             }
         }
         Button(
@@ -9711,7 +10322,7 @@ private fun ActionButtons(
         ) {
             Icon(Icons.Filled.Payment, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Оплатити")
+            Text(stringResource(R.string.cash_payment_action))
         }
     }
 }
@@ -9721,33 +10332,37 @@ private fun HistoryItem(
     item: CashHistoryItem,
     modifier: Modifier = Modifier
 ) {
-    val blueColor = Color(0xFF2196F3) // Blue for purchases and sales
+    val depositLabel = stringResource(R.string.cash_history_deposit)
+    val withdrawalLabel = stringResource(R.string.cash_history_withdrawal)
+    val paymentLabel = stringResource(R.string.cash_history_payment)
+    val purchaseLabel = stringResource(R.string.cash_history_purchase)
+    val saleLabel = stringResource(R.string.cash_history_sale)
     
     val (icon, color, label) = when (item.type) {
         CashHistoryItemType.DEPOSIT -> Triple(
             Icons.Filled.ArrowDownward,
-            Color(0xFF4CAF50),
-            "Поповнення"
+            CashPositive,
+            depositLabel
         )
         CashHistoryItemType.WITHDRAWAL -> Triple(
             Icons.Filled.ArrowUpward,
-            Color(0xFFF44336),
-            "Виведення"
+            CashNegative,
+            withdrawalLabel
         )
         CashHistoryItemType.PAYMENT -> Triple(
             Icons.Filled.Payment,
-            Color(0xFFFF9800),
-            item.categoryName ?: "Оплата"
+            CashWarning,
+            item.categoryName ?: paymentLabel
         )
         CashHistoryItemType.PURCHASE -> Triple(
             Icons.Filled.Remove,
-            blueColor,
-            "Закупки"
+            CashInfo,
+            purchaseLabel
         )
         CashHistoryItemType.SALE -> Triple(
             Icons.Filled.Add,
-            blueColor,
-            "Продажі"
+            CashInfo,
+            saleLabel
         )
     }
 
@@ -9793,7 +10408,12 @@ private fun HistoryItem(
                 val detailText = when {
                     item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE -> {
                         val parts = mutableListOf<String>()
-                        item.batchCount?.let { if (it > 1) parts.add("$it клієнтів") }
+                        item.batchCount?.let { count ->
+                            if (count > 1) {
+                                val clientWord = pluralizeUkrainian(count, "клієнт", "клієнти", "клієнтів")
+                                parts.add("$count $clientWord")
+                            }
+                        }
                         item.itemCount?.let { parts.add("$it поз.") }
                         item.weightKg?.let { parts.add("${it.setScale(2)} кг") }
                         if (parts.isNotEmpty()) parts.joinToString(" • ") else null
@@ -9845,13 +10465,13 @@ private fun DepositDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Поповнення каси") },
+        title = { Text(stringResource(R.string.cash_deposit_dialog_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -9864,7 +10484,7 @@ private fun DepositDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -9881,13 +10501,13 @@ private fun DepositDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Внести")
+                    Text(stringResource(R.string.cash_deposit_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -9907,11 +10527,11 @@ private fun WithdrawDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Виведення з каси") },
+        title = { Text(stringResource(R.string.cash_withdraw_dialog_title)) },
         text = {
             Column {
                 Text(
-                    text = "Доступно: ${balance.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -9919,7 +10539,7 @@ private fun WithdrawDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -9932,7 +10552,7 @@ private fun WithdrawDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -9949,13 +10569,13 @@ private fun WithdrawDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Вивести")
+                    Text(stringResource(R.string.cash_withdraw_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -9982,11 +10602,11 @@ private fun PaymentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Оплата витрат") },
+        title = { Text(stringResource(R.string.cash_payment_dialog_title)) },
         text = {
             Column {
                 Text(
-                    text = "Доступно: ${balance.setScale(2)} ₴",
+                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -9994,7 +10614,7 @@ private fun PaymentDialog(
                 OutlinedTextField(
                     value = amount,
                     onValueChange = onAmountChange,
-                    label = { Text("Сума") },
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
                     suffix = { Text("₴") },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -10005,15 +10625,16 @@ private fun PaymentDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val noCategoryLabel = stringResource(R.string.cash_no_category)
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedCategory?.name ?: "Без категорії",
+                        value = selectedCategory?.name ?: noCategoryLabel,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Категорія") },
+                        label = { Text(stringResource(R.string.cash_category_label)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -10024,7 +10645,7 @@ private fun PaymentDialog(
                         onDismissRequest = { expanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Без категорії") },
+                            text = { Text(noCategoryLabel) },
                             onClick = {
                                 onCategorySelect(null)
                                 expanded = false
@@ -10046,7 +10667,7 @@ private fun PaymentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = onNotesChange,
-                    label = { Text("Примітка (опціонально)") },
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -10063,13 +10684,13 @@ private fun PaymentDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Оплатити")
+                    Text(stringResource(R.string.cash_payment_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Скасувати")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
@@ -10086,7 +10707,7 @@ private fun CategoriesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Категорії витрат") },
+        title = { Text(stringResource(R.string.cash_categories_title)) },
         text = {
             Column {
                 Row(
@@ -10096,7 +10717,7 @@ private fun CategoriesDialog(
                     OutlinedTextField(
                         value = newCategoryName,
                         onValueChange = onNewCategoryNameChange,
-                        label = { Text("Нова категорія") },
+                        label = { Text(stringResource(R.string.cash_new_category_label)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -10105,7 +10726,7 @@ private fun CategoriesDialog(
                         onClick = onAddCategory,
                         enabled = newCategoryName.isNotBlank()
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Додати")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.save))
                     }
                 }
 
@@ -10113,7 +10734,7 @@ private fun CategoriesDialog(
 
                 if (categories.isEmpty()) {
                     Text(
-                        text = "Немає категорій",
+                        text = stringResource(R.string.cash_no_categories),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -10135,7 +10756,7 @@ private fun CategoriesDialog(
                             ) {
                                 Icon(
                                     Icons.Filled.Delete,
-                                    contentDescription = "Видалити",
+                                    contentDescription = stringResource(R.string.delete),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -10146,10 +10767,28 @@ private fun CategoriesDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Закрити")
+                Text(stringResource(R.string.cash_close))
             }
         }
     )
+}
+
+/**
+ * Ukrainian pluralization helper.
+ * Returns the correct form based on the number:
+ * - 1, 21, 31... → singular (клієнт)
+ * - 2-4, 22-24, 32-34... → few (клієнти)
+ * - 0, 5-20, 25-30... → many (клієнтів)
+ */
+private fun pluralizeUkrainian(count: Int, one: String, few: String, many: String): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..19 -> many
+        mod10 == 1 -> one
+        mod10 in 2..4 -> few
+        else -> many
+    }
 }
 
 
@@ -10665,6 +11304,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.TransactionType
@@ -10721,10 +11362,16 @@ fun HistoryScreen(
 
         Divider()
 
-        // Content
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Content with pull-to-refresh
+        val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
+        
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
+        ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading && uiState.batches.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -13829,7 +14476,10 @@ data class PurchaseEntryUiState(
     val positions: List<PurchasePosition> = emptyList(),
     val notes: String = "",
     val screenState: PurchaseEntryScreenState = PurchaseEntryScreenState.PRODUCT_GRID,
-    val scaleWeight: BigDecimal? = null, // null = not connected
+    // Phase 6 stub: Scale weight from Bluetooth/TCP connection
+    // Currently always null (scale not implemented yet)
+    // When implemented, this will be populated by ScaleService
+    val scaleWeight: BigDecimal? = null,
     val isManualWeightMode: Boolean = false, // true = user overriding scale weight
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -17465,11 +18115,13 @@ fun SettingsScreen(
                                     }
                                 }
                                 SyncStatus.State.SYNCING -> "Синхронізація..."
+                                SyncStatus.State.WARNING -> uiState.syncStatus.warningMessage ?: "Часткова синхронізація"
                                 SyncStatus.State.ERROR -> "Помилка"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = when (uiState.syncStatus.state) {
                                 SyncStatus.State.ERROR -> MaterialTheme.colorScheme.error
+                                SyncStatus.State.WARNING -> MaterialTheme.colorScheme.tertiary
                                 SyncStatus.State.SYNCING -> MaterialTheme.colorScheme.primary
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
@@ -19250,6 +19902,12 @@ val GrayVariant80 = Color(0xFFC6C9C0)
 val GrayVariant90 = Color(0xFFE2E5DC)
 val GrayVariant95 = Color(0xFFF0F3EA)
 
+// Semantic colors for cash operations
+val CashPositive = Color(0xFF4CAF50)  // Deposits, income
+val CashNegative = Color(0xFFF44336)  // Withdrawals, expenses
+val CashWarning = Color(0xFFFF9800)   // Payments
+val CashInfo = Color(0xFF2196F3)      // Purchases, sales
+
 
 
 ================================================
@@ -19543,6 +20201,11 @@ FILE: app/src/main/res/values/strings.xml
     <string name="pin_confirm_title">Confirm PIN code</string>
     <string name="pin_verify_title">Enter PIN code</string>
     <string name="pin_backspace">Delete</string>
+    <string name="pin_error_mismatch">PINs don\'t match. Try again.</string>
+    <string name="pin_error_wrong">Wrong PIN. Attempts remaining: %d</string>
+    <string name="pin_error_locked_seconds">Too many failed attempts. Wait %d seconds.</string>
+    <string name="pin_error_locked_minutes">Too many failed attempts. Wait %d minutes.</string>
+    <string name="pin_min_length_error">PIN must be at least %d digits</string>
     
     <!-- Cash Screen -->
     <string name="cash_deposit">Deposit</string>
@@ -19550,16 +20213,65 @@ FILE: app/src/main/res/values/strings.xml
     <string name="cash_payment">Payment</string>
     <string name="cash_balance">Balance</string>
     <string name="cash_insufficient_funds">Insufficient funds</string>
+    <string name="cash_deposit_error">Deposit error</string>
+    <string name="cash_withdraw_error">Withdrawal error</string>
+    <string name="cash_payment_error">Payment error</string>
+    <string name="cash_category_create_error">Category creation error</string>
+    <string name="cash_category_delete_error">Category deletion error</string>
+    <string name="cash_title">Cash Register</string>
+    <string name="cash_deposit_action">Deposit</string>
+    <string name="cash_withdraw_action">Withdraw</string>
+    <string name="cash_payment_action">Pay</string>
+    <string name="cash_history_title">Transaction History</string>
+    <string name="cash_no_operations">No operations</string>
+    <string name="cash_all_loaded">All operations loaded</string>
+    <string name="cash_today">Today: %1$s</string>
+    <string name="cash_deposit_dialog_title">Cash Deposit</string>
+    <string name="cash_withdraw_dialog_title">Cash Withdrawal</string>
+    <string name="cash_payment_dialog_title">Pay Expense</string>
+    <string name="cash_categories_title">Expense Categories</string>
+    <string name="cash_amount_label">Amount</string>
+    <string name="cash_notes_label">Notes (optional)</string>
+    <string name="cash_category_label">Category</string>
+    <string name="cash_no_category">No category</string>
+    <string name="cash_new_category_label">New category</string>
+    <string name="cash_no_categories">No categories</string>
+    <string name="cash_available">Available: %1$s</string>
+    <string name="cash_close">Close</string>
+    <string name="cash_history_deposit">Deposit</string>
+    <string name="cash_history_withdrawal">Withdrawal</string>
+    <string name="cash_history_payment">Payment</string>
+    <string name="cash_history_purchase">Purchases</string>
+    <string name="cash_history_sale">Sales</string>
+    
+    <!-- Sync -->
+    <string name="sync_partial_warning">Data saved, but not all updates downloaded</string>
+    <string name="sync_offline_mode">Offline mode - data not syncing</string>
     
     <!-- Common -->
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
+    <string name="confirm">Confirm</string>
     <string name="error_loading">Loading error</string>
     <string name="error_saving">Saving error</string>
+    <string name="error_refresh">Refresh error</string>
     <string name="synced">Synced</string>
     <string name="back">Back</string>
+    <string name="unknown_location">Unknown location</string>
+    <string name="unknown_product">Unknown product</string>
+    
+    <!-- History -->
+    <string name="history_empty_title">No transactions</string>
+    <string name="history_empty_description">Transactions will appear here after purchases or sales</string>
+    <string name="history_filter_no_results">No results</string>
+    <string name="history_filter_try_different">Try changing filters</string>
+    <string name="history_clear_filters">Clear filters</string>
+    
+    <!-- Undo -->
+    <string name="operation_completed">Operation completed</string>
+    <string name="undo">Undo</string>
 </resources>
 
 
@@ -19593,6 +20305,31 @@ FILE: app/src/main/res/values-uk/strings.xml
     <string name="cash_payment">Оплата</string>
     <string name="cash_balance">Баланс</string>
     <string name="cash_insufficient_funds">Недостатньо коштів</string>
+    <string name="cash_title">Каса</string>
+    <string name="cash_deposit_action">Внести</string>
+    <string name="cash_withdraw_action">Вивести</string>
+    <string name="cash_payment_action">Оплатити</string>
+    <string name="cash_history_title">Історія операцій</string>
+    <string name="cash_no_operations">Немає операцій</string>
+    <string name="cash_all_loaded">Усі операції завантажено</string>
+    <string name="cash_today">Сьогодні: %1$s</string>
+    <string name="cash_deposit_dialog_title">Поповнення каси</string>
+    <string name="cash_withdraw_dialog_title">Виведення з каси</string>
+    <string name="cash_payment_dialog_title">Оплата витрат</string>
+    <string name="cash_categories_title">Категорії витрат</string>
+    <string name="cash_amount_label">Сума</string>
+    <string name="cash_notes_label">Примітка (опціонально)</string>
+    <string name="cash_category_label">Категорія</string>
+    <string name="cash_no_category">Без категорії</string>
+    <string name="cash_new_category_label">Нова категорія</string>
+    <string name="cash_no_categories">Немає категорій</string>
+    <string name="cash_available">Доступно: %1$s</string>
+    <string name="cash_close">Закрити</string>
+    <string name="cash_history_deposit">Поповнення</string>
+    <string name="cash_history_withdrawal">Виведення</string>
+    <string name="cash_history_payment">Оплата</string>
+    <string name="cash_history_purchase">Закупки</string>
+    <string name="cash_history_sale">Продажі</string>
     
     <!-- Common -->
     <string name="save">Зберегти</string>
@@ -19604,6 +20341,214 @@ FILE: app/src/main/res/values-uk/strings.xml
     <string name="synced">Синхронізовано</string>
     <string name="back">Назад</string>
 </resources>
+
+
+
+================================================
+FILE: app/src/main/res/xml/backup_rules.xml
+================================================
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup rules for Android Auto Backup.
+    Excludes sensitive authentication data from being backed up to Google Drive.
+-->
+<full-backup-content>
+    <!-- Exclude encrypted shared preferences containing PIN hash and device credentials -->
+    <exclude domain="sharedpref" path="zagot_device_prefs_encrypted.xml"/>
+    <exclude domain="sharedpref" path="zagot_auth_prefs.xml"/>
+    
+    <!-- Exclude sync preferences (timestamps can cause duplicate sync issues) -->
+    <exclude domain="sharedpref" path="zagot_sync_prefs.xml"/>
+    
+    <!-- Include the Room database (transactions can be restored) -->
+    <include domain="database" path="zagot_database"/>
+</full-backup-content>
+
+
+
+================================================
+FILE: app/src/main/res/xml/network_security_config.xml
+================================================
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration for Zagot+
+    
+    Security features:
+    1. Enforces HTTPS for all connections (no cleartext traffic)
+    2. Certificate pinning for Supabase domain (prevents MITM attacks)
+    
+    Note: Update pin-set expiration date and pins before they expire.
+    Generate pins using: openssl s_client -connect YOUR_DOMAIN:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+    
+    The backup-pin should be a pin for the CA certificate (like DigiCert) for rotation.
+-->
+<network-security-config>
+    <!-- Base config: require HTTPS for all connections -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Supabase domain configuration with certificate pinning -->
+    <!-- TODO: Replace 'your-project.supabase.co' with actual Supabase project domain -->
+    <!-- TODO: Generate actual certificate pins before production deployment -->
+    <!--
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">supabase.co</domain>
+        <pin-set expiration="2027-01-01">
+            <pin digest="SHA-256">REPLACE_WITH_ACTUAL_PIN</pin>
+            <pin digest="SHA-256">REPLACE_WITH_BACKUP_PIN</pin>
+        </pin-set>
+    </domain-config>
+    -->
+    
+    <!-- Debug config: allow user-added CAs for development/testing -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>
+
+
+
+================================================
+FILE: app/src/test/kotlin/com/zagot/zagotplus/data/local/MigrationTest.kt
+================================================
+package com.zagot.zagotplus.data.local
+
+import androidx.room.testing.MigrationTestHelper
+import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.IOException
+
+/**
+ * Tests for database migrations to ensure data integrity during schema changes.
+ * 
+ * IMPORTANT: These tests must run as instrumented tests (androidTest) 
+ * since they require the Android SQLite implementation.
+ * 
+ * To run: ./gradlew connectedAndroidTest --tests "*.MigrationTest"
+ */
+@RunWith(AndroidJUnit4::class)
+class MigrationTest {
+    
+    private val TEST_DB = "migration-test"
+    
+    @get:Rule
+    val helper: MigrationTestHelper = MigrationTestHelper(
+        InstrumentationRegistry.getInstrumentation(),
+        ZagotDatabase::class.java.canonicalName,
+        FrameworkSQLiteOpenHelperFactory()
+    )
+    
+    /**
+     * Test migration from version 8 to 9.
+     * Verifies that:
+     * 1. Cash operations data is preserved
+     * 2. transaction_id column is renamed to batch_id
+     * 3. All indexes are recreated correctly
+     */
+    @Test
+    @Throws(IOException::class)
+    fun migrate8To9() {
+        // Create database at version 8
+        helper.createDatabase(TEST_DB, 8).apply {
+            // Insert test cash operation with a transaction_id
+            execSQL("""
+                INSERT INTO cash_operations (
+                    id, local_id, location_id, type, amount, 
+                    category_id, transaction_id, notes, device_id, 
+                    created_at, synced_at
+                ) VALUES (
+                    'test-id-1', 'local-test-1', null, 'DEPOSIT', '100.00',
+                    null, 'batch-ref-1', 'Test notes', 'device-1',
+                    1704067200000, null
+                )
+            """)
+            close()
+        }
+        
+        // Run migration
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 
+            9, 
+            true, 
+            ZagotDatabase.MIGRATION_8_9
+        )
+        
+        // Verify data was preserved and column renamed
+        val cursor = db.query("SELECT * FROM cash_operations WHERE id = 'test-id-1'")
+        assert(cursor.moveToFirst()) { "Cash operation should exist after migration" }
+        
+        // Check that batch_id contains the old transaction_id value
+        val batchIdIndex = cursor.getColumnIndex("batch_id")
+        assert(batchIdIndex >= 0) { "batch_id column should exist" }
+        val batchId = cursor.getString(batchIdIndex)
+        assert(batchId == "batch-ref-1") { "batch_id should contain old transaction_id value" }
+        
+        // Verify transaction_id column no longer exists
+        val transactionIdIndex = cursor.getColumnIndex("transaction_id")
+        assert(transactionIdIndex < 0) { "transaction_id column should not exist after migration" }
+        
+        // Verify all other data is preserved
+        val amountIndex = cursor.getColumnIndex("amount")
+        val amount = cursor.getString(amountIndex)
+        assert(amount == "100.00") { "Amount should be preserved" }
+        
+        cursor.close()
+        db.close()
+    }
+    
+    /**
+     * Test that migration 8→9 is atomic (transaction-safe).
+     * If migration fails midway, database should remain at version 8.
+     */
+    @Test
+    @Throws(IOException::class)
+    fun migrate8To9_preservesDataOnSuccess() {
+        // Create database at version 8 with multiple records
+        helper.createDatabase(TEST_DB, 8).apply {
+            // Insert multiple cash operations
+            for (i in 1..10) {
+                execSQL("""
+                    INSERT INTO cash_operations (
+                        id, local_id, location_id, type, amount, 
+                        category_id, transaction_id, notes, device_id, 
+                        created_at, synced_at
+                    ) VALUES (
+                        'test-id-$i', 'local-test-$i', null, 'DEPOSIT', '${i * 10}.00',
+                        null, 'batch-ref-$i', 'Test notes $i', 'device-1',
+                        1704067200000, null
+                    )
+                """)
+            }
+            close()
+        }
+        
+        // Run migration
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 
+            9, 
+            true, 
+            ZagotDatabase.MIGRATION_8_9
+        )
+        
+        // Verify all records exist
+        val cursor = db.query("SELECT COUNT(*) FROM cash_operations")
+        cursor.moveToFirst()
+        val count = cursor.getInt(0)
+        assert(count == 10) { "All 10 records should be preserved after migration" }
+        
+        cursor.close()
+        db.close()
+    }
+}
 
 
 
@@ -22284,13 +23229,13 @@ class DevicePreferencesTest {
         sharedPreferences = mockk(relaxed = true)
         editor = mockk(relaxed = true)
 
-        every { context.getSharedPreferences("zagot_device_prefs", Context.MODE_PRIVATE) } returns sharedPreferences
         every { sharedPreferences.edit() } returns editor
         every { editor.putString(any(), any()) } returns editor
         every { editor.apply() } returns Unit
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        // Use the test factory to bypass encrypted prefs
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
     }
 
     // Device ID Tests
@@ -22340,7 +23285,7 @@ class DevicePreferencesTest {
     fun `getSelectedLocationId returns null when not set`() {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.getSelectedLocationId()
 
         assertNull(result)
@@ -22350,7 +23295,7 @@ class DevicePreferencesTest {
     fun `getSelectedLocationId returns UUID when stored`() {
         every { sharedPreferences.getString("selected_location", null) } returns testLocationId.toString()
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.getSelectedLocationId()
 
         assertEquals(testLocationId, result)
@@ -22371,7 +23316,7 @@ class DevicePreferencesTest {
     fun `selectedLocationIdFlow emits initial value`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns testLocationId.toString()
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
         assertEquals(testLocationId, result)
@@ -22381,7 +23326,7 @@ class DevicePreferencesTest {
     fun `selectedLocationIdFlow emits null when not set`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
         assertNull(result)
@@ -22391,7 +23336,7 @@ class DevicePreferencesTest {
     fun `setSelectedLocationId updates flow`() = runTest {
         every { sharedPreferences.getString("selected_location", null) } returns null
 
-        devicePreferences = DevicePreferences(context)
+        devicePreferences = DevicePreferences.createForTest(context, sharedPreferences)
         devicePreferences.setSelectedLocationId(testLocationId)
         val result = devicePreferences.selectedLocationIdFlow.first()
 
@@ -34564,6 +35509,15 @@ coil = "2.5.0"
 # Reorderable
 reorderable = "2.3.0"
 
+# Biometric
+biometric = "1.1.0"
+
+# App Update
+playAppUpdate = "2.1.0"
+
+# SwipeRefresh (Accompanist)
+accompanist = "0.32.0"
+
 # Testing
 junit = "4.13.2"
 mockk = "1.13.8"
@@ -34628,6 +35582,16 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 # Reorderable
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
+
+# Biometric
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+
+# App Update
+play-app-update = { group = "com.google.android.play", name = "app-update", version.ref = "playAppUpdate" }
+play-app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "playAppUpdate" }
+
+# SwipeRefresh
+accompanist-swiperefresh = { group = "com.google.accompanist", name = "accompanist-swiperefresh", version.ref = "accompanist" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

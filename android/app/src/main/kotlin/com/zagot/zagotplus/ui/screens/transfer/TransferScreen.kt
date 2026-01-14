@@ -34,7 +34,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -58,7 +58,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -271,7 +273,7 @@ private fun InventoryGrid(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Place,
-                        contentDescription = null,
+                        contentDescription = "Локація",
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -305,7 +307,7 @@ private fun InventoryGrid(
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Filled.Place,
-                                    contentDescription = null
+                                    contentDescription = "Локація"
                                 )
                             }
                         )
@@ -388,7 +390,7 @@ private fun InventoryTile(
                 } else {
                     Icon(
                         imageVector = Icons.Filled.Image,
-                        contentDescription = null,
+                        contentDescription = "Фото товару",
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -492,7 +494,7 @@ private fun TransferWeightEntry(
                 .fillMaxWidth()
                 .height(64.dp)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
+            Icon(Icons.Filled.Add, contentDescription = "Додати")
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Додати позицію",
@@ -541,7 +543,7 @@ private fun TransferPositionsList(
                         .fillMaxWidth()
                         .height(56.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Icon(Icons.Filled.Add, contentDescription = "Додати")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Додати ще товар",
@@ -573,7 +575,7 @@ private fun TransferPositionsList(
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(16.dp)
         ) {
-            Divider()
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
             
             // Totals
@@ -631,7 +633,7 @@ private fun TransferPositionsList(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(Icons.Filled.ArrowForward, contentDescription = null)
+                    Icon(Icons.Filled.ArrowForward, contentDescription = "Перейти далі")
                 }
             }
         }
@@ -754,7 +756,7 @@ private fun LocationCard(
         ) {
             Icon(
                 imageVector = Icons.Filled.Place,
-                contentDescription = null,
+                contentDescription = "Локація",
                 modifier = Modifier.size(32.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -773,7 +775,7 @@ private fun LocationCard(
             }
             Icon(
                 imageVector = Icons.Filled.ArrowForward,
-                contentDescription = null,
+                contentDescription = "Оберіть",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -790,17 +792,17 @@ private fun TransferSummaryOverlay(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+    
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
-            .clickable(enabled = !isSaving) { onConfirm() },
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)),
         contentAlignment = Alignment.Center
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .clickable(enabled = !isSaving) { onConfirm() },
+                .fillMaxWidth(0.9f),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -841,7 +843,7 @@ private fun TransferSummaryOverlay(
                     }
                     Icon(
                         imageVector = Icons.Filled.ArrowForward,
-                        contentDescription = null,
+                        contentDescription = "Напрямок переміщення",
                         modifier = Modifier.padding(horizontal = 16.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -860,7 +862,7 @@ private fun TransferSummaryOverlay(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Positions list
@@ -876,7 +878,7 @@ private fun TransferSummaryOverlay(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Total
@@ -899,17 +901,28 @@ private fun TransferSummaryOverlay(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Saving indicator or hint
+                // Confirm button with haptic feedback
                 if (isSaving) {
                     CircularProgressIndicator()
                 } else {
-                    Text(
-                        text = "(торкніться для продовження)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onConfirm()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = "ПІДТВЕРДИТИ ПЕРЕМІЩЕННЯ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

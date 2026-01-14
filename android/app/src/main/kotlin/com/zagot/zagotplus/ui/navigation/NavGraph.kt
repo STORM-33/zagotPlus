@@ -111,7 +111,7 @@ fun NavGraph(
                                     navController.navigate(Destination.Products.route)
                                 },
                                 leadingIcon = {
-                                    Icon(Destination.Products.icon, contentDescription = null)
+                                    Icon(Destination.Products.icon, contentDescription = "Товари")
                                 }
                             )
                             DropdownMenuItem(
@@ -121,7 +121,7 @@ fun NavGraph(
                                     navController.navigate(Destination.Cash.route)
                                 },
                                 leadingIcon = {
-                                    Icon(Destination.Cash.icon, contentDescription = null)
+                                    Icon(Destination.Cash.icon, contentDescription = "Каса")
                                 }
                             )
                             DropdownMenuItem(
@@ -131,7 +131,7 @@ fun NavGraph(
                                     navController.navigate(Destination.Transfer.route)
                                 },
                                 leadingIcon = {
-                                    Icon(Destination.Transfer.icon, contentDescription = null)
+                                    Icon(Destination.Transfer.icon, contentDescription = "Переміщення")
                                 }
                             )
                             DropdownMenuItem(
@@ -141,7 +141,7 @@ fun NavGraph(
                                     navController.navigate(Destination.Reports.route)
                                 },
                                 leadingIcon = {
-                                    Icon(Destination.Reports.icon, contentDescription = null)
+                                    Icon(Destination.Reports.icon, contentDescription = "Звіти")
                                 }
                             )
                             DropdownMenuItem(
@@ -151,7 +151,7 @@ fun NavGraph(
                                     navController.navigate(Destination.Settings.route)
                                 },
                                 leadingIcon = {
-                                    Icon(Destination.Settings.icon, contentDescription = null)
+                                    Icon(Destination.Settings.icon, contentDescription = "Налаштування")
                                 }
                             )
                         }

@@ -71,3 +71,9 @@ val GrayVariant70 = Color(0xFFAAADA5)
 val GrayVariant80 = Color(0xFFC6C9C0)
 val GrayVariant90 = Color(0xFFE2E5DC)
 val GrayVariant95 = Color(0xFFF0F3EA)
+
+// Semantic colors for cash operations
+val CashPositive = Color(0xFF4CAF50)  // Deposits, income
+val CashNegative = Color(0xFFF44336)  // Withdrawals, expenses
+val CashWarning = Color(0xFFFF9800)   // Payments
+val CashInfo = Color(0xFF2196F3)      // Purchases, sales

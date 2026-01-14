@@ -38,7 +38,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -410,7 +410,7 @@ private fun WeightEntry(
                 .fillMaxWidth()
                 .height(64.dp)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
+            Icon(Icons.Filled.Add, contentDescription = "Додати")
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Додати позицію",
@@ -482,7 +482,7 @@ private fun PositionsList(
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
+                Icon(Icons.Filled.Add, contentDescription = "Додати")
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Додати ще товар",
@@ -491,7 +491,7 @@ private fun PositionsList(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Divider()
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
             
             // Totals
@@ -579,40 +579,48 @@ private fun PositionItem(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = position.product.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${position.weightKg.toPlainString()} кг × ₴${position.pricePerKg.toPlainString()}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
                 Text(
-                    text = position.product.name,
+                    text = "₴${position.totalAmount.toPlainString()}",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    text = "${position.weightKg.toPlainString()} кг × ₴${position.pricePerKg.toPlainString()}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Видалити",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
-            
             Text(
-                text = "₴${position.totalAmount.toPlainString()}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                text = "Утримуйте для редагування",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
             )
-            
-            IconButton(onClick = onRemove) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "Видалити",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
         }
     }
 }

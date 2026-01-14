@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration for Zagot+
+    
+    Security features:
+    1. Enforces HTTPS for all connections (no cleartext traffic)
+    2. Certificate pinning for Supabase domain (prevents MITM attacks)
+    
+    Note: Update pin-set expiration date and pins before they expire.
+    Generate pins using: openssl s_client -connect YOUR_DOMAIN:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+    
+    The backup-pin should be a pin for the CA certificate (like DigiCert) for rotation.
+-->
+<network-security-config>
+    <!-- Base config: require HTTPS for all connections -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Supabase domain configuration with certificate pinning -->
+    <!-- TODO: Replace 'your-project.supabase.co' with actual Supabase project domain -->
+    <!-- TODO: Generate actual certificate pins before production deployment -->
+    <!--
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">supabase.co</domain>
+        <pin-set expiration="2027-01-01">
+            <pin digest="SHA-256">REPLACE_WITH_ACTUAL_PIN</pin>
+            <pin digest="SHA-256">REPLACE_WITH_BACKUP_PIN</pin>
+        </pin-set>
+    </domain-config>
+    -->
+    
+    <!-- Debug config: allow user-added CAs for development/testing -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

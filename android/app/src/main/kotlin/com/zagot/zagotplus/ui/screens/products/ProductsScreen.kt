@@ -296,6 +296,11 @@ private fun ProductCard(
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
+                    Text(
+                        text = "Утримуйте для опцій",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 }
                 
                 Switch(
@@ -316,7 +321,7 @@ private fun ProductCard(
                         onEdit()
                     },
                     leadingIcon = {
-                        Icon(Icons.Filled.Edit, contentDescription = null)
+                        Icon(Icons.Filled.Edit, contentDescription = "Редагувати")
                     }
                 )
                 DropdownMenuItem(
@@ -328,7 +333,7 @@ private fun ProductCard(
                     leadingIcon = {
                         Icon(
                             Icons.Filled.Delete,
-                            contentDescription = null,
+                            contentDescription = "Фото товару",
                             tint = MaterialTheme.colorScheme.error
                         )
                     }

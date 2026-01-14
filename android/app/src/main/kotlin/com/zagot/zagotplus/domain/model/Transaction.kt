@@ -1,12 +1,16 @@
 package com.zagot.zagotplus.domain.model
 
+import androidx.compose.runtime.Stable
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
 /**
  * Domain model for a transaction.
+ * 
+ * Marked @Stable for Compose recomposition optimization.
  */
+@Stable
 data class Transaction(
     val id: UUID,
     val localId: String,
