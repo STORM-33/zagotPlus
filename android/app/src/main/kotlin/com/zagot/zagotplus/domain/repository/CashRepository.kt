@@ -41,7 +41,9 @@ interface CashRepository {
     
     // Cash history (unified: cash_operations + purchases + sales)
     suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryItem>
+    suspend fun getCashHistoryByLocationPaged(locationId: UUID, limit: Int, offset: Int): List<CashHistoryItem>
     suspend fun getTotalHistoryCount(): Int
+    suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int
 
     
     // Balance (per location)

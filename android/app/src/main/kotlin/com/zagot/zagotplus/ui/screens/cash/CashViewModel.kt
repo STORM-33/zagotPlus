@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.CashRepository
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -36,6 +39,8 @@ data class CashUiState(
     val dailyChange: BigDecimal = BigDecimal.ZERO,
     val historyItems: List<CashHistoryItem> = emptyList(),
     val categories: List<ExpenseCategory> = emptyList(),
+    val locations: List<Location> = emptyList(),
+    val selectedLocationId: UUID? = null, // null = totals view (all locations)
     val selectedDate: LocalDate = LocalDate.now(),
     val dialogType: CashDialogType = CashDialogType.NONE,
     val dialogAmount: String = "",
@@ -57,11 +62,18 @@ data class CashUiState(
 
     val canConfirmPayment: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true
+
+    val isTotalsView: Boolean
+        get() = selectedLocationId == null
+
+    val selectedLocationName: String?
+        get() = selectedLocationId?.let { id -> locations.find { it.id == id }?.name }
 }
 
 @HiltViewModel
 class CashViewModel @Inject constructor(
-    private val cashRepository: CashRepository
+    private val cashRepository: CashRepository,
+    private val locationRepository: LocationRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CashUiState())
@@ -80,28 +92,81 @@ class CashViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // Load initial page of history items (cash operations + purchases + sales)
-                val totalCount = cashRepository.getTotalHistoryCount()
-                val initialItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
+                // Load locations first
+                val locations = locationRepository.getAllLocations().first()
+                _uiState.update { it.copy(locations = locations) }
                 
-                // Collect balance and categories as flows
-                combine(
-                    cashRepository.getTotalBalance(),
-                    cashRepository.getDailyChangeGlobal(LocalDate.now()),
-                    cashRepository.getActiveCategories()
-                ) { balance, dailyChange, categories ->
-                    _uiState.update { state ->
-                        state.copy(
-                            balance = balance,
-                            dailyChange = dailyChange,
-                            historyItems = initialItems,
-                            categories = categories,
-                            isLoading = false,
-                            totalItemsCount = totalCount,
-                            hasMoreItems = initialItems.size < totalCount
-                        )
-                    }
-                }.collect { }
+                // Load history and balance based on selected location
+                loadHistoryAndBalance()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Помилка завантаження",
+                        isLoading = false
+                    )
+                }
+            }
+        }
+    }
+
+    private fun loadHistoryAndBalance() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val selectedLocationId = state.selectedLocationId
+            
+            try {
+                // Load initial page of history items based on location
+                val totalCount: Int
+                val initialItems: List<CashHistoryItem>
+                
+                if (selectedLocationId == null) {
+                    // Totals view - all locations
+                    totalCount = cashRepository.getTotalHistoryCount()
+                    initialItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
+                } else {
+                    // Specific location
+                    totalCount = cashRepository.getTotalHistoryCountByLocation(selectedLocationId)
+                    initialItems = cashRepository.getCashHistoryByLocationPaged(selectedLocationId, PAGE_SIZE, 0)
+                }
+                
+                // Collect balance and categories as flows based on location
+                if (selectedLocationId == null) {
+                    combine(
+                        cashRepository.getTotalBalance(),
+                        cashRepository.getDailyChangeGlobal(LocalDate.now()),
+                        cashRepository.getActiveCategories()
+                    ) { balance, dailyChange, categories ->
+                        _uiState.update { currentState ->
+                            currentState.copy(
+                                balance = balance,
+                                dailyChange = dailyChange,
+                                historyItems = initialItems,
+                                categories = categories,
+                                isLoading = false,
+                                totalItemsCount = totalCount,
+                                hasMoreItems = initialItems.size < totalCount
+                            )
+                        }
+                    }.collect { }
+                } else {
+                    combine(
+                        cashRepository.getBalance(selectedLocationId),
+                        cashRepository.getDailyChange(selectedLocationId, LocalDate.now()),
+                        cashRepository.getActiveCategories()
+                    ) { balance, dailyChange, categories ->
+                        _uiState.update { currentState ->
+                            currentState.copy(
+                                balance = balance,
+                                dailyChange = dailyChange,
+                                historyItems = initialItems,
+                                categories = categories,
+                                isLoading = false,
+                                totalItemsCount = totalCount,
+                                hasMoreItems = initialItems.size < totalCount
+                            )
+                        }
+                    }.collect { }
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -121,7 +186,11 @@ class CashViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingMore = true) }
             try {
                 val offset = state.historyItems.size
-                val moreItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
+                val moreItems = if (state.selectedLocationId == null) {
+                    cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
+                } else {
+                    cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, PAGE_SIZE, offset)
+                }
                 _uiState.update { currentState ->
                     val newItems = currentState.historyItems + moreItems
                     currentState.copy(
@@ -144,11 +213,21 @@ class CashViewModel @Inject constructor(
     fun refreshOperations() {
         viewModelScope.launch {
             try {
-                val totalCount = cashRepository.getTotalHistoryCount()
-                val currentCount = _uiState.value.historyItems.size.coerceAtLeast(PAGE_SIZE)
-                val items = cashRepository.getCashHistoryPaged(currentCount, 0)
-                _uiState.update { state ->
-                    state.copy(
+                val state = _uiState.value
+                val totalCount: Int
+                val items: List<CashHistoryItem>
+                val currentCount = state.historyItems.size.coerceAtLeast(PAGE_SIZE)
+                
+                if (state.selectedLocationId == null) {
+                    totalCount = cashRepository.getTotalHistoryCount()
+                    items = cashRepository.getCashHistoryPaged(currentCount, 0)
+                } else {
+                    totalCount = cashRepository.getTotalHistoryCountByLocation(state.selectedLocationId)
+                    items = cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, currentCount, 0)
+                }
+                
+                _uiState.update { currentState ->
+                    currentState.copy(
                         historyItems = items,
                         totalItemsCount = totalCount,
                         hasMoreItems = items.size < totalCount
@@ -242,7 +321,7 @@ class CashViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true) }
             try {
                 cashRepository.deposit(
-                    locationId = null,
+                    locationId = state.selectedLocationId,
                     amount = amount,
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
@@ -273,7 +352,7 @@ class CashViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true) }
             try {
                 cashRepository.withdraw(
-                    locationId = null,
+                    locationId = state.selectedLocationId,
                     amount = amount,
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
@@ -304,7 +383,7 @@ class CashViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true) }
             try {
                 cashRepository.payment(
-                    locationId = null,
+                    locationId = state.selectedLocationId,
                     amount = amount,
                     categoryId = state.dialogCategoryId,
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
@@ -349,5 +428,21 @@ class CashViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * Select a specific location to filter cash history and balance.
+     */
+    fun selectLocation(locationId: UUID) {
+        _uiState.update { it.copy(selectedLocationId = locationId, isLoading = true) }
+        loadHistoryAndBalance()
+    }
+
+    /**
+     * Switch to totals view showing all locations.
+     */
+    fun selectTotalView() {
+        _uiState.update { it.copy(selectedLocationId = null, isLoading = true) }
+        loadHistoryAndBalance()
     }
 }

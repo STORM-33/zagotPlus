@@ -116,8 +116,16 @@ class CashRepositoryImpl @Inject constructor(
         return projections.map { it.toDomain() }
     }
 
+    override suspend fun getCashHistoryByLocationPaged(locationId: UUID, limit: Int, offset: Int): List<CashHistoryItem> {
+        val projections = cashOperationDao.getCashHistoryByLocationPaged(locationId, limit, offset)
+        return projections.map { it.toDomain() }
+    }
+
     override suspend fun getTotalHistoryCount(): Int =
         cashOperationDao.getTotalHistoryCount()
+
+    override suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int =
+        cashOperationDao.getTotalHistoryCountByLocation(locationId)
 
     // ========== Balance ==========
 
@@ -247,6 +255,8 @@ class CashRepositoryImpl @Inject constructor(
         itemCount = itemCount,
         weightKg = weightKg,
         createdAt = createdAt,
-        batchCount = batchCount
+        batchCount = batchCount,
+        locationId = locationId?.let { UUID.fromString(it) },
+        locationName = locationName
     )
 }

@@ -7,7 +7,7 @@ Make cash operations location-specific with totals view.
 
 | # | Session | Complexity | Status |
 |---|---------|------------|--------|
-| 1 | cash-dao-location | medium | pending |
+| 1 | cash-dao-location | medium | completed |
 | 2 | cash-viewmodel-location | medium | pending |
 | 3 | cash-ui-tabs | medium | pending |
 

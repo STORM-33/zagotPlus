@@ -81,6 +81,7 @@ Last updated: 2026-01-11
 | 2026-01-12 | Test Coverage | MockK for repository mocking | Industry standard for Kotlin mocking | repository-tests |
 | 2026-01-12 | Test Coverage | runTest for coroutine tests | Kotlin coroutines test library | viewmodel-tests |
 | 2026-01-12 | Test Coverage | UnconfinedTestDispatcher for immediate execution | Synchronous test execution | viewmodel-tests |
+| 2026-01-14 | Location Cash | Location+date composite key for batches | Groups cash history by location for proper separation | cash-dao-location |
 | 2026-01-11 | Phase 5 | database.withTransaction for atomic batch | Ensures batch + transactions created together | db-batches |
 | 2026-01-11 | Phase 5 | SQLite date functions for today query | localtime aware filtering for batches | db-batches |
 | 2026-01-11 | Phase 5 | SET_NULL on batch_id FK delete | Preserve transactions if batch deleted | db-batches |
@@ -225,4 +226,6 @@ Last updated: 2026-01-11
 
 ## Tags
 
-#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk #filtering #crud #reports #settings #batches #images #coil #entry-flow #summary-overlay
+| Location-filtered queries | Add {entity}ByLocationPaged + getTotalCountByLocation methods | cash-dao-location |
+
+#android #supabase #hilt #compose #offline-first #jdk21 #room #workmanager #sync #navigation #auth #viewmodel #testing #mockk #filtering #crud #reports #settings #batches #images #coil #entry-flow #summary-overlay #location-filtering

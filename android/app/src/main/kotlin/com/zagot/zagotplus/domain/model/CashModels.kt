@@ -97,7 +97,9 @@ data class CashHistoryItem(
     val itemCount: Int?,
     val weightKg: BigDecimal?,
     val createdAt: Instant,
-    val batchCount: Int? = null // Number of batches in daily aggregate (for purchases/sales)
+    val batchCount: Int? = null, // Number of batches in daily aggregate (for purchases/sales)
+    val locationId: UUID? = null, // Location where this item occurred
+    val locationName: String? = null // Location name for display in totals view
 ) {
     /**
      * Returns the signed amount: positive for inflows, negative for outflows.
