@@ -92,6 +92,11 @@ class SaleBatchRepositoryImpl @Inject constructor(
         saleBatchDao.delete(id)
     }
 
+    override suspend fun markVoided(id: UUID) {
+        saleBatchDao.markVoided(id)
+        syncManager.triggerManualSync()
+    }
+
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
         transactionDao.getBySaleBatchId(batchId).map { it.toDomain() }
 
@@ -99,10 +104,44 @@ class SaleBatchRepositoryImpl @Inject constructor(
         saleBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
 
     override suspend fun getTotalBatchCount(): Int =
-        saleBatchDao.getTotalCount()
+        saleBatchDao.getActiveCount()
 
     override fun observeTotalBatchCount(): Flow<Int> =
         saleBatchDao.observeTotalCount()
+
+    override suspend fun correctBatch(
+        originalBatchId: UUID,
+        correctedBatch: SaleBatch,
+        correctedTransactions: List<Transaction>,
+        reason: String
+    ): SaleBatch {
+        // Validate original batch exists and isn't already voided
+        val original = saleBatchDao.getById(originalBatchId)
+            ?: throw IllegalArgumentException("Партію не знайдено")
+        if (original.isVoided) {
+            throw IllegalStateException("Неможливо виправити вже анульовану партію")
+        }
+        
+        val batchWithCorrection = correctedBatch.copy(
+            correctsBatchId = originalBatchId,
+            correctionReason = reason
+        )
+        
+        database.withTransaction {
+            // 1. Mark the original batch as voided
+            saleBatchDao.markVoided(originalBatchId)
+            
+            // 2. Insert the new correction batch
+            saleBatchDao.insert(batchWithCorrection.toEntity())
+            
+            // 3. Insert the corrected transactions
+            val transactionEntities = correctedTransactions.map { it.toEntity(batchWithCorrection.id) }
+            transactionDao.insertAll(transactionEntities)
+        }
+        
+        syncManager.triggerManualSync()
+        return batchWithCorrection
+    }
 
     private fun SaleBatchEntity.toDomain() = SaleBatch(
         id = id,
@@ -114,7 +153,10 @@ class SaleBatchRepositoryImpl @Inject constructor(
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     private fun SaleBatch.toEntity() = SaleBatchEntity(
@@ -127,7 +169,10 @@ class SaleBatchRepositoryImpl @Inject constructor(
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     private fun Transaction.toEntity(saleBatchId: UUID) = TransactionEntity(

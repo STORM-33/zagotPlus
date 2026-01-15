@@ -199,6 +199,9 @@ interface CashOperationDao {
     @Query("SELECT * FROM cash_operations WHERE local_id = :localId")
     suspend fun getByLocalId(localId: String): CashOperationEntity?
 
+    @Update
+    suspend fun update(operation: CashOperationEntity)
+
     /**
      * Get unified cash history with pagination.
      * Combines individual cash_operations with daily aggregates of purchase_batches and sale_batches.
@@ -249,7 +252,7 @@ interface CashOperationDao {
                 l.name as location_name
             FROM purchase_batches pb
             LEFT JOIN locations l ON pb.location_id = l.id
-            WHERE pb.total_amount IS NOT NULL
+            WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0
             GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
             UNION ALL
             SELECT 
@@ -266,7 +269,7 @@ interface CashOperationDao {
                 l.name as location_name
             FROM sale_batches sb
             LEFT JOIN locations l ON sb.location_id = l.id
-            WHERE sb.total_amount IS NOT NULL
+            WHERE sb.total_amount IS NOT NULL AND sb.is_voided = 0
             GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
         )
         ORDER BY created_at DESC
@@ -322,7 +325,7 @@ interface CashOperationDao {
                 l.name as location_name
             FROM purchase_batches pb
             LEFT JOIN locations l ON pb.location_id = l.id
-            WHERE pb.total_amount IS NOT NULL AND pb.location_id = :locationId
+            WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0 AND pb.location_id = :locationId
             GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
             UNION ALL
             SELECT 
@@ -339,10 +342,10 @@ interface CashOperationDao {
                 l.name as location_name
             FROM sale_batches sb
             LEFT JOIN locations l ON sb.location_id = l.id
-            WHERE sb.total_amount IS NOT NULL AND sb.location_id = :locationId
+            WHERE sb.total_amount IS NOT NULL AND sb.is_voided = 0 AND sb.location_id = :locationId
             GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
         )
-        ORDER BY created_at DESC
+        ORDER by created_at DESC
         LIMIT :limit OFFSET :offset
     """)
     suspend fun getCashHistoryByLocationPaged(locationId: UUID, limit: Int, offset: Int): List<CashHistoryProjection>
@@ -353,8 +356,8 @@ interface CashOperationDao {
     @Query("""
         SELECT 
             (SELECT COUNT(*) FROM cash_operations) +
-            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL) +
-            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL)
+            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0) +
+            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND is_voided = 0)
     """)
     suspend fun getTotalHistoryCount(): Int
 
@@ -364,8 +367,8 @@ interface CashOperationDao {
     @Query("""
         SELECT 
             (SELECT COUNT(*) FROM cash_operations WHERE location_id = :locationId) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND location_id = :locationId) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND location_id = :locationId)
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId)
     """)
     suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int
 }

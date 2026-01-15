@@ -36,20 +36,24 @@ interface SaleBatchDao {
 
     /**
      * Observe batches created within a date range (index-friendly).
+     * Excludes voided batches.
      */
     @Query("""
         SELECT * FROM sale_batches 
         WHERE created_at >= :startMillis AND created_at < :endMillis
+          AND is_voided = 0
         ORDER BY created_at DESC
     """)
     fun observeBatchesInRange(startMillis: Long, endMillis: Long): Flow<List<SaleBatchEntity>>
 
     /**
      * Get batches created within a date range (index-friendly).
+     * Excludes voided batches.
      */
     @Query("""
         SELECT * FROM sale_batches 
         WHERE created_at >= :startMillis AND created_at < :endMillis
+          AND is_voided = 0
         ORDER BY created_at DESC
     """)
     suspend fun getBatchesInRange(startMillis: Long, endMillis: Long): List<SaleBatchEntity>
@@ -84,4 +88,27 @@ interface SaleBatchDao {
      */
     @Query("SELECT COUNT(*) FROM sale_batches")
     fun observeTotalCount(): Flow<Int>
+
+    /**
+     * Mark a batch as voided (for correction workflow).
+     */
+    @Query("UPDATE sale_batches SET is_voided = 1, synced_at = NULL WHERE id = :id")
+    suspend fun markVoided(id: UUID)
+
+    /**
+     * Get paginated non-voided batches (for inventory and history display).
+     */
+    @Query("""
+        SELECT * FROM sale_batches
+        WHERE is_voided = 0
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getActiveAllPaginated(limit: Int, offset: Int): List<SaleBatchEntity>
+
+    /**
+     * Get count of non-voided batches.
+     */
+    @Query("SELECT COUNT(*) FROM sale_batches WHERE is_voided = 0")
+    suspend fun getActiveCount(): Int
 }

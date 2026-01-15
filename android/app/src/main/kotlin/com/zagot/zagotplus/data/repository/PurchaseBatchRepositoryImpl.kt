@@ -2,17 +2,21 @@ package com.zagot.zagotplus.data.repository
 
 import androidx.room.withTransaction
 import com.zagot.zagotplus.data.local.ZagotDatabase
+import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -28,6 +32,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
     private val purchaseBatchDao: PurchaseBatchDao,
     private val transactionDao: TransactionDao,
+    private val productDao: ProductDao,
     private val syncManager: SyncManager
 ) : PurchaseBatchRepository {
 
@@ -40,6 +45,26 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         val (startMillis, endMillis) = getTodayRange()
         return purchaseBatchDao.observeBatchesInRange(startMillis, endMillis).map { entities ->
             entities.map { it.toDomain() }
+        }
+    }
+
+    override fun observeTodaysProductTotals(): Flow<List<ProductDailyTotal>> {
+        val (startMillis, endMillis) = getTodayRange()
+        return combine(
+            transactionDao.observeTodaysPurchaseTotals(startMillis, endMillis),
+            productDao.getAllFlow()
+        ) { totals, products ->
+            val productMap = products.associate { it.id to it.name }
+            totals.mapNotNull { result ->
+                val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
+                val name = productMap[productId] ?: return@mapNotNull null
+                ProductDailyTotal(
+                    productId = productId,
+                    productName = name,
+                    totalWeightKg = BigDecimal(result.totalWeightKg),
+                    totalAmount = BigDecimal(result.totalAmount ?: "0")
+                )
+            }.sortedBy { it.productName }
         }
     }
 
@@ -92,6 +117,11 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         purchaseBatchDao.delete(id)
     }
 
+    override suspend fun markVoided(id: UUID) {
+        purchaseBatchDao.markVoided(id)
+        syncManager.triggerManualSync()
+    }
+
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
         transactionDao.getByBatchId(batchId).map { it.toDomain() }
 
@@ -99,10 +129,44 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
 
     override suspend fun getTotalBatchCount(): Int =
-        purchaseBatchDao.getTotalCount()
+        purchaseBatchDao.getActiveCount()
 
     override fun observeTotalBatchCount(): Flow<Int> =
         purchaseBatchDao.observeTotalCount()
+
+    override suspend fun correctBatch(
+        originalBatchId: UUID,
+        correctedBatch: PurchaseBatch,
+        correctedTransactions: List<Transaction>,
+        reason: String
+    ): PurchaseBatch {
+        // Validate original batch exists and isn't already voided
+        val original = purchaseBatchDao.getById(originalBatchId)
+            ?: throw IllegalArgumentException("Партію не знайдено")
+        if (original.isVoided) {
+            throw IllegalStateException("Неможливо виправити вже анульовану партію")
+        }
+        
+        val batchWithCorrection = correctedBatch.copy(
+            correctsBatchId = originalBatchId,
+            correctionReason = reason
+        )
+        
+        database.withTransaction {
+            // 1. Mark the original batch as voided
+            purchaseBatchDao.markVoided(originalBatchId)
+            
+            // 2. Insert the new correction batch
+            purchaseBatchDao.insert(batchWithCorrection.toEntity())
+            
+            // 3. Insert the corrected transactions
+            val transactionEntities = correctedTransactions.map { it.toEntity(batchWithCorrection.id) }
+            transactionDao.insertAll(transactionEntities)
+        }
+        
+        syncManager.triggerManualSync()
+        return batchWithCorrection
+    }
 
     private fun PurchaseBatchEntity.toDomain() = PurchaseBatch(
         id = id,
@@ -114,7 +178,10 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     private fun PurchaseBatch.toEntity() = PurchaseBatchEntity(
@@ -127,7 +194,10 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     private fun Transaction.toEntity(batchId: UUID) = TransactionEntity(
