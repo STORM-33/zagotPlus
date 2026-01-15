@@ -5,6 +5,7 @@ import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
 import java.math.BigDecimal
@@ -160,6 +161,31 @@ object TestData {
         createdAt: Instant = TEST_INSTANT,
         syncedAt: Instant? = null
     ) = PurchaseBatch(
+        id = id,
+        localId = localId,
+        locationId = locationId,
+        notes = notes,
+        totalWeightKg = totalWeightKg,
+        totalAmount = totalAmount,
+        itemCount = itemCount,
+        deviceId = deviceId,
+        createdAt = createdAt,
+        syncedAt = syncedAt
+    )
+
+    // Sale Batch
+    fun createSaleBatch(
+        id: UUID = BATCH_ID_1,
+        localId: String = "sale-batch-local-$id",
+        locationId: UUID? = LOCATION_ID_1,
+        notes: String? = null,
+        totalWeightKg: BigDecimal = BigDecimal("100.00"),
+        totalAmount: BigDecimal = BigDecimal("5500.00"),
+        itemCount: Int = 1,
+        deviceId: String? = "test-device",
+        createdAt: Instant = TEST_INSTANT,
+        syncedAt: Instant? = null
+    ) = SaleBatch(
         id = id,
         localId = localId,
         locationId = locationId,

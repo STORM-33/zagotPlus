@@ -58,4 +58,8 @@ interface CashRepository {
     suspend fun deposit(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun withdraw(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun payment(locationId: UUID?, amount: BigDecimal, categoryId: UUID?, notes: String? = null)
+
+    // Update operations
+    suspend fun getOperationById(id: UUID): CashOperation?
+    suspend fun updateOperation(id: UUID, amount: BigDecimal, categoryId: UUID?, notes: String?)
 }

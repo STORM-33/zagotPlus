@@ -314,4 +314,143 @@ class CashRepositoryImplTest {
 
         assertNull(result[0].categoryName)
     }
+
+    // ==================== Update Operation Tests ====================
+
+    @Test
+    fun `getOperationById returns operation when found`() = runTest {
+        val operationId = UUID.randomUUID()
+        val entity = createOperationEntity(
+            id = operationId,
+            type = CashOperationType.DEPOSIT.toDbValue(),
+            amount = BigDecimal("250.00"),
+            notes = "Test deposit"
+        )
+        coEvery { cashOperationDao.getById(operationId) } returns entity
+
+        val result = repository.getOperationById(operationId)
+
+        assertNotNull(result)
+        assertEquals(operationId, result!!.id)
+        assertEquals(BigDecimal("250.00"), result.amount)
+        assertEquals("Test deposit", result.notes)
+        assertEquals(CashOperationType.DEPOSIT, result.type)
+    }
+
+    @Test
+    fun `getOperationById returns null when not found`() = runTest {
+        val operationId = UUID.randomUUID()
+        coEvery { cashOperationDao.getById(operationId) } returns null
+
+        val result = repository.getOperationById(operationId)
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `getOperationById includes category name when present`() = runTest {
+        val operationId = UUID.randomUUID()
+        val category = createCategoryEntity(id = testCategoryId, name = "Fuel")
+        val entity = createOperationEntity(
+            id = operationId,
+            type = CashOperationType.PAYMENT.toDbValue(),
+            categoryId = testCategoryId
+        )
+        coEvery { cashOperationDao.getById(operationId) } returns entity
+        coEvery { expenseCategoryDao.getById(testCategoryId) } returns category
+
+        val result = repository.getOperationById(operationId)
+
+        assertNotNull(result)
+        assertEquals("Fuel", result!!.categoryName)
+    }
+
+    @Test
+    fun `updateOperation updates entity with new values`() = runTest {
+        val operationId = UUID.randomUUID()
+        val existing = createOperationEntity(
+            id = operationId,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            notes = "Original"
+        )
+        val slot = slot<CashOperationEntity>()
+        
+        coEvery { cashOperationDao.getById(operationId) } returns existing
+        coEvery { cashOperationDao.update(capture(slot)) } returns Unit
+
+        repository.updateOperation(
+            id = operationId,
+            amount = BigDecimal("200.00"),
+            categoryId = testCategoryId,
+            notes = "Updated"
+        )
+
+        assertEquals(BigDecimal("200.00"), slot.captured.amount)
+        assertEquals(testCategoryId, slot.captured.categoryId)
+        assertEquals("Updated", slot.captured.notes)
+    }
+
+    @Test
+    fun `updateOperation sets syncedAt to null for resync`() = runTest {
+        val operationId = UUID.randomUUID()
+        val existing = createOperationEntity(id = operationId).copy(
+            syncedAt = Instant.now() // Previously synced
+        )
+        val slot = slot<CashOperationEntity>()
+        
+        coEvery { cashOperationDao.getById(operationId) } returns existing
+        coEvery { cashOperationDao.update(capture(slot)) } returns Unit
+
+        repository.updateOperation(
+            id = operationId,
+            amount = BigDecimal("150.00"),
+            categoryId = null,
+            notes = null
+        )
+
+        assertNull(slot.captured.syncedAt)
+    }
+
+    @Test
+    fun `updateOperation does nothing when operation not found`() = runTest {
+        val operationId = UUID.randomUUID()
+        coEvery { cashOperationDao.getById(operationId) } returns null
+
+        repository.updateOperation(
+            id = operationId,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            notes = null
+        )
+
+        coVerify(exactly = 0) { cashOperationDao.update(any()) }
+    }
+
+    @Test
+    fun `updateOperation preserves unchanged fields`() = runTest {
+        val operationId = UUID.randomUUID()
+        val existing = createOperationEntity(
+            id = operationId,
+            type = CashOperationType.PAYMENT.toDbValue(),
+            locationId = testLocationId
+        )
+        val slot = slot<CashOperationEntity>()
+        
+        coEvery { cashOperationDao.getById(operationId) } returns existing
+        coEvery { cashOperationDao.update(capture(slot)) } returns Unit
+
+        repository.updateOperation(
+            id = operationId,
+            amount = BigDecimal("300.00"),
+            categoryId = null,
+            notes = null
+        )
+
+        // These should be preserved from original
+        assertEquals(CashOperationType.PAYMENT.toDbValue(), slot.captured.type)
+        assertEquals(testLocationId, slot.captured.locationId)
+        assertEquals(existing.localId, slot.captured.localId)
+        assertEquals(existing.createdAt, slot.captured.createdAt)
+    }
 }

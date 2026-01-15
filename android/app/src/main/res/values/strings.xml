@@ -49,6 +49,12 @@
     <string name="cash_history_payment">Payment</string>
     <string name="cash_history_purchase">Purchases</string>
     <string name="cash_history_sale">Sales</string>
+    <string name="cash_edit_deposit_title">Edit Deposit</string>
+    <string name="cash_edit_withdraw_title">Edit Withdrawal</string>
+    <string name="cash_edit_payment_title">Edit Payment</string>
+    <string name="cash_delete_title">Delete Operation</string>
+    <string name="cash_delete_confirm">Are you sure you want to delete this %1$s?</string>
+    <string name="cash_operation">operation</string>
     
     <!-- Sync -->
     <string name="sync_partial_warning">Data saved, but not all updates downloaded</string>

@@ -459,4 +459,39 @@ class SaleEntryViewModelTest {
 
         assertTrue(viewModel.uiState.value.showInventoryWarning)
     }
+
+    // ==================== Editing/Correction Mode Tests ====================
+
+    @Test
+    fun `loadBatchForEditing fetches products from repository when uiState products not loaded`() = runTest {
+        val batchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = batchId, notes = "Test sale notes")
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-30.00"),
+                pricePerKg = BigDecimal("55.00")
+            ).copy(saleBatchId = batchId)
+        )
+
+        coEvery { saleBatchRepository.getById(batchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(batchId) } returns existingTransactions
+
+        // Create viewModel but don't wait for init to complete
+        viewModel = createViewModel()
+        
+        // Immediately call loadBatchForEditing before products are loaded
+        viewModel.loadBatchForEditing(batchId.toString())
+        advanceUntilIdle()
+
+        // Verify that loadBatchForEditing fetched products directly from repository
+        val state = viewModel.uiState.value
+        assertEquals(batchId, state.editingBatchId)
+        assertEquals("Test sale notes", state.notes)
+        assertEquals(1, state.positions.size)
+        assertEquals(testProduct, state.positions[0].product)
+        assertEquals(BigDecimal("30.00"), state.positions[0].netWeight)
+        assertEquals(BigDecimal("55.00"), state.positions[0].pricePerKg)
+    }
 }

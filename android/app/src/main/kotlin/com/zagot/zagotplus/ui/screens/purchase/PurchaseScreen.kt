@@ -30,12 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import java.math.BigDecimal
 import java.text.DecimalFormat
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun PurchaseScreen(
@@ -45,6 +44,8 @@ fun PurchaseScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+    val weightFormat = remember { DecimalFormat("#,##0.0") }
 
     LaunchedEffect(uiState.navigateToNewClient) {
         if (uiState.navigateToNewClient) {
@@ -66,6 +67,14 @@ fun PurchaseScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            // Cash balance card
+            CashBalanceCard(
+                balance = uiState.cashBalance,
+                currencyFormat = currencyFormat
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Section header
             Text(
                 text = "Закупки сьогодні",
@@ -75,7 +84,7 @@ fun PurchaseScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-            // Batches list or empty state
+            // Product totals or empty state
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -85,7 +94,7 @@ fun PurchaseScreen(
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (uiState.todaysBatches.isEmpty()) {
+            } else if (uiState.todaysProductTotals.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -101,13 +110,17 @@ fun PurchaseScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
-                        items = uiState.todaysBatches,
-                        key = { it.id }
-                    ) { batch ->
-                        BatchItem(batch = batch)
+                        items = uiState.todaysProductTotals,
+                        key = { it.productId }
+                    ) { productTotal ->
+                        ProductTotalItem(
+                            productTotal = productTotal,
+                            weightFormat = weightFormat,
+                            currencyFormat = currencyFormat
+                        )
                     }
                 }
             }
@@ -136,21 +149,46 @@ fun PurchaseScreen(
 }
 
 @Composable
-private fun BatchItem(
-    batch: PurchaseBatch,
+private fun CashBalanceCard(
+    balance: BigDecimal,
+    currencyFormat: DecimalFormat,
     modifier: Modifier = Modifier
 ) {
-    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
-    val decimalFormat = remember { DecimalFormat("#,##0.0") }
-    val currencyFormat = remember { DecimalFormat("#,##0") }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Баланс каси",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "₴${currencyFormat.format(balance)}",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
 
-    val time = batch.createdAt
-        .atZone(ZoneId.systemDefault())
-        .format(timeFormatter)
-    val weight = batch.totalWeightKg?.let { "${decimalFormat.format(it)} кг" } ?: "-- кг"
-    val amount = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
-    val positions = "${batch.itemCount ?: 0} поз"
-
+@Composable
+private fun ProductTotalItem(
+    productTotal: ProductDailyTotal,
+    weightFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -165,23 +203,20 @@ private fun BatchItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = time,
+                text = productTotal.productName,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
             )
             Text(
-                text = weight,
+                text = "${weightFormat.format(productTotal.totalWeightKg)} кг",
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = amount,
+                text = "₴${currencyFormat.format(productTotal.totalAmount)}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = positions,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 12.dp)
             )
         }
     }

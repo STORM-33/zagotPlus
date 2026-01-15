@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.data.repository
 
 import com.zagot.zagotplus.data.local.ZagotDatabase
+import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
@@ -14,7 +15,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.math.BigDecimal
@@ -26,6 +31,7 @@ class PurchaseBatchRepositoryImplTest {
     private lateinit var database: ZagotDatabase
     private lateinit var purchaseBatchDao: PurchaseBatchDao
     private lateinit var transactionDao: TransactionDao
+    private lateinit var productDao: ProductDao
     private lateinit var syncManager: SyncManager
     private lateinit var repository: PurchaseBatchRepositoryImpl
 
@@ -39,8 +45,9 @@ class PurchaseBatchRepositoryImplTest {
         database = mockk()
         purchaseBatchDao = mockk()
         transactionDao = mockk()
+        productDao = mockk()
         syncManager = mockk(relaxed = true)
-        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao, syncManager)
+        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao, productDao, syncManager)
     }
 
     private fun createBatchEntity(
@@ -53,7 +60,10 @@ class PurchaseBatchRepositoryImplTest {
         itemCount: Int? = 3,
         deviceId: String? = "test-device",
         createdAt: Instant = now,
-        syncedAt: Instant? = null
+        syncedAt: Instant? = null,
+        isVoided: Boolean = false,
+        correctsBatchId: UUID? = null,
+        correctionReason: String? = null
     ) = PurchaseBatchEntity(
         id = id,
         localId = localId,
@@ -64,7 +74,10 @@ class PurchaseBatchRepositoryImplTest {
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     @Test
@@ -230,5 +243,95 @@ class PurchaseBatchRepositoryImplTest {
         assertNull(batch.itemCount)
         assertNull(batch.deviceId)
         assertNull(batch.syncedAt)
+    }
+
+    // ==================== Correction Tests ====================
+
+    @Test
+    fun `correctBatch throws when original batch not found`() = runTest {
+        coEvery { purchaseBatchDao.getById(batchId1) } returns null
+
+        val correctedBatch = PurchaseBatch(
+            id = UUID.randomUUID(),
+            localId = "local",
+            locationId = null,
+            notes = null,
+            totalWeightKg = null,
+            totalAmount = null,
+            itemCount = null,
+            deviceId = null,
+            createdAt = now,
+            syncedAt = null
+        )
+
+        try {
+            repository.correctBatch(batchId1, correctedBatch, emptyList(), "reason")
+            fail("Expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertEquals("Партію не знайдено", e.message)
+        }
+    }
+
+    @Test
+    fun `correctBatch throws when original batch already voided`() = runTest {
+        val voidedEntity = createBatchEntity(batchId1, isVoided = true)
+        coEvery { purchaseBatchDao.getById(batchId1) } returns voidedEntity
+
+        val correctedBatch = PurchaseBatch(
+            id = UUID.randomUUID(),
+            localId = "local",
+            locationId = null,
+            notes = null,
+            totalWeightKg = null,
+            totalAmount = null,
+            itemCount = null,
+            deviceId = null,
+            createdAt = now,
+            syncedAt = null
+        )
+
+        try {
+            repository.correctBatch(batchId1, correctedBatch, emptyList(), "reason")
+            fail("Expected IllegalStateException")
+        } catch (e: IllegalStateException) {
+            assertEquals("Неможливо виправити вже анульовану партію", e.message)
+        }
+    }
+
+    @Test
+    fun `observeAll maps correction fields correctly`() = runTest {
+        val entity = createBatchEntity(
+            id = batchId1,
+            isVoided = true,
+            correctsBatchId = batchId2,
+            correctionReason = "Test correction"
+        )
+        every { purchaseBatchDao.observeAll() } returns flowOf(listOf(entity))
+
+        val batches = repository.observeAll().first()
+
+        assertEquals(1, batches.size)
+        val batch = batches[0]
+        assertTrue(batch.isVoided)
+        assertEquals(batchId2, batch.correctsBatchId)
+        assertEquals("Test correction", batch.correctionReason)
+    }
+
+    @Test
+    fun `getById maps correction fields correctly`() = runTest {
+        val entity = createBatchEntity(
+            id = batchId1,
+            isVoided = false,
+            correctsBatchId = batchId2,
+            correctionReason = "Corrected data"
+        )
+        coEvery { purchaseBatchDao.getById(batchId1) } returns entity
+
+        val batch = repository.getById(batchId1)
+
+        assertNotNull(batch)
+        assertFalse(batch!!.isVoided)
+        assertEquals(batchId2, batch.correctsBatchId)
+        assertEquals("Corrected data", batch.correctionReason)
     }
 }

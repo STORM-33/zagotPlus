@@ -30,7 +30,18 @@ sealed class Destination(
         route = "purchase_entry",
         title = "Нова закупка",
         icon = Icons.Filled.ShoppingCart
-    )
+    ) {
+        const val ROUTE_WITH_ARGS = "purchase_entry?batchId={batchId}"
+        const val ARG_BATCH_ID = "batchId"
+        
+        fun createRoute(batchId: String? = null): String {
+            return if (batchId != null) {
+                "purchase_entry?batchId=$batchId"
+            } else {
+                "purchase_entry"
+            }
+        }
+    }
     
     data object Sale : Destination(
         route = "sale",
@@ -42,7 +53,18 @@ sealed class Destination(
         route = "sale_entry",
         title = "Новий продаж",
         icon = Icons.Filled.Sell
-    )
+    ) {
+        const val ROUTE_WITH_ARGS = "sale_entry?batchId={batchId}"
+        const val ARG_BATCH_ID = "batchId"
+        
+        fun createRoute(batchId: String? = null): String {
+            return if (batchId != null) {
+                "sale_entry?batchId=$batchId"
+            } else {
+                "sale_entry"
+            }
+        }
+    }
     
     data object Inventory : Destination(
         route = "inventory",

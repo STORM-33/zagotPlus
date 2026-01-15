@@ -196,9 +196,20 @@ fun NavGraph(
                     }
                 )
             }
-            composable(Destination.PurchaseEntry.route) {
+            composable(
+                route = Destination.PurchaseEntry.ROUTE_WITH_ARGS,
+                arguments = listOf(
+                    navArgument(Destination.PurchaseEntry.ARG_BATCH_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val batchId = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_BATCH_ID)
                 PurchaseEntryScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    editingBatchId = batchId
                 )
             }
             composable(Destination.Sale.route) {
@@ -208,9 +219,20 @@ fun NavGraph(
                     }
                 )
             }
-            composable(Destination.SaleEntry.route) {
+            composable(
+                route = Destination.SaleEntry.ROUTE_WITH_ARGS,
+                arguments = listOf(
+                    navArgument(Destination.SaleEntry.ARG_BATCH_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val batchId = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_BATCH_ID)
                 SaleEntryScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    editingBatchId = batchId
                 )
             }
             composable(Destination.Inventory.route) {
@@ -223,7 +245,14 @@ fun NavGraph(
                 )
             }
             composable(Destination.History.route) {
-                HistoryScreen()
+                HistoryScreen(
+                    onNavigateToEditPurchase = { batchId ->
+                        navController.navigate(Destination.PurchaseEntry.createRoute(batchId))
+                    },
+                    onNavigateToEditSale = { batchId ->
+                        navController.navigate(Destination.SaleEntry.createRoute(batchId))
+                    }
+                )
             }
             composable(Destination.Products.route) {
                 ProductsScreen(

@@ -17,6 +17,9 @@ sealed class HistoryBatchDisplayItem {
     abstract val itemCount: Int
     abstract val locationName: String
     abstract val isSynced: Boolean
+    abstract val isVoided: Boolean
+    abstract val isCorrection: Boolean
+    abstract val correctionReason: String?
 
     /**
      * Real purchase batch from database.
@@ -29,7 +32,11 @@ sealed class HistoryBatchDisplayItem {
         override val itemCount: Int,
         override val locationName: String,
         override val isSynced: Boolean,
-        val notes: String?
+        val notes: String?,
+        override val isVoided: Boolean = false,
+        override val isCorrection: Boolean = false,
+        override val correctionReason: String? = null,
+        val correctsBatchId: UUID? = null
     ) : HistoryBatchDisplayItem() {
         override val id: String = "batch_$batchId"
         override val batchType: BatchType = BatchType.PURCHASE
@@ -46,7 +53,11 @@ sealed class HistoryBatchDisplayItem {
         override val itemCount: Int,
         override val locationName: String,
         override val isSynced: Boolean,
-        val notes: String?
+        val notes: String?,
+        override val isVoided: Boolean = false,
+        override val isCorrection: Boolean = false,
+        override val correctionReason: String? = null,
+        val correctsBatchId: UUID? = null
     ) : HistoryBatchDisplayItem() {
         override val id: String = "sale_batch_$batchId"
         override val batchType: BatchType = BatchType.SALE
@@ -68,6 +79,9 @@ sealed class HistoryBatchDisplayItem {
         override val isSynced: Boolean
     ) : HistoryBatchDisplayItem() {
         override val id: String = "virtual_${batchType.name}_${timeWindowStart.toEpochMilli()}_${locationName.hashCode()}"
+        override val isVoided: Boolean = false
+        override val isCorrection: Boolean = false
+        override val correctionReason: String? = null
     }
 }
 
@@ -77,11 +91,13 @@ sealed class HistoryBatchDisplayItem {
 enum class BatchType {
     PURCHASE,
     SALE,
-    TRANSFER;
+    TRANSFER,
+    ADJUSTMENT;
 
     fun toDisplayString(): String = when (this) {
         PURCHASE -> "Закупка"
         SALE -> "Продаж"
         TRANSFER -> "Переміщення"
+        ADJUSTMENT -> "Коригування"
     }
 }

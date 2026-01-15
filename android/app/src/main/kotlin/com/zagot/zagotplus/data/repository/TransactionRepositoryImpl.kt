@@ -263,6 +263,41 @@ class TransactionRepositoryImpl @Inject constructor(
     override suspend fun getTransactionsByIds(ids: List<UUID>): List<Transaction> =
         transactionDao.getByIds(ids).map { it.toDomain() }
 
+    override suspend fun createAdjustment(
+        locationId: UUID,
+        productId: UUID,
+        adjustmentKg: BigDecimal,
+        reason: String?,
+        notes: String?
+    ): Transaction {
+        require(adjustmentKg != BigDecimal.ZERO) { "Adjustment cannot be zero" }
+        
+        // Build notes with reason prefix if provided
+        val fullNotes = buildString {
+            reason?.let { append("[$it] ") }
+            notes?.let { append(it) }
+        }.ifBlank { null }
+
+        val entity = TransactionEntity(
+            id = UUID.randomUUID(),
+            localId = UUID.randomUUID().toString(),
+            locationId = locationId,
+            type = TransactionType.ADJUSTMENT.toDbValue(),
+            transferLocationId = null,
+            productId = productId,
+            weightKg = adjustmentKg, // Already signed (positive or negative)
+            pricePerKg = null,
+            totalAmount = null,
+            notes = fullNotes,
+            deviceId = devicePreferences.getDeviceId(),
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        transactionDao.insert(entity)
+        syncManager.triggerManualSync()
+        return entity.toDomain()
+    }
+
     private fun TransactionEntity.toDomain()= Transaction(
         id = id,
         localId = localId,

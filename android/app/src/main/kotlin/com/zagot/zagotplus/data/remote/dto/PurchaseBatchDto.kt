@@ -44,7 +44,16 @@ data class PurchaseBatchDto(
     val syncedAt: String?,
 
     @SerialName("server_updated_at")
-    val serverUpdatedAt: String? = null
+    val serverUpdatedAt: String? = null,
+
+    @SerialName("is_voided")
+    val isVoided: Boolean = false,
+
+    @SerialName("corrects_batch_id")
+    val correctsBatchId: String? = null,
+
+    @SerialName("correction_reason")
+    val correctionReason: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -59,7 +68,10 @@ data class PurchaseBatchDto(
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
-        syncedAt = syncedAt?.let { Instant.parse(it) }
+        syncedAt = syncedAt?.let { Instant.parse(it) },
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId?.let { UUID.fromString(it) },
+        correctionReason = correctionReason
     )
 
     companion object {
@@ -76,7 +88,10 @@ data class PurchaseBatchDto(
             itemCount = entity.itemCount,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
-            syncedAt = entity.syncedAt?.toString()
+            syncedAt = entity.syncedAt?.toString(),
+            isVoided = entity.isVoided,
+            correctsBatchId = entity.correctsBatchId?.toString(),
+            correctionReason = entity.correctionReason
         )
     }
 }

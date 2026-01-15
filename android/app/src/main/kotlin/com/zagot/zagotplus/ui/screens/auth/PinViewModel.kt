@@ -48,11 +48,12 @@ class PinViewModel @Inject constructor(
             errorMessage = null
         )
 
-        // Auto-submit when PIN reaches expected length for verification
-        if (currentState.mode == PinMode.VERIFY_PIN && newPin.length >= currentState.minPinLength) {
-            // Try to verify - but only auto-submit at max length
-            if (newPin.length == currentState.maxPinLength) {
-                handleVerifyPinComplete(newPin)
+        // Auto-submit when PIN reaches max length
+        if (newPin.length == currentState.maxPinLength) {
+            when (currentState.mode) {
+                PinMode.SET_PIN -> handleSetPinComplete(newPin)
+                PinMode.CONFIRM_PIN -> handleConfirmPinComplete(newPin)
+                PinMode.VERIFY_PIN -> handleVerifyPinComplete(newPin)
             }
         }
     }

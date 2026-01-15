@@ -205,6 +205,27 @@ class CashRepositoryImpl @Inject constructor(
         cashOperationDao.insert(entity)
     }
 
+    // ========== Update ==========
+
+    override suspend fun getOperationById(id: UUID): CashOperation? {
+        val entity = cashOperationDao.getById(id) ?: return null
+        val categoryName = entity.categoryId?.let { catId ->
+            expenseCategoryDao.getById(catId)?.name
+        }
+        return entity.toDomain(categoryName)
+    }
+
+    override suspend fun updateOperation(id: UUID, amount: BigDecimal, categoryId: UUID?, notes: String?) {
+        val existing = cashOperationDao.getById(id) ?: return
+        val updated = existing.copy(
+            amount = amount,
+            categoryId = categoryId,
+            notes = notes,
+            syncedAt = null // Mark for re-sync
+        )
+        cashOperationDao.update(updated)
+    }
+
     // ========== Helpers ==========
 
     private suspend fun enrichWithCategories(entities: List<CashOperationEntity>): List<CashOperation> {

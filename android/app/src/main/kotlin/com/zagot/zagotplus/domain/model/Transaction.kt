@@ -33,13 +33,15 @@ enum class TransactionType {
     PURCHASE,
     SALE,
     TRANSFER_OUT,
-    TRANSFER_IN;
+    TRANSFER_IN,
+    ADJUSTMENT;
 
     fun toDbValue(): String = when (this) {
         PURCHASE -> "purchase"
         SALE -> "sale"
         TRANSFER_OUT -> "transfer_out"
         TRANSFER_IN -> "transfer_in"
+        ADJUSTMENT -> "adjustment"
     }
 
     companion object {
@@ -48,6 +50,7 @@ enum class TransactionType {
             "sale" -> SALE
             "transfer_out" -> TRANSFER_OUT
             "transfer_in" -> TRANSFER_IN
+            "adjustment" -> ADJUSTMENT
             else -> throw IllegalArgumentException("Unknown transaction type: $value")
         }
     }

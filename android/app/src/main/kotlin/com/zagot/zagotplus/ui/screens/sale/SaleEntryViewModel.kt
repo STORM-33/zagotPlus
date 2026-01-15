@@ -105,7 +105,10 @@ data class SaleEntryUiState(
     val error: String? = null,
     val navigateBack: Boolean = false,
     val editingPosition: SalePosition? = null, // Position being edited
-    val showExitConfirmation: Boolean = false // Show confirmation dialog before exit
+    val showExitConfirmation: Boolean = false, // Show confirmation dialog before exit
+    // Editing mode: if set, we're correcting an existing batch
+    val editingBatchId: UUID? = null,
+    val correctionReason: String = ""
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -402,6 +405,10 @@ class SaleEntryViewModel @Inject constructor(
         }
     }
 
+    fun onCorrectionReasonChange(reason: String) {
+        _uiState.update { it.copy(correctionReason = reason) }
+    }
+
     fun confirmSave() {
         val state = _uiState.value
         if (state.positions.isEmpty()) return
@@ -454,7 +461,21 @@ class SaleEntryViewModel @Inject constructor(
                     )
                 }
 
-                saleBatchRepository.createBatchWithTransactions(batch, transactions)
+                // Check if we're in correction mode
+                val editingBatchId = state.editingBatchId
+                if (editingBatchId != null) {
+                    // Correction flow: void original and create new
+                    val reason = state.correctionReason.ifBlank { "Виправлення помилки" }
+                    saleBatchRepository.correctBatch(
+                        originalBatchId = editingBatchId,
+                        correctedBatch = batch,
+                        correctedTransactions = transactions,
+                        reason = reason
+                    )
+                } else {
+                    // Normal creation flow
+                    saleBatchRepository.createBatchWithTransactions(batch, transactions)
+                }
 
                 _uiState.update {
                     it.copy(
@@ -468,6 +489,82 @@ class SaleEntryViewModel @Inject constructor(
                         isSaving = false,
                         screenState = SaleEntryScreenState.POSITIONS_LIST,
                         error = e.message ?: "Помилка збереження"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Load an existing batch for editing/correction.
+     * Pre-fills the UI with the batch's transactions.
+     */
+    fun loadBatchForEditing(batchIdString: String) {
+        val batchId = try {
+            UUID.fromString(batchIdString)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(error = "Невірний ID партії") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val batch = saleBatchRepository.getById(batchId)
+                if (batch == null) {
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            error = "Партію не знайдено"
+                        )
+                    }
+                    return@launch
+                }
+
+                val transactions = saleBatchRepository.getTransactionsForBatch(batchId)
+                
+                // Fetch products directly from repository to ensure they're available
+                // (init loading may not have completed yet)
+                val allProducts = productRepository.getActiveProducts().first()
+                val products = allProducts.associateBy { it.id }
+
+                // Convert transactions back to SalePositions
+                // Note: This is a simplified conversion - tare info from notes may be lost
+                val positions = transactions.mapNotNull { tx ->
+                    val product = tx.productId?.let { products[it] }
+                    if (product != null) {
+                        SalePosition(
+                            product = product,
+                            batches = listOf(
+                                SaleWeighingBatch(
+                                    grossWeightKg = tx.weightKg.abs(),
+                                    tareCount = 0
+                                )
+                            ),
+                            tareWeightPerUnit = BigDecimal("0.1"),
+                            pricePerKg = tx.pricePerKg ?: BigDecimal.ZERO
+                        )
+                    } else null
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        editingBatchId = batchId,
+                        positions = positions,
+                        notes = batch.notes ?: "",
+                        products = allProducts.ifEmpty { it.products },
+                        screenState = if (positions.isNotEmpty()) 
+                            SaleEntryScreenState.POSITIONS_LIST 
+                        else 
+                            SaleEntryScreenState.PRODUCT_GRID
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Помилка завантаження"
                     )
                 }
             }

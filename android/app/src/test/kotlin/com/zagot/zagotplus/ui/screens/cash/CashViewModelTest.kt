@@ -2,8 +2,12 @@ package com.zagot.zagotplus.ui.screens.cash
 
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
+import com.zagot.zagotplus.domain.model.CashOperation
+import com.zagot.zagotplus.domain.model.CashOperationType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.CashRepository
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.testutil.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -29,6 +33,7 @@ class CashViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var cashRepository: CashRepository
+    private lateinit var locationRepository: LocationRepository
     private lateinit var viewModel: CashViewModel
 
     private val testCategoryId = UUID.randomUUID()
@@ -60,6 +65,7 @@ class CashViewModelTest {
     @Before
     fun setup() {
         cashRepository = mockk()
+        locationRepository = mockk()
         setupDefaultMocks()
     }
 
@@ -69,10 +75,11 @@ class CashViewModelTest {
         every { cashRepository.getActiveCategories() } returns flowOf(testCategories)
         coEvery { cashRepository.getTotalHistoryCount() } returns 1
         coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns testHistoryItems
+        every { locationRepository.getAllLocations() } returns flowOf(emptyList())
     }
 
     private fun createViewModel(): CashViewModel {
-        return CashViewModel(cashRepository)
+        return CashViewModel(cashRepository, locationRepository)
     }
 
     // ==================== Initial State Tests ====================
@@ -464,5 +471,524 @@ class CashViewModelTest {
         viewModel.dismissError()
 
         assertNull(viewModel.uiState.value.error)
+    }
+
+    // ==================== Edit Operation Tests ====================
+
+    @Test
+    fun `canModifyItem returns true for deposit`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = UUID.randomUUID().toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("100"),
+            notes = null,
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        assertTrue(viewModel.canModifyItem(depositItem))
+    }
+
+    @Test
+    fun `canModifyItem returns true for withdrawal`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val withdrawalItem = CashHistoryItem(
+            id = UUID.randomUUID().toString(),
+            type = CashHistoryItemType.WITHDRAWAL,
+            amount = BigDecimal("100"),
+            notes = null,
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        assertTrue(viewModel.canModifyItem(withdrawalItem))
+    }
+
+    @Test
+    fun `canModifyItem returns true for payment`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val paymentItem = CashHistoryItem(
+            id = UUID.randomUUID().toString(),
+            type = CashHistoryItemType.PAYMENT,
+            amount = BigDecimal("100"),
+            notes = null,
+            categoryName = "Fuel",
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        assertTrue(viewModel.canModifyItem(paymentItem))
+    }
+
+    @Test
+    fun `canModifyItem returns false for purchase`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val purchaseItem = CashHistoryItem(
+            id = "purchase_loc_2024-01-01",
+            type = CashHistoryItemType.PURCHASE,
+            amount = BigDecimal("500"),
+            notes = null,
+            categoryName = null,
+            itemCount = 10,
+            weightKg = BigDecimal("50"),
+            createdAt = Instant.now(),
+            batchCount = 2
+        )
+
+        assertFalse(viewModel.canModifyItem(purchaseItem))
+    }
+
+    @Test
+    fun `canModifyItem returns false for sale`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val saleItem = CashHistoryItem(
+            id = "sale_loc_2024-01-01",
+            type = CashHistoryItemType.SALE,
+            amount = BigDecimal("800"),
+            notes = null,
+            categoryName = null,
+            itemCount = 15,
+            weightKg = BigDecimal("75"),
+            createdAt = Instant.now(),
+            batchCount = 3
+        )
+
+        assertFalse(viewModel.canModifyItem(saleItem))
+    }
+
+    @Test
+    fun `showEditDialog sets EDIT_DEPOSIT for deposit item`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-1",
+            locationId = null,
+            type = CashOperationType.DEPOSIT,
+            amount = BigDecimal("250.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = "Test deposit note",
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("250.00"),
+            notes = "Test deposit note",
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(depositItem)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(CashDialogType.EDIT_DEPOSIT, state.dialogType)
+        assertEquals("250.00", state.dialogAmount)
+        assertEquals("Test deposit note", state.dialogNotes)
+        assertEquals(operationId, state.editingOperationId)
+    }
+
+    @Test
+    fun `showEditDialog sets EDIT_WITHDRAW for withdrawal item`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-2",
+            locationId = null,
+            type = CashOperationType.WITHDRAWAL,
+            amount = BigDecimal("150.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = "Test withdrawal",
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val withdrawalItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.WITHDRAWAL,
+            amount = BigDecimal("150.00"),
+            notes = "Test withdrawal",
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(withdrawalItem)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(CashDialogType.EDIT_WITHDRAW, state.dialogType)
+        assertEquals("150.00", state.dialogAmount)
+        assertEquals("Test withdrawal", state.dialogNotes)
+    }
+
+    @Test
+    fun `showEditDialog sets EDIT_PAYMENT for payment item with category`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-3",
+            locationId = null,
+            type = CashOperationType.PAYMENT,
+            amount = BigDecimal("75.50"),
+            categoryId = testCategoryId,
+            categoryName = "Fuel",
+            notes = "Gas station",
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val paymentItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.PAYMENT,
+            amount = BigDecimal("75.50"),
+            notes = "Gas station",
+            categoryName = "Fuel",
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(paymentItem)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(CashDialogType.EDIT_PAYMENT, state.dialogType)
+        assertEquals("75.50", state.dialogAmount)
+        assertEquals("Gas station", state.dialogNotes)
+        assertEquals(testCategoryId, state.dialogCategoryId)
+    }
+
+    @Test
+    fun `showEditDialog does nothing for purchase item`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val purchaseItem = CashHistoryItem(
+            id = "purchase_loc_2024-01-01",
+            type = CashHistoryItemType.PURCHASE,
+            amount = BigDecimal("500"),
+            notes = null,
+            categoryName = null,
+            itemCount = 10,
+            weightKg = BigDecimal("50"),
+            createdAt = Instant.now(),
+            batchCount = 2
+        )
+
+        viewModel.showEditDialog(purchaseItem)
+        advanceUntilIdle()
+
+        assertEquals(CashDialogType.NONE, viewModel.uiState.value.dialogType)
+    }
+
+    @Test
+    fun `showEditDialog does nothing for sale item`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val saleItem = CashHistoryItem(
+            id = "sale_loc_2024-01-01",
+            type = CashHistoryItemType.SALE,
+            amount = BigDecimal("800"),
+            notes = null,
+            categoryName = null,
+            itemCount = 15,
+            weightKg = BigDecimal("75"),
+            createdAt = Instant.now(),
+            batchCount = 3
+        )
+
+        viewModel.showEditDialog(saleItem)
+        advanceUntilIdle()
+
+        assertEquals(CashDialogType.NONE, viewModel.uiState.value.dialogType)
+    }
+
+    @Test
+    fun `confirmEdit calls updateOperation with correct parameters`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-1",
+            locationId = null,
+            type = CashOperationType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = "Original note",
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+        coEvery { cashRepository.updateOperation(any(), any(), any(), any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            notes = "Original note",
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(depositItem)
+        advanceUntilIdle()
+
+        // Modify the values
+        viewModel.onAmountChange("200")
+        viewModel.onNotesChange("Updated note")
+        viewModel.confirmEdit()
+        advanceUntilIdle()
+
+        coVerify { 
+            cashRepository.updateOperation(
+                id = operationId,
+                amount = BigDecimal("200"),
+                categoryId = null,
+                notes = "Updated note"
+            )
+        }
+    }
+
+    @Test
+    fun `confirmEdit dismisses dialog on success`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-1",
+            locationId = null,
+            type = CashOperationType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = null,
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+        coEvery { cashRepository.updateOperation(any(), any(), any(), any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            notes = null,
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(depositItem)
+        advanceUntilIdle()
+        viewModel.onAmountChange("150")
+        viewModel.confirmEdit()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(CashDialogType.NONE, state.dialogType)
+        assertNull(state.editingOperationId)
+    }
+
+    @Test
+    fun `confirmEdit sets error on failure`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-1",
+            locationId = null,
+            type = CashOperationType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = null,
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+        coEvery { cashRepository.updateOperation(any(), any(), any(), any()) } throws RuntimeException("Update failed")
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            notes = null,
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(depositItem)
+        advanceUntilIdle()
+        viewModel.onAmountChange("150")
+        viewModel.confirmEdit()
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun `confirmEdit updates payment with new category`() = runTest {
+        val operationId = UUID.randomUUID()
+        val newCategoryId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-3",
+            locationId = null,
+            type = CashOperationType.PAYMENT,
+            amount = BigDecimal("50.00"),
+            categoryId = testCategoryId,
+            categoryName = "Fuel",
+            notes = null,
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+        coEvery { cashRepository.updateOperation(any(), any(), any(), any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val paymentItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.PAYMENT,
+            amount = BigDecimal("50.00"),
+            notes = null,
+            categoryName = "Fuel",
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(paymentItem)
+        advanceUntilIdle()
+
+        // Change category
+        viewModel.onCategorySelect(newCategoryId)
+        viewModel.onAmountChange("75")
+        viewModel.confirmEdit()
+        advanceUntilIdle()
+
+        coVerify { 
+            cashRepository.updateOperation(
+                id = operationId,
+                amount = BigDecimal("75"),
+                categoryId = newCategoryId,
+                notes = null
+            )
+        }
+    }
+
+    @Test
+    fun `dismissDialog clears editing state`() = runTest {
+        val operationId = UUID.randomUUID()
+        val testOperation = CashOperation(
+            id = operationId,
+            localId = "local-1",
+            locationId = null,
+            type = CashOperationType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            categoryId = null,
+            categoryName = null,
+            notes = "Test",
+            deviceId = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        coEvery { cashRepository.getOperationById(operationId) } returns testOperation
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val depositItem = CashHistoryItem(
+            id = operationId.toString(),
+            type = CashHistoryItemType.DEPOSIT,
+            amount = BigDecimal("100.00"),
+            notes = "Test",
+            categoryName = null,
+            itemCount = null,
+            weightKg = null,
+            createdAt = Instant.now(),
+            batchCount = null
+        )
+
+        viewModel.showEditDialog(depositItem)
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.editingOperationId)
+
+        viewModel.dismissDialog()
+
+        val state = viewModel.uiState.value
+        assertEquals(CashDialogType.NONE, state.dialogType)
+        assertNull(state.editingOperationId)
+        assertNull(state.editingOperationType)
+        assertEquals("", state.dialogAmount)
+        assertEquals("", state.dialogNotes)
     }
 }

@@ -189,12 +189,23 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pulled $cashPullResult cash operations")
 
-        // Update last sync timestamp using the maximum server_updated_at from pulled records
-        // minus 1 second to avoid missing records created at the exact same timestamp.
-        // This prevents the race condition where data created on server during sync might be missed.
-        val newTimestamp = maxServerUpdatedAt.getMaxTimestamp()?.minusSeconds(1) ?: Instant.now()
-        syncPreferences.setLastSyncTimestamp(newTimestamp)
-        Log.d(TAG, "Updated last sync timestamp to $newTimestamp")
+        // Update last sync timestamp using the maximum server_updated_at from pulled records.
+        // We store the exact max timestamp (no subtraction needed) because:
+        // 1. Supabase uses strict `gt` filter, so same-timestamp records will be re-pulled
+        // 2. Before inserting, we check if local_id already exists (deduplication)
+        // 3. OnConflictStrategy.REPLACE handles any edge cases safely
+        // This approach trades a small amount of redundant re-pulls for correctness.
+        //
+        // IMPORTANT: Only update the timestamp if we actually pulled records with server_updated_at.
+        // Using Instant.now() as a fallback is unsafe because device clocks may be skewed,
+        // which could cause missed records if the device clock is ahead of the server.
+        val maxTimestamp = maxServerUpdatedAt.getMaxTimestamp()
+        if (maxTimestamp != null) {
+            syncPreferences.setLastSyncTimestamp(maxTimestamp)
+            Log.d(TAG, "Updated last sync timestamp to $maxTimestamp")
+        } else {
+            Log.d(TAG, "No new records pulled, keeping existing sync timestamp")
+        }
 
         return SyncResult.Success(
             pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
@@ -272,7 +283,7 @@ class SyncService @Inject constructor(
 
     /**
      * Pull new transactions from Supabase that were updated after last sync.
-     * Inserts or updates local Room database.
+     * Uses batch insert for new records and individual updates for batch ID fixes.
      *
      * Uses server_updated_at filter which is set by a Postgres trigger when the
      * server receives the record. This ensures no gaps even if devices sync at
@@ -295,27 +306,48 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Found ${remoteDtos.size} new remote transactions")
 
-        var insertCount = 0
-        for (dto in remoteDtos) {
+        // Track max timestamp from all pulled records
+        remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
+
+        // Get existing local_ids in one query for efficient deduplication
+        val existingLocalIds = transactionDao.getAllLocalIds().toSet()
+        
+        // Separate new records from existing ones
+        val (existingDtos, newDtos) = remoteDtos.partition { it.localId in existingLocalIds }
+        
+        // Batch insert all new records
+        if (newDtos.isNotEmpty()) {
+            val newEntities = newDtos.map { it.toEntity() }
+            transactionDao.insertAll(newEntities)
+            Log.d(TAG, "Inserted ${newEntities.size} new transactions")
+        }
+
+        // Handle batch ID updates for existing transactions
+        // This is rare (only for v1 migrations or out-of-order sync) so individual updates are acceptable
+        for (dto in existingDtos) {
             try {
-                // Track max timestamp for next sync
-                timestampTracker.update(dto.serverUpdatedAt)
+                val existing = transactionDao.getByLocalId(dto.localId) ?: continue
                 
-                // Check if we already have this transaction
-                val existing = transactionDao.getByLocalId(dto.localId)
-                if (existing == null) {
-                    // New transaction from another device
-                    val entity = dto.toEntity()
-                    transactionDao.insert(entity)
-                    insertCount++
+                val remoteBatchId = dto.batchId?.let { java.util.UUID.fromString(it) }
+                val remoteSaleBatchId = dto.saleBatchId?.let { java.util.UUID.fromString(it) }
+                
+                val needsBatchUpdate = (existing.batchId == null && remoteBatchId != null) ||
+                                      (existing.saleBatchId == null && remoteSaleBatchId != null)
+                
+                if (needsBatchUpdate) {
+                    transactionDao.updateBatchIds(
+                        localId = dto.localId,
+                        batchId = remoteBatchId ?: existing.batchId,
+                        saleBatchId = remoteSaleBatchId ?: existing.saleBatchId
+                    )
+                    Log.d(TAG, "Updated batch IDs for transaction ${dto.localId}")
                 }
-                // If exists, it's our own transaction - skip
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to insert remote transaction ${dto.localId}", e)
+                Log.e(TAG, "Failed to update batch IDs for transaction ${dto.localId}", e)
             }
         }
 
-        return insertCount
+        return newDtos.size
     }
 
     /**
@@ -390,7 +422,7 @@ class SyncService @Inject constructor(
 
     /**
      * Pull new batches from Supabase that were created after last sync.
-     * Inserts or updates local Room database.
+     * Uses batch insert for efficiency after filtering out existing records.
      *
      * @param since Timestamp to filter batches created after
      * @param timestampTracker Tracker to record max server_updated_at for next sync
@@ -408,27 +440,27 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Found ${remoteDtos.size} new remote batches")
 
-        var insertCount = 0
-        for (dto in remoteDtos) {
-            try {
-                // Track max timestamp for next sync
-                timestampTracker.update(dto.serverUpdatedAt)
-                
-                // Check if we already have this batch
-                val existing = purchaseBatchDao.getByLocalId(dto.localId)
-                if (existing == null) {
-                    // New batch from another device
-                    val entity = dto.toEntity()
-                    purchaseBatchDao.insert(entity)
-                    insertCount++
-                }
-                // If exists, it's our own batch - skip
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to insert remote batch ${dto.localId}", e)
-            }
+        // Track max timestamp from all pulled records
+        remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
+
+        // Get existing local_ids in one query for efficient deduplication
+        val existingLocalIds = purchaseBatchDao.getAllLocalIds().toSet()
+        
+        // Filter to only new records and convert to entities
+        val newEntities = remoteDtos
+            .filter { it.localId !in existingLocalIds }
+            .map { it.toEntity() }
+
+        if (newEntities.isEmpty()) {
+            Log.d(TAG, "All batches already exist locally")
+            return 0
         }
 
-        return insertCount
+        // Batch insert all new records
+        purchaseBatchDao.insertAll(newEntities)
+        Log.d(TAG, "Inserted ${newEntities.size} new batches")
+
+        return newEntities.size
     }
 
     /**
@@ -468,7 +500,7 @@ class SyncService @Inject constructor(
 
     /**
      * Pull new sale batches from Supabase that were created after last sync.
-     * Inserts or updates local Room database.
+     * Uses batch insert for efficiency after filtering out existing records.
      *
      * @param since Timestamp to filter sale batches created after
      * @param timestampTracker Tracker to record max server_updated_at for next sync
@@ -486,27 +518,27 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Found ${remoteDtos.size} new remote sale batches")
 
-        var insertCount = 0
-        for (dto in remoteDtos) {
-            try {
-                // Track max timestamp for next sync
-                timestampTracker.update(dto.serverUpdatedAt)
-                
-                // Check if we already have this batch
-                val existing = saleBatchDao.getByLocalId(dto.localId)
-                if (existing == null) {
-                    // New batch from another device
-                    val entity = dto.toEntity()
-                    saleBatchDao.insert(entity)
-                    insertCount++
-                }
-                // If exists, it's our own batch - skip
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to insert remote sale batch ${dto.localId}", e)
-            }
+        // Track max timestamp from all pulled records
+        remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
+
+        // Get existing local_ids in one query for efficient deduplication
+        val existingLocalIds = saleBatchDao.getAllLocalIds().toSet()
+        
+        // Filter to only new records and convert to entities
+        val newEntities = remoteDtos
+            .filter { it.localId !in existingLocalIds }
+            .map { it.toEntity() }
+
+        if (newEntities.isEmpty()) {
+            Log.d(TAG, "All sale batches already exist locally")
+            return 0
         }
 
-        return insertCount
+        // Batch insert all new records
+        saleBatchDao.insertAll(newEntities)
+        Log.d(TAG, "Inserted ${newEntities.size} new sale batches")
+
+        return newEntities.size
     }
 
     /**
@@ -631,7 +663,7 @@ class SyncService @Inject constructor(
 
     /**
      * Pull new expense categories from Supabase that were created after last sync.
-     * Inserts or updates local Room database.
+     * Uses batch insert for efficiency after filtering out existing records.
      *
      * @param since Timestamp to filter expense categories created after
      * @param timestampTracker Tracker to record max server_updated_at for next sync
@@ -649,29 +681,32 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Found ${remoteDtos.size} new remote expense categories")
 
-        var insertCount = 0
-        for (dto in remoteDtos) {
-            try {
-                // Track max timestamp for next sync
-                timestampTracker.update(dto.serverUpdatedAt)
-                
-                val existing = expenseCategoryDao.getByLocalId(dto.localId)
-                if (existing == null) {
-                    val entity = dto.toEntity()
-                    expenseCategoryDao.insert(entity)
-                    insertCount++
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to insert remote expense category ${dto.localId}", e)
-            }
+        // Track max timestamp from all pulled records
+        remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
+
+        // Get existing local_ids in one query for efficient deduplication
+        val existingLocalIds = expenseCategoryDao.getAllLocalIds().toSet()
+        
+        // Filter to only new records and convert to entities
+        val newEntities = remoteDtos
+            .filter { it.localId !in existingLocalIds }
+            .map { it.toEntity() }
+
+        if (newEntities.isEmpty()) {
+            Log.d(TAG, "All expense categories already exist locally")
+            return 0
         }
 
-        return insertCount
+        // Batch insert all new records
+        expenseCategoryDao.insertAll(newEntities)
+        Log.d(TAG, "Inserted ${newEntities.size} new expense categories")
+
+        return newEntities.size
     }
 
     /**
      * Pull new cash operations from Supabase that were created after last sync.
-     * Inserts or updates local Room database.
+     * Uses batch insert for efficiency after filtering out existing records.
      *
      * @param since Timestamp to filter cash operations created after
      * @param timestampTracker Tracker to record max server_updated_at for next sync
@@ -689,23 +724,26 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Found ${remoteDtos.size} new remote cash operations")
 
-        var insertCount = 0
-        for (dto in remoteDtos) {
-            try {
-                // Track max timestamp for next sync
-                timestampTracker.update(dto.serverUpdatedAt)
-                
-                val existing = cashOperationDao.getByLocalId(dto.localId)
-                if (existing == null) {
-                    val entity = dto.toEntity()
-                    cashOperationDao.insert(entity)
-                    insertCount++
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to insert remote cash operation ${dto.localId}", e)
-            }
+        // Track max timestamp from all pulled records
+        remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
+
+        // Get existing local_ids in one query for efficient deduplication
+        val existingLocalIds = cashOperationDao.getAllLocalIds().toSet()
+        
+        // Filter to only new records and convert to entities
+        val newEntities = remoteDtos
+            .filter { it.localId !in existingLocalIds }
+            .map { it.toEntity() }
+
+        if (newEntities.isEmpty()) {
+            Log.d(TAG, "All cash operations already exist locally")
+            return 0
         }
 
-        return insertCount
+        // Batch insert all new records
+        cashOperationDao.insertAll(newEntities)
+        Log.d(TAG, "Inserted ${newEntities.size} new cash operations")
+
+        return newEntities.size
     }
 }

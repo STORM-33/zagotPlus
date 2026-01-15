@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.history
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.domain.model.DateRangePreset
@@ -189,7 +190,11 @@ class HistoryViewModel @Inject constructor(
                         itemCount = batch.itemCount ?: 0,
                         locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
                         isSynced = batch.syncedAt != null,
-                        notes = batch.notes
+                        notes = batch.notes,
+                        isVoided = batch.isVoided,
+                        isCorrection = batch.correctsBatchId != null,
+                        correctionReason = batch.correctionReason,
+                        correctsBatchId = batch.correctsBatchId
                     )
                 }
 
@@ -215,18 +220,22 @@ class HistoryViewModel @Inject constructor(
                         itemCount = batch.itemCount ?: 0,
                         locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
                         isSynced = batch.syncedAt != null,
-                        notes = batch.notes
+                        notes = batch.notes,
+                        isVoided = batch.isVoided,
+                        isCorrection = batch.correctsBatchId != null,
+                        correctionReason = batch.correctionReason,
+                        correctsBatchId = batch.correctsBatchId
                     )
                 }
 
-            // Load unbatched transactions for virtual batches (transfers only now)
+            // Load unbatched transactions for virtual batches (transfers and adjustments)
             val unbatchedTransactions = transactionRepository.getFilteredTransactions(
                 filter = transactionFilter.copy(
-                    // Only get transfer transactions for virtual batches
+                    // Get transfer and adjustment transactions for virtual batches
                     types = state.selectedTypes.flatMap { it.toTransactionTypes() }
-                        .filter { it == TransactionType.TRANSFER_IN || it == TransactionType.TRANSFER_OUT }
+                        .filter { it == TransactionType.TRANSFER_IN || it == TransactionType.TRANSFER_OUT || it == TransactionType.ADJUSTMENT }
                         .toSet()
-                        .ifEmpty { setOf(TransactionType.TRANSFER_IN, TransactionType.TRANSFER_OUT) }
+                        .ifEmpty { setOf(TransactionType.TRANSFER_IN, TransactionType.TRANSFER_OUT, TransactionType.ADJUSTMENT) }
                 ),
                 limit = PAGE_SIZE * 10, // Get more transactions to group them
                 offset = 0
@@ -289,12 +298,18 @@ class HistoryViewModel @Inject constructor(
             }
             .map { (key, txList) ->
                 val (batchType, locationId, hourStart) = key
+                // For adjustments, sum signed values; for others, sum absolute values
+                val totalWeight = if (batchType == BatchType.ADJUSTMENT) {
+                    txList.sumOf { it.weightKg }
+                } else {
+                    txList.sumOf { it.weightKg.abs() }
+                }
                 HistoryBatchDisplayItem.VirtualBatch(
                     transactionIds = txList.map { it.id },
                     timeWindowStart = hourStart,
                     batchType = batchType,
                     createdAt = txList.maxOf { it.createdAt },
-                    totalWeightKg = txList.sumOf { it.weightKg.abs() },
+                    totalWeightKg = totalWeight,
                     totalAmount = txList.mapNotNull { it.totalAmount?.abs() }
                         .takeIf { it.isNotEmpty() }
                         ?.reduce { acc, amount -> acc + amount },
@@ -309,12 +324,14 @@ class HistoryViewModel @Inject constructor(
         TransactionType.PURCHASE -> BatchType.PURCHASE
         TransactionType.SALE -> BatchType.SALE
         TransactionType.TRANSFER_IN, TransactionType.TRANSFER_OUT -> BatchType.TRANSFER
+        TransactionType.ADJUSTMENT -> BatchType.ADJUSTMENT
     }
 
     private fun BatchType.toTransactionTypes(): Set<TransactionType> = when (this) {
         BatchType.PURCHASE -> setOf(TransactionType.PURCHASE)
         BatchType.SALE -> setOf(TransactionType.SALE)
         BatchType.TRANSFER -> setOf(TransactionType.TRANSFER_IN, TransactionType.TRANSFER_OUT)
+        BatchType.ADJUSTMENT -> setOf(TransactionType.ADJUSTMENT)
     }
 
     private fun getDateRange(
@@ -388,12 +405,18 @@ class HistoryViewModel @Inject constructor(
                 batchId.startsWith("batch_") -> {
                     // Real purchase batch
                     val uuid = UUID.fromString(batchId.removePrefix("batch_"))
-                    purchaseBatchRepository.getTransactionsForBatch(uuid)
+                    Log.d("HistoryViewModel", "Loading transactions for purchase batch: $uuid")
+                    val result = purchaseBatchRepository.getTransactionsForBatch(uuid)
+                    Log.d("HistoryViewModel", "Found ${result.size} transactions for batch $uuid")
+                    result
                 }
                 batchId.startsWith("sale_batch_") -> {
                     // Real sale batch
                     val uuid = UUID.fromString(batchId.removePrefix("sale_batch_"))
-                    saleBatchRepository.getTransactionsForBatch(uuid)
+                    Log.d("HistoryViewModel", "Loading transactions for sale batch: $uuid")
+                    val result = saleBatchRepository.getTransactionsForBatch(uuid)
+                    Log.d("HistoryViewModel", "Found ${result.size} transactions for sale batch $uuid")
+                    result
                 }
                 batchId.startsWith("virtual_") -> {
                     // Virtual batch - get transaction IDs from the batch item
@@ -524,6 +547,25 @@ class HistoryViewModel @Inject constructor(
                 )
             }
             loadBatches(resetPage = true)
+        }
+    }
+
+    /**
+     * Void a batch (soft delete).
+     */
+    fun voidBatch(batchId: UUID, batchType: BatchType) {
+        viewModelScope.launch {
+            try {
+                when (batchType) {
+                    BatchType.PURCHASE -> purchaseBatchRepository.markVoided(batchId)
+                    BatchType.SALE -> saleBatchRepository.markVoided(batchId)
+                    BatchType.TRANSFER -> { /* Transfers can't be voided */ }
+                    BatchType.ADJUSTMENT -> { /* Adjustments can't be voided - they are individual transactions */ }
+                }
+                reloadWithFilter()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Помилка скасування") }
+            }
         }
     }
 

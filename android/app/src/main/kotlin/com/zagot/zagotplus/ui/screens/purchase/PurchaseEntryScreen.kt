@@ -80,10 +80,18 @@ import java.math.BigDecimal
 @Composable
 fun PurchaseEntryScreen(
     onNavigateBack: () -> Unit,
+    editingBatchId: String? = null,
     viewModel: PurchaseEntryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Load batch for editing if provided
+    LaunchedEffect(editingBatchId) {
+        if (editingBatchId != null) {
+            viewModel.loadBatchForEditing(editingBatchId)
+        }
+    }
 
     // Handle navigation
     LaunchedEffect(uiState.navigateBack) {
@@ -111,11 +119,12 @@ fun PurchaseEntryScreen(
         }
     }
 
+    val isEditing = uiState.editingBatchId != null
     val topBarTitle = when (uiState.screenState) {
-        PurchaseEntryScreenState.PRODUCT_GRID -> "Оберіть товар"
+        PurchaseEntryScreenState.PRODUCT_GRID -> if (isEditing) "Редагування" else "Оберіть товар"
         PurchaseEntryScreenState.WEIGHT_ENTRY -> uiState.selectedProduct?.name ?: "Введіть дані"
         PurchaseEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
-        PurchaseEntryScreenState.SUMMARY -> "Підсумок"
+        PurchaseEntryScreenState.SUMMARY -> if (isEditing) "Виправлення" else "Підсумок"
     }
 
     val showBackToGrid = uiState.screenState != PurchaseEntryScreenState.PRODUCT_GRID && 

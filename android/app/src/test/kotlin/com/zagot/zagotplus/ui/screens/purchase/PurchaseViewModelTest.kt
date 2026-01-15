@@ -1,6 +1,8 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -22,6 +24,7 @@ import java.util.UUID
 class PurchaseViewModelTest {
 
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
+    private lateinit var cashRepository: CashRepository
     private lateinit var viewModel: PurchaseViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -38,53 +41,60 @@ class PurchaseViewModelTest {
         syncedAt = null
     )
 
+    private val testProductTotal = ProductDailyTotal(
+        productId = UUID.randomUUID(),
+        productName = "Яблука",
+        totalWeightKg = BigDecimal("100.0"),
+        totalAmount = BigDecimal("2500.00")
+    )
+
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         purchaseBatchRepository = mockk()
+        cashRepository = mockk()
     }
 
     private fun createViewModel(): PurchaseViewModel {
-        return PurchaseViewModel(purchaseBatchRepository)
+        return PurchaseViewModel(purchaseBatchRepository, cashRepository)
     }
 
     @Test
-    fun `loads today's batches on init`() = runTest {
+    fun `loads cash balance and product totals on init`() = runTest {
+        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("5000.00"))
+        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(listOf(testProductTotal))
         every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(listOf(testBatch))
 
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
+        assertEquals(BigDecimal("5000.00"), state.cashBalance)
+        assertEquals(1, state.todaysProductTotals.size)
+        assertEquals(testProductTotal, state.todaysProductTotals[0])
         assertEquals(1, state.todaysBatches.size)
-        assertEquals(testBatch, state.todaysBatches[0])
         assertFalse(state.isLoading)
     }
 
     @Test
-    fun `shows empty state when no batches today`() = runTest {
+    fun `shows empty state when no purchases today`() = runTest {
+        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("1000.00"))
+        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
         every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
+        assertTrue(state.todaysProductTotals.isEmpty())
         assertTrue(state.todaysBatches.isEmpty())
         assertFalse(state.isLoading)
     }
 
     @Test
-    fun `weight placeholder shows default value`() = runTest {
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
-
-        viewModel = createViewModel()
-        advanceUntilIdle()
-
-        assertEquals("-- кг", viewModel.uiState.value.weightPlaceholder)
-    }
-
-    @Test
     fun `onNewClientClick sets navigate flag`() = runTest {
+        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
         every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
 
         viewModel = createViewModel()
@@ -97,6 +107,8 @@ class PurchaseViewModelTest {
 
     @Test
     fun `onNavigationHandled clears navigate flag`() = runTest {
+        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
         every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
 
         viewModel = createViewModel()
@@ -111,6 +123,8 @@ class PurchaseViewModelTest {
 
     @Test
     fun `dismissError clears error`() = runTest {
+        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
         every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
 
         viewModel = createViewModel()

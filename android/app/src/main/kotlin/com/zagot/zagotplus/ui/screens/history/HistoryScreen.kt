@@ -2,7 +2,9 @@ package com.zagot.zagotplus.ui.screens.history
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -27,8 +31,9 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -70,7 +75,9 @@ import java.util.UUID
 @Composable
 fun HistoryScreen(
     modifier: Modifier = Modifier,
-    viewModel: HistoryViewModel = hiltViewModel()
+    viewModel: HistoryViewModel = hiltViewModel(),
+    onNavigateToEditPurchase: (batchId: String) -> Unit = {},
+    onNavigateToEditSale: (batchId: String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
@@ -169,6 +176,26 @@ fun HistoryScreen(
                                 transactions = transactions,
                                 isLoadingTransactions = isLoadingTransactions,
                                 onClick = { viewModel.toggleBatchExpansion(batch.id) },
+                                onEditClick = { batchId ->
+                                    when (batch) {
+                                        is HistoryBatchDisplayItem.RealBatch -> 
+                                            onNavigateToEditPurchase(batchId.toString())
+                                        is HistoryBatchDisplayItem.RealSaleBatch -> 
+                                            onNavigateToEditSale(batchId.toString())
+                                        is HistoryBatchDisplayItem.VirtualBatch -> 
+                                            { /* Virtual batches cannot be edited */ }
+                                    }
+                                },
+                                onDeleteClick = { batchId ->
+                                    when (batch) {
+                                        is HistoryBatchDisplayItem.RealBatch -> 
+                                            viewModel.voidBatch(batchId, BatchType.PURCHASE)
+                                        is HistoryBatchDisplayItem.RealSaleBatch -> 
+                                            viewModel.voidBatch(batchId, BatchType.SALE)
+                                        is HistoryBatchDisplayItem.VirtualBatch -> 
+                                            { /* Virtual batches cannot be deleted */ }
+                                    }
+                                },
                                 decimalFormat = decimalFormat,
                                 dateFormatter = dateFormatter
                             )
@@ -392,6 +419,7 @@ private fun LocationDropdown(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ExpandableBatchCard(
     batch: HistoryBatchDisplayItem,
@@ -399,26 +427,38 @@ private fun ExpandableBatchCard(
     transactions: List<HistoryDisplayItem>?,
     isLoadingTransactions: Boolean,
     onClick: () -> Unit,
+    onEditClick: (batchId: java.util.UUID) -> Unit,
+    onDeleteClick: (batchId: java.util.UUID) -> Unit,
     decimalFormat: DecimalFormat,
     dateFormatter: DateTimeFormatter,
     modifier: Modifier = Modifier
 ) {
-    val containerColor = when (batch.batchType) {
-        BatchType.PURCHASE -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        BatchType.SALE -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        BatchType.TRANSFER -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+    var showContextMenu by remember { mutableStateOf(false) }
+    
+    // Determine card color based on batch state
+    val containerColor = when {
+        batch.isVoided -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        batch.isCorrection -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else -> when (batch.batchType) {
+            BatchType.PURCHASE -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            BatchType.SALE -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+            BatchType.TRANSFER -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+            BatchType.ADJUSTMENT -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        }
     }
 
     val typeColor = when (batch.batchType) {
         BatchType.PURCHASE -> MaterialTheme.colorScheme.primary
         BatchType.SALE -> MaterialTheme.colorScheme.error
         BatchType.TRANSFER -> MaterialTheme.colorScheme.tertiary
+        BatchType.ADJUSTMENT -> MaterialTheme.colorScheme.tertiary
     }
 
     val typeIcon: ImageVector = when (batch.batchType) {
         BatchType.PURCHASE -> Icons.Filled.ShoppingCart
         BatchType.SALE -> Icons.Filled.ShoppingCart
         BatchType.TRANSFER -> Icons.Filled.SwapHoriz
+        BatchType.ADJUSTMENT -> Icons.Filled.Edit
     }
 
     val rotationAngle by animateFloatAsState(
@@ -427,128 +467,214 @@ private fun ExpandableBatchCard(
     )
 
     val localTime = batch.createdAt.atZone(ZoneId.systemDefault())
-    val weightText = "${decimalFormat.format(batch.totalWeightKg.abs())} кг"
+    val weightText = if (batch.batchType == BatchType.ADJUSTMENT) {
+        val sign = if (batch.totalWeightKg >= java.math.BigDecimal.ZERO) "+" else ""
+        "$sign${decimalFormat.format(batch.totalWeightKg)} кг"
+    } else {
+        "${decimalFormat.format(batch.totalWeightKg.abs())} кг"
+    }
     val amountText = batch.totalAmount?.let { "₴${decimalFormat.format(it)}" }
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
-    ) {
-        Column(
-            modifier = Modifier
+    
+    val canEdit = !batch.isVoided && batch !is HistoryBatchDisplayItem.VirtualBatch
+    
+    Box {
+        Card(
+            modifier = modifier
                 .fillMaxWidth()
-                .animateContentSize()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { if (canEdit) showContextMenu = true }
+                ),
+            colors = CardDefaults.cardColors(containerColor = containerColor)
         ) {
-            // Batch header (always visible)
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .animateContentSize()
             ) {
-                // Left: Type icon + info
+                // Batch header (always visible)
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = typeIcon,
-                        contentDescription = "Тип операції",
-                        tint = typeColor,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                    // Left: Type icon + info
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = typeIcon,
+                            contentDescription = "Тип операції",
+                            tint = typeColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = batch.batchType.toDisplayString(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = typeColor
+                                )
+                                // Show voided badge
+                                if (batch.isVoided) {
+                                    Text(
+                                        text = "Скасовано",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                                // Show correction badge
+                                if (batch.isCorrection) {
+                                    Text(
+                                        text = "Виправлення",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                                if (batch.isSynced) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = "Синхронізовано",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            // Show correction reason if present
+                            batch.correctionReason?.let { reason ->
+                                Text(
+                                    text = reason,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Text(
-                                text = batch.batchType.toDisplayString(),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = typeColor
+                                text = "${batch.itemCount} позицій • ${batch.locationName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (batch.isSynced) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = "Синхронізовано",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                            Text(
+                                text = dateFormatter.format(localTime),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Right: Totals + expand indicator
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = weightText,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (amountText != null) {
+                                Text(
+                                    text = amountText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
-                        Text(
-                            text = "${batch.itemCount} позицій • ${batch.locationName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = dateFormatter.format(localTime),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Right: Totals + expand indicator
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = weightText,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (amountText != null) {
-                        Text(
-                            text = amountText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Згорнути" else "Розгорнути",
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(rotationAngle),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Expanded content
-            if (isExpanded) {
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                when {
-                    isLoadingTransactions -> {
-                        Box(
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Згорнути" else "Розгорнути",
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
+                                .size(24.dp)
+                                .rotate(rotationAngle),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    transactions != null -> {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            transactions.forEach { transaction ->
-                                TransactionRow(
-                                    transaction = transaction,
-                                    decimalFormat = decimalFormat
-                                )
+                }
+
+                // Expanded content
+                if (isExpanded) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    when {
+                        isLoadingTransactions -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                        transactions != null -> {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                transactions.forEach { transaction ->
+                                    TransactionRow(
+                                        transaction = transaction,
+                                        decimalFormat = decimalFormat
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+        
+        // Context menu for long press
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Редагувати") },
+                onClick = {
+                    showContextMenu = false
+                    val batchId = when (batch) {
+                        is HistoryBatchDisplayItem.RealBatch -> batch.batchId
+                        is HistoryBatchDisplayItem.RealSaleBatch -> batch.batchId
+                        is HistoryBatchDisplayItem.VirtualBatch -> null
+                    }
+                    batchId?.let { onEditClick(it) }
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.Edit, contentDescription = "Редагувати")
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Видалити", color = MaterialTheme.colorScheme.error) },
+                onClick = {
+                    showContextMenu = false
+                    val batchId = when (batch) {
+                        is HistoryBatchDisplayItem.RealBatch -> batch.batchId
+                        is HistoryBatchDisplayItem.RealSaleBatch -> batch.batchId
+                        is HistoryBatchDisplayItem.VirtualBatch -> null
+                    }
+                    batchId?.let { onDeleteClick(it) }
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Видалити",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            )
         }
     }
 }
@@ -564,6 +690,14 @@ private fun TransactionRow(
         if (weight.compareTo(java.math.BigDecimal.ZERO) > 0) {
             amount.abs().divide(weight, 2, java.math.RoundingMode.HALF_UP)
         } else null
+    }
+    
+    val isAdjustment = transaction.type == TransactionType.ADJUSTMENT
+    val weightText = if (isAdjustment) {
+        val sign = if (transaction.weightKg >= java.math.BigDecimal.ZERO) "+" else ""
+        "$sign${decimalFormat.format(transaction.weightKg)} кг"
+    } else {
+        "${decimalFormat.format(transaction.weightKg.abs())} кг"
     }
 
     Row(
@@ -588,7 +722,7 @@ private fun TransactionRow(
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = "${decimalFormat.format(transaction.weightKg.abs())} кг",
+                text = weightText,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )

@@ -144,4 +144,23 @@ interface TransactionRepository {
      * @return List of transactions matching the IDs
      */
     suspend fun getTransactionsByIds(ids: List<UUID>): List<Transaction>
+
+    /**
+     * Create an inventory adjustment transaction.
+     * Used during inventorization to correct discrepancies between recorded and actual inventory.
+     *
+     * @param locationId Location where adjustment is made
+     * @param productId Product being adjusted
+     * @param adjustmentKg Weight difference (positive = add to inventory, negative = remove from inventory)
+     * @param reason Optional reason for adjustment
+     * @param notes Optional additional notes
+     * @return Created adjustment transaction
+     */
+    suspend fun createAdjustment(
+        locationId: UUID,
+        productId: UUID,
+        adjustmentKg: BigDecimal,
+        reason: String? = null,
+        notes: String? = null
+    ): Transaction
 }

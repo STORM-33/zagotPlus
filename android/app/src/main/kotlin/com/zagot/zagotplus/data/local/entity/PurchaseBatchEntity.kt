@@ -14,6 +14,10 @@ import java.util.UUID
  * Groups multiple transaction line items per client session.
  * Mirrors Supabase 'purchase_batches' table.
  *
+ * Supports correction workflow: when a batch is corrected, the original
+ * is marked as voided (isVoided=true) and a new correction batch is created
+ * with correctsBatchId pointing to the original.
+ *
  * @property id Primary key (UUID stored as TEXT, server-generated)
  * @property localId Device-generated UUID, ensures conflict-free sync
  * @property locationId Location where batch was created
@@ -24,6 +28,9 @@ import java.util.UUID
  * @property deviceId Identifies which device created the batch
  * @property createdAt Timestamp when batch was created
  * @property syncedAt Timestamp when synced to Supabase (null = pending sync)
+ * @property isVoided True if this batch has been voided by a correction
+ * @property correctsBatchId ID of the batch this one corrects (null if not a correction)
+ * @property correctionReason Reason for correction (only set on correction batches)
  */
 @Entity(
     tableName = "purchase_batches",
@@ -39,7 +46,9 @@ import java.util.UUID
         Index(value = ["local_id"], unique = true),
         Index(value = ["location_id"]),
         Index(value = ["synced_at"]),
-        Index(value = ["created_at"])
+        Index(value = ["created_at"]),
+        Index(value = ["is_voided"]),
+        Index(value = ["corrects_batch_id"])
     ]
 )
 data class PurchaseBatchEntity(
@@ -72,5 +81,14 @@ data class PurchaseBatchEntity(
     val createdAt: Instant,
 
     @ColumnInfo(name = "synced_at")
-    val syncedAt: Instant?
+    val syncedAt: Instant?,
+
+    @ColumnInfo(name = "is_voided", defaultValue = "0")
+    val isVoided: Boolean = false,
+
+    @ColumnInfo(name = "corrects_batch_id")
+    val correctsBatchId: UUID? = null,
+
+    @ColumnInfo(name = "correction_reason")
+    val correctionReason: String? = null
 )

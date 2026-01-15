@@ -2,6 +2,7 @@ package com.zagot.zagotplus.ui.screens.inventory
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,13 +15,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -45,6 +52,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
+/**
+ * Action type for inventory item context menu.
+ */
+private enum class InventoryItemAction {
+    TRANSFER,
+    ADJUST
+}
+
 @Composable
 fun InventoryScreen(
     modifier: Modifier = Modifier,
@@ -56,9 +71,10 @@ fun InventoryScreen(
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     
-    // State for move dialog
+    // State for dialogs
+    var selectedItem by remember { mutableStateOf<InventoryDisplayItem?>(null) }
     var showMoveDialog by remember { mutableStateOf(false) }
-    var selectedItemForMove by remember { mutableStateOf<InventoryDisplayItem?>(null) }
+    var showAdjustDialog by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -132,12 +148,14 @@ fun InventoryScreen(
                                     InventoryItemCard(
                                         item = item,
                                         decimalFormat = decimalFormat,
-                                        showMoveOption = !isTotalView && item.weightKg > BigDecimal.ZERO,
-                                        onLongPress = {
-                                            if (!isTotalView && item.weightKg > BigDecimal.ZERO) {
-                                                selectedItemForMove = item
-                                                showMoveDialog = true
-                                            }
+                                        showContextMenuOption = !isTotalView,
+                                        onTransferClick = {
+                                            selectedItem = item
+                                            showMoveDialog = true
+                                        },
+                                        onAdjustClick = {
+                                            selectedItem = item
+                                            showAdjustDialog = true
                                         }
                                     )
                                 }
@@ -168,8 +186,8 @@ fun InventoryScreen(
         }
         
         // Move product dialog
-        if (showMoveDialog && selectedItemForMove != null) {
-            val item = selectedItemForMove!!
+        if (showMoveDialog && selectedItem != null) {
+            val item = selectedItem!!
             val currentLocationId = item.locationId
             val otherLocations = uiState.locations.filter { it.id != currentLocationId }
             
@@ -178,7 +196,7 @@ fun InventoryScreen(
                 availableLocations = otherLocations,
                 onDismiss = { 
                     showMoveDialog = false
-                    selectedItemForMove = null
+                    selectedItem = null
                 },
                 onLocationSelected = { destinationLocation ->
                     onNavigateToTransfer(
@@ -186,9 +204,38 @@ fun InventoryScreen(
                         destinationLocation.id.toString()
                     )
                     showMoveDialog = false
-                    selectedItemForMove = null
+                    selectedItem = null
                 }
             )
+        }
+        
+        // Adjustment dialog
+        if (showAdjustDialog && selectedItem != null) {
+            val item = selectedItem!!
+            val locationId = item.locationId
+            
+            if (locationId != null) {
+                AdjustmentDialog(
+                    productName = item.productName,
+                    currentWeightKg = item.weightKg,
+                    decimalFormat = decimalFormat,
+                    onDismiss = {
+                        showAdjustDialog = false
+                        selectedItem = null
+                    },
+                    onConfirm = { actualWeight, reason ->
+                        viewModel.createAdjustment(
+                            locationId = locationId,
+                            productId = item.productId,
+                            actualWeightKg = actualWeight,
+                            currentWeightKg = item.weightKg,
+                            reason = reason
+                        )
+                        showAdjustDialog = false
+                        selectedItem = null
+                    }
+                )
+            }
         }
     }
 }
@@ -242,42 +289,42 @@ private fun MoveProductDialog(
 private fun InventoryItemCard(
     item: InventoryDisplayItem,
     decimalFormat: DecimalFormat,
-    showMoveOption: Boolean = false,
-    onLongPress: () -> Unit = {},
+    showContextMenuOption: Boolean = false,
+    onTransferClick: () -> Unit = {},
+    onAdjustClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showContextMenu by remember { mutableStateOf(false) }
+    
     val weightText = "${decimalFormat.format(item.weightKg)} кг"
     val isNegative = item.isNegative
-    val isZero = item.weightKg == BigDecimal.ZERO
     
     val containerColor = when {
         isNegative -> MaterialTheme.colorScheme.errorContainer
-        isZero -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     
     val contentColor = when {
         isNegative -> MaterialTheme.colorScheme.onErrorContainer
-        isZero -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (showMoveOption) {
-                    Modifier.combinedClickable(
-                        onClick = { },
-                        onLongClick = onLongPress
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
-    ) {
-        Column {
+    Box {
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .then(
+                    if (showContextMenuOption) {
+                        Modifier.combinedClickable(
+                            onClick = { },
+                            onLongClick = { showContextMenu = true }
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            colors = CardDefaults.cardColors(containerColor = containerColor)
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -311,14 +358,205 @@ private fun InventoryItemCard(
                     )
                 }
             }
-            if (showMoveOption) {
-                Text(
-                    text = "Утримуйте для переміщення",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+        }
+        
+        // Context menu for long press
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false }
+        ) {
+            // Transfer option - only show if item has positive weight
+            if (item.weightKg.compareTo(BigDecimal.ZERO) == 1) {
+                DropdownMenuItem(
+                    text = { Text("Перемістити") },
+                    onClick = {
+                        showContextMenu = false
+                        onTransferClick()
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Filled.SwapHoriz, contentDescription = "Перемістити")
+                    }
                 )
             }
+            // Adjust option - always available
+            DropdownMenuItem(
+                text = { Text("Коригувати") },
+                onClick = {
+                    showContextMenu = false
+                    onAdjustClick()
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.Edit, contentDescription = "Коригувати")
+                }
+            )
         }
     }
+}
+
+/**
+ * Adjustment reasons for inventory corrections.
+ */
+private enum class AdjustmentReason(val displayName: String) {
+    DAMAGE("Пошкодження"),
+    LOSS("Втрата"),
+    COUNTING_ERROR("Помилка підрахунку"),
+    THEFT("Крадіжка"),
+    OTHER("Інше")
+}
+
+@Composable
+private fun AdjustmentDialog(
+    productName: String,
+    currentWeightKg: BigDecimal,
+    decimalFormat: DecimalFormat,
+    onDismiss: () -> Unit,
+    onConfirm: (actualWeight: BigDecimal, reason: String?) -> Unit
+) {
+    var actualWeightText by remember { mutableStateOf(decimalFormat.format(currentWeightKg)) }
+    var selectedReason by remember { mutableStateOf<AdjustmentReason?>(null) }
+    var showReasonDropdown by remember { mutableStateOf(false) }
+    
+    val actualWeight = remember(actualWeightText) {
+        try {
+            BigDecimal(actualWeightText.replace(",", ".").replace(" ", ""))
+        } catch (e: NumberFormatException) {
+            null
+        }
+    }
+    
+    val difference = actualWeight?.let { it - currentWeightKg }
+    val isValid = actualWeight != null && difference != null && difference.compareTo(BigDecimal.ZERO) != 0
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Коригування залишків") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Product name
+                Text(
+                    text = productName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                // Current weight display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Поточний залишок:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${decimalFormat.format(currentWeightKg)} кг",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                
+                // Actual weight input
+                OutlinedTextField(
+                    value = actualWeightText,
+                    onValueChange = { actualWeightText = it },
+                    label = { Text("Фактична вага (кг)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = actualWeight == null && actualWeightText.isNotEmpty()
+                )
+                
+                // Difference display
+                if (difference != null && difference.compareTo(BigDecimal.ZERO) != 0) {
+                    val diffText = if (difference > BigDecimal.ZERO) {
+                        "+${decimalFormat.format(difference)}"
+                    } else {
+                        decimalFormat.format(difference)
+                    }
+                    val diffColor = if (difference > BigDecimal.ZERO) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Різниця:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "$diffText кг",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = diffColor
+                        )
+                    }
+                }
+                
+                // Reason dropdown
+                Box {
+                    OutlinedTextField(
+                        value = selectedReason?.displayName ?: "",
+                        onValueChange = {},
+                        label = { Text("Причина (необов'язково)") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showReasonDropdown = true },
+                        readOnly = true,
+                        enabled = false,
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = "Обрати причину"
+                            )
+                        }
+                    )
+                    // Clickable overlay for the text field
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { showReasonDropdown = true }
+                    )
+                    
+                    DropdownMenu(
+                        expanded = showReasonDropdown,
+                        onDismissRequest = { showReasonDropdown = false }
+                    ) {
+                        AdjustmentReason.entries.forEach { reason ->
+                            DropdownMenuItem(
+                                text = { Text(reason.displayName) },
+                                onClick = {
+                                    selectedReason = reason
+                                    showReasonDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    actualWeight?.let { weight ->
+                        onConfirm(weight, selectedReason?.displayName)
+                    }
+                },
+                enabled = isValid
+            ) {
+                Text("Підтвердити")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Скасувати")
+            }
+        }
+    )
 }

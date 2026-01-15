@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
@@ -63,11 +64,14 @@ data class PurchaseEntryUiState(
     val error: String? = null,
     val navigateBack: Boolean = false,
     val editingPosition: PurchasePosition? = null, // Position being edited
-    val showExitConfirmation: Boolean = false // Show confirmation dialog before exit
+    val showExitConfirmation: Boolean = false, // Show confirmation dialog before exit
+    // Editing mode: if set, we're correcting an existing batch
+    val editingBatchId: UUID? = null,
+    val correctionReason: String = ""
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
-                currentWeight.isNotBlank() || 
+                currentWeight.isNotBlank() ||
                 (currentPrice.isNotBlank() && selectedProduct != null) ||
                 notes.isNotBlank()
     val isScaleConnected: Boolean
@@ -285,6 +289,10 @@ class PurchaseEntryViewModel @Inject constructor(
         }
     }
 
+    fun onCorrectionReasonChange(reason: String) {
+        _uiState.update { it.copy(correctionReason = reason) }
+    }
+
     fun confirmSave() {
         val state = _uiState.value
         if (state.positions.isEmpty()) return
@@ -330,7 +338,21 @@ class PurchaseEntryViewModel @Inject constructor(
                     )
                 }
 
-                purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
+                // Check if we're in correction mode
+                val editingBatchId = state.editingBatchId
+                if (editingBatchId != null) {
+                    // Correction flow: void original and create new
+                    val reason = state.correctionReason.ifBlank { "Виправлення помилки" }
+                    purchaseBatchRepository.correctBatch(
+                        originalBatchId = editingBatchId,
+                        correctedBatch = batch,
+                        correctedTransactions = transactions,
+                        reason = reason
+                    )
+                } else {
+                    // Normal creation flow
+                    purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
+                }
 
                 // Note: Cash balance is automatically updated via transactions table
                 // (purchases reduce cash balance in the balance calculation query)
@@ -350,6 +372,75 @@ class PurchaseEntryViewModel @Inject constructor(
                         isSaving = false,
                         screenState = PurchaseEntryScreenState.POSITIONS_LIST,
                         error = e.message ?: "Помилка збереження"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Load an existing batch for editing/correction.
+     * Pre-fills the UI with the batch's transactions.
+     */
+    fun loadBatchForEditing(batchIdString: String) {
+        val batchId = try {
+            UUID.fromString(batchIdString)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(error = "Невірний ID партії") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val batch = purchaseBatchRepository.getById(batchId)
+                if (batch == null) {
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            error = "Партію не знайдено"
+                        )
+                    }
+                    return@launch
+                }
+
+                val transactions = purchaseBatchRepository.getTransactionsForBatch(batchId)
+                
+                // Fetch products directly from repository to ensure they're available
+                // (init loading may not have completed yet)
+                val allProducts = productRepository.getActiveProducts().first()
+                val products = allProducts.associateBy { it.id }
+
+                val positions = transactions.mapNotNull { tx ->
+                    val product = tx.productId?.let { products[it] }
+                    if (product != null) {
+                        PurchasePosition(
+                            product = product,
+                            weightKg = tx.weightKg,
+                            pricePerKg = tx.pricePerKg ?: BigDecimal.ZERO,
+                            totalAmount = tx.totalAmount ?: BigDecimal.ZERO
+                        )
+                    } else null
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        editingBatchId = batchId,
+                        positions = positions,
+                        notes = batch.notes ?: "",
+                        products = allProducts.ifEmpty { it.products },
+                        screenState = if (positions.isNotEmpty()) 
+                            PurchaseEntryScreenState.POSITIONS_LIST 
+                        else 
+                            PurchaseEntryScreenState.PRODUCT_GRID
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = e.message ?: "Помилка завантаження"
                     )
                 }
             }

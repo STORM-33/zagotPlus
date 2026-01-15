@@ -1,7 +1,8 @@
 package com.zagot.zagotplus.ui.screens.cash
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
@@ -34,6 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -66,6 +69,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -230,7 +234,9 @@ fun CashScreen(
                     ) { item ->
                         HistoryItem(
                             item = item,
-                            showLocationName = uiState.isTotalsView
+                            showLocationName = uiState.isTotalsView,
+                            canModify = viewModel.canModifyItem(item),
+                            onEdit = { viewModel.showEditDialog(item) }
                         )
                     }
 
@@ -325,6 +331,39 @@ fun CashScreen(
             onAddCategory = viewModel::addCategory,
             onDeactivateCategory = viewModel::deactivateCategory,
             onDismiss = viewModel::dismissDialog
+        )
+        CashDialogType.EDIT_DEPOSIT -> EditDepositDialog(
+            amount = uiState.dialogAmount,
+            notes = uiState.dialogNotes,
+            onAmountChange = viewModel::onAmountChange,
+            onNotesChange = viewModel::onNotesChange,
+            onConfirm = viewModel::confirmEdit,
+            onDismiss = viewModel::dismissDialog,
+            canConfirm = uiState.canConfirmDeposit,
+            isSaving = uiState.isSaving
+        )
+        CashDialogType.EDIT_WITHDRAW -> EditWithdrawDialog(
+            amount = uiState.dialogAmount,
+            notes = uiState.dialogNotes,
+            onAmountChange = viewModel::onAmountChange,
+            onNotesChange = viewModel::onNotesChange,
+            onConfirm = viewModel::confirmEdit,
+            onDismiss = viewModel::dismissDialog,
+            canConfirm = uiState.dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true,
+            isSaving = uiState.isSaving
+        )
+        CashDialogType.EDIT_PAYMENT -> EditPaymentDialog(
+            amount = uiState.dialogAmount,
+            notes = uiState.dialogNotes,
+            categories = uiState.categories,
+            selectedCategoryId = uiState.dialogCategoryId,
+            onAmountChange = viewModel::onAmountChange,
+            onNotesChange = viewModel::onNotesChange,
+            onCategorySelect = viewModel::onCategorySelect,
+            onConfirm = viewModel::confirmEdit,
+            onDismiss = viewModel::dismissDialog,
+            canConfirm = uiState.dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true,
+            isSaving = uiState.isSaving
         )
         CashDialogType.NONE -> { /* No dialog */ }
     }
@@ -430,17 +469,23 @@ private fun ActionButtons(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryItem(
     item: CashHistoryItem,
     showLocationName: Boolean = false,
+    canModify: Boolean = false,
+    onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showContextMenu by remember { mutableStateOf(false) }
+    
     val depositLabel = stringResource(R.string.cash_history_deposit)
     val withdrawalLabel = stringResource(R.string.cash_history_withdrawal)
     val paymentLabel = stringResource(R.string.cash_history_payment)
     val purchaseLabel = stringResource(R.string.cash_history_purchase)
     val saleLabel = stringResource(R.string.cash_history_sale)
+    val editLabel = stringResource(R.string.edit)
     
     val (icon, color, label) = when (item.type) {
         CashHistoryItemType.DEPOSIT -> Triple(
@@ -473,102 +518,127 @@ private fun HistoryItem(
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM") }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
+    Box(modifier = modifier) {
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .combinedClickable(
+                    onClick = { },
+                    onLongClick = { if (canModify) showContextMenu = true }
+                ),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = "Тип операції",
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                // Show details based on type
-                val detailText = when {
-                    item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE -> {
-                        val parts = mutableListOf<String>()
-                        item.batchCount?.let { count ->
-                            if (count > 1) {
-                                val clientWord = pluralizeUkrainian(count, "клієнт", "клієнти", "клієнтів")
-                                parts.add("$count $clientWord")
-                            }
-                        }
-                        item.itemCount?.let { parts.add("$it поз.") }
-                        item.weightKg?.let { parts.add("${it.setScale(2)} кг") }
-                        if (parts.isNotEmpty()) parts.joinToString(" • ") else null
-                    }
-                    !item.notes.isNullOrBlank() -> item.notes
-                    else -> null
-                }
-                if (detailText != null) {
-                    Text(
-                        text = detailText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                val amountText = if (item.type.isInflow) {
-                    "+${item.amount.setScale(2)}"
-                } else {
-                    "-${item.amount.setScale(2)}"
-                }
-                Text(
-                    text = "$amountText ₴",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = color
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(color.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = dateFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = "Тип операції",
+                        tint = color,
+                        modifier = Modifier.size(24.dp)
                     )
-                    if (showLocationName && item.locationName != null) {
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    // Show details based on type
+                    val detailText = when {
+                        item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE -> {
+                            val parts = mutableListOf<String>()
+                            item.batchCount?.let { count ->
+                                if (count > 1) {
+                                    val clientWord = pluralizeUkrainian(count, "клієнт", "клієнти", "клієнтів")
+                                    parts.add("$count $clientWord")
+                                }
+                            }
+                            item.itemCount?.let { parts.add("$it поз.") }
+                            item.weightKg?.let { parts.add("${it.setScale(2)} кг") }
+                            if (parts.isNotEmpty()) parts.joinToString(" • ") else null
+                        }
+                        !item.notes.isNullOrBlank() -> item.notes
+                        else -> null
+                    }
+                    if (detailText != null) {
                         Text(
-                            text = "•",
+                            text = detailText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    val amountText = if (item.type.isInflow) {
+                        "+${item.amount.setScale(2)}"
+                    } else {
+                        "-${item.amount.setScale(2)}"
+                    }
+                    Text(
+                        text = "$amountText ₴",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = color
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = item.locationName,
+                            text = dateFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (showLocationName && item.locationName != null) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = item.locationName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
+        }
+
+        // Context menu for edit
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false },
+            offset = DpOffset(16.dp, 0.dp)
+        ) {
+            DropdownMenuItem(
+                text = { Text(editLabel) },
+                onClick = {
+                    showContextMenu = false
+                    onEdit()
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.Edit, contentDescription = null)
+                }
+            )
         }
     }
 }
@@ -910,4 +980,234 @@ private fun pluralizeUkrainian(count: Int, one: String, few: String, many: Strin
         mod10 in 2..4 -> few
         else -> many
     }
+}
+
+@Composable
+private fun EditDepositDialog(
+    amount: String,
+    notes: String,
+    onAmountChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    canConfirm: Boolean,
+    isSaving: Boolean
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cash_edit_deposit_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = onAmountChange,
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
+                    suffix = { Text("₴") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = canConfirm && !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditWithdrawDialog(
+    amount: String,
+    notes: String,
+    onAmountChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    canConfirm: Boolean,
+    isSaving: Boolean
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cash_edit_withdraw_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = onAmountChange,
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
+                    suffix = { Text("₴") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = canConfirm && !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditPaymentDialog(
+    amount: String,
+    notes: String,
+    categories: List<ExpenseCategory>,
+    selectedCategoryId: UUID?,
+    onAmountChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onCategorySelect: (UUID?) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    canConfirm: Boolean,
+    isSaving: Boolean
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedCategory = categories.find { it.id == selectedCategoryId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cash_edit_payment_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = onAmountChange,
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
+                    suffix = { Text("₴") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val noCategoryLabel = stringResource(R.string.cash_no_category)
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedCategory?.name ?: noCategoryLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.cash_category_label)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(noCategoryLabel) },
+                            onClick = {
+                                onCategorySelect(null)
+                                expanded = false
+                            }
+                        )
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                onClick = {
+                                    onCategorySelect(category.id)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = canConfirm && !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }

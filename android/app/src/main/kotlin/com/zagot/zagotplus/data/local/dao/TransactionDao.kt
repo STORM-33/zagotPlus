@@ -24,6 +24,16 @@ data class InventoryAggregateResult(
 )
 
 /**
+ * Raw result from daily product purchase totals query.
+ * Used internally by DAO; converted to ProductDailyTotal in repository.
+ */
+data class ProductDailyTotalResult(
+    val productId: String,
+    val totalWeightKg: String,
+    val totalAmount: String
+)
+
+/**
  * Data Access Object for transactions table.
  * Provides CRUD operations, sync queries, and reactive queries via Flow.
  */
@@ -107,6 +117,12 @@ interface TransactionDao {
     suspend fun getByLocalId(localId: String): TransactionEntity?
 
     /**
+     * Get all existing local_ids for efficient batch deduplication during sync.
+     */
+    @Query("SELECT local_id FROM transactions")
+    suspend fun getAllLocalIds(): List<String>
+
+    /**
      * Get transactions by location as Flow.
      */
     @Query("SELECT * FROM transactions WHERE location_id = :locationId ORDER BY created_at DESC")
@@ -141,6 +157,14 @@ interface TransactionDao {
      */
     @Query("UPDATE transactions SET synced_at = :syncedAt WHERE local_id = :localId")
     suspend fun markAsSynced(localId: String, syncedAt: Instant)
+
+    /**
+     * Update batch IDs for an existing transaction by local_id.
+     * Used during sync to link transactions to their batches when the transaction
+     * was created before the batch was synced.
+     */
+    @Query("UPDATE transactions SET batch_id = :batchId, sale_batch_id = :saleBatchId WHERE local_id = :localId")
+    suspend fun updateBatchIds(localId: String, batchId: UUID?, saleBatchId: UUID?)
 
     /**
      * Delete all transactions (for testing/reset).
@@ -197,24 +221,54 @@ interface TransactionDao {
     /**
      * Get aggregated inventory using SQL SUM.
      * Memory-efficient: doesn't load all transactions into memory.
+     * Excludes transactions from voided batches.
      */
     @Query("""
-        SELECT location_id AS locationId, product_id AS productId, SUM(weight_kg) AS totalWeightKg
-        FROM transactions
-        WHERE location_id IS NOT NULL AND product_id IS NOT NULL
-        GROUP BY location_id, product_id
+        SELECT t.location_id AS locationId, t.product_id AS productId, SUM(t.weight_kg) AS totalWeightKg
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+        WHERE t.location_id IS NOT NULL 
+          AND t.product_id IS NOT NULL
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+          AND (t.sale_batch_id IS NULL OR sb.is_voided = 0)
+        GROUP BY t.location_id, t.product_id
     """)
     fun getInventoryAggregatedFlow(): Flow<List<InventoryAggregateResult>>
 
     /**
      * Get aggregated inventory for a specific location using SQL SUM.
      * Memory-efficient: doesn't load all transactions into memory.
+     * Excludes transactions from voided batches.
      */
     @Query("""
-        SELECT location_id AS locationId, product_id AS productId, SUM(weight_kg) AS totalWeightKg
-        FROM transactions
-        WHERE location_id = :locationId AND product_id IS NOT NULL
-        GROUP BY location_id, product_id
+        SELECT t.location_id AS locationId, t.product_id AS productId, SUM(t.weight_kg) AS totalWeightKg
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+        WHERE t.location_id = :locationId 
+          AND t.product_id IS NOT NULL
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+          AND (t.sale_batch_id IS NULL OR sb.is_voided = 0)
+        GROUP BY t.location_id, t.product_id
     """)
     fun getInventoryByLocationAggregatedFlow(locationId: UUID): Flow<List<InventoryAggregateResult>>
+
+    /**
+     * Get today's purchase totals grouped by product.
+     * Excludes transactions from voided batches.
+     */
+    @Query("""
+        SELECT t.product_id AS productId, 
+               SUM(t.weight_kg) AS totalWeightKg,
+               SUM(t.total_amount) AS totalAmount
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        WHERE t.type = 'purchase'
+          AND t.product_id IS NOT NULL
+          AND t.created_at >= :startMillis AND t.created_at < :endMillis
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+        GROUP BY t.product_id
+    """)
+    fun observeTodaysPurchaseTotals(startMillis: Long, endMillis: Long): Flow<List<ProductDailyTotalResult>>
 }

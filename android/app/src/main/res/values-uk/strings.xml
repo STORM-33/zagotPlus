@@ -39,6 +39,12 @@
     <string name="cash_history_payment">Оплата</string>
     <string name="cash_history_purchase">Закупки</string>
     <string name="cash_history_sale">Продажі</string>
+    <string name="cash_edit_deposit_title">Редагування поповнення</string>
+    <string name="cash_edit_withdraw_title">Редагування виведення</string>
+    <string name="cash_edit_payment_title">Редагування оплати</string>
+    <string name="cash_delete_title">Видалення операції</string>
+    <string name="cash_delete_confirm">Ви впевнені, що хочете видалити це %1$s?</string>
+    <string name="cash_operation">операцію</string>
     
     <!-- Common -->
     <string name="save">Зберегти</string>

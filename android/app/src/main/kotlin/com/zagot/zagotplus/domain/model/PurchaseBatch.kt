@@ -7,6 +7,11 @@ import java.util.UUID
 /**
  * Domain model for a purchase batch.
  * Groups multiple transactions per client session.
+ * 
+ * Supports correction workflow: when a batch is corrected, the original
+ * is marked as voided (isVoided=true) and a new correction batch is created
+ * with correctsBatchId pointing to the original. This maintains immutability
+ * while providing full audit trail.
  */
 data class PurchaseBatch(
     val id: UUID,
@@ -18,5 +23,21 @@ data class PurchaseBatch(
     val itemCount: Int?,
     val deviceId: String?,
     val createdAt: Instant,
-    val syncedAt: Instant?
+    val syncedAt: Instant?,
+    /** If true, this batch has been voided by a correction. Excluded from inventory. */
+    val isVoided: Boolean = false,
+    /** ID of the batch this one corrects (null if not a correction). */
+    val correctsBatchId: UUID? = null,
+    /** Reason for correction (only set on correction batches). */
+    val correctionReason: String? = null
+)
+
+/**
+ * Daily totals for a product (used in purchase summary).
+ */
+data class ProductDailyTotal(
+    val productId: UUID,
+    val productName: String,
+    val totalWeightKg: BigDecimal,
+    val totalAmount: BigDecimal
 )

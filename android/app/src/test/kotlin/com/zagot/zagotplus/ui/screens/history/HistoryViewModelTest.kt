@@ -295,4 +295,62 @@ class HistoryViewModelTest {
 
         assertEquals(51, viewModel.uiState.value.batches.size)
     }
+
+    @Test
+    fun `voidBatch voids purchase batch and refreshes list`() = testScope.runTest {
+        val batchToVoid = testBatch.id
+        coEvery { purchaseBatchRepository.markVoided(batchToVoid) } returns Unit
+        
+        // After voiding, the batch is still in the list but marked as voided
+        viewModel = createViewModel()
+        assertEquals(2, viewModel.uiState.value.batches.size)
+
+        viewModel.voidBatch(batchToVoid, BatchType.PURCHASE)
+
+        io.mockk.coVerify { purchaseBatchRepository.markVoided(batchToVoid) }
+    }
+
+    @Test
+    fun `voidBatch voids sale batch and refreshes list`() = testScope.runTest {
+        val saleBatchId = UUID.randomUUID()
+        val testSaleBatch = com.zagot.zagotplus.domain.model.SaleBatch(
+            id = saleBatchId,
+            localId = "sale-batch-1",
+            locationId = testLocation.id,
+            deviceId = "test-device",
+            totalWeightKg = BigDecimal("5.00"),
+            totalAmount = BigDecimal("250.00"),
+            itemCount = 1,
+            notes = null,
+            createdAt = Instant.now(),
+            syncedAt = null
+        )
+        
+        coEvery { saleBatchRepository.markVoided(saleBatchId) } returns Unit
+        coEvery { saleBatchRepository.getAllBatchesPaginated(any(), any()) } returns listOf(testSaleBatch)
+        coEvery { saleBatchRepository.getTotalBatchCount() } returns 1
+        coEvery { purchaseBatchRepository.getAllBatchesPaginated(any(), any()) } returns emptyList()
+        coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 0
+
+        viewModel = createViewModel()
+        assertEquals(1, viewModel.uiState.value.batches.size)
+
+        viewModel.voidBatch(saleBatchId, BatchType.SALE)
+
+        io.mockk.coVerify { saleBatchRepository.markVoided(saleBatchId) }
+    }
+
+    @Test
+    fun `voidBatch sets error on failure`() = testScope.runTest {
+        val batchToVoid = testBatch.id
+        coEvery { purchaseBatchRepository.markVoided(batchToVoid) } throws RuntimeException("Void failed")
+
+        viewModel = createViewModel()
+        assertNull(viewModel.uiState.value.error)
+
+        viewModel.voidBatch(batchToVoid, BatchType.PURCHASE)
+
+        assertNotNull(viewModel.uiState.value.error)
+        assertEquals("Void failed", viewModel.uiState.value.error)
+    }
 }

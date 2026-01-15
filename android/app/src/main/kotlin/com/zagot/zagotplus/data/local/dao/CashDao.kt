@@ -30,6 +30,15 @@ interface ExpenseCategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(category: ExpenseCategoryEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(categories: List<ExpenseCategoryEntity>)
+
+    /**
+     * Get all existing local_ids for efficient batch deduplication during sync.
+     */
+    @Query("SELECT local_id FROM expense_categories")
+    suspend fun getAllLocalIds(): List<String>
+
     @Update
     suspend fun update(category: ExpenseCategoryEntity)
 
@@ -93,10 +102,15 @@ interface CashOperationDao {
             END), 0) FROM cash_operations WHERE location_id = :locationId)
             +
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'sale' THEN total_amount
-                WHEN type = 'purchase' THEN -total_amount
+                WHEN t.type = 'sale' THEN t.total_amount
+                WHEN t.type = 'purchase' THEN -t.total_amount
                 ELSE 0
-            END), 0) FROM transactions WHERE location_id = :locationId)
+            END), 0) FROM transactions t
+            LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+            WHERE t.location_id = :locationId
+              AND (t.batch_id IS NULL OR pb.is_voided = 0)
+              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
         , 0)
     """)
     fun getBalanceByLocation(locationId: UUID): Flow<java.math.BigDecimal>
@@ -113,13 +127,17 @@ interface CashOperationDao {
               AND created_at < :endOfDay)
             +
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'sale' THEN total_amount
-                WHEN type = 'purchase' THEN -total_amount
+                WHEN t.type = 'sale' THEN t.total_amount
+                WHEN t.type = 'purchase' THEN -t.total_amount
                 ELSE 0
-            END), 0) FROM transactions
-            WHERE location_id = :locationId
-              AND created_at >= :startOfDay
-              AND created_at < :endOfDay)
+            END), 0) FROM transactions t
+            LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+            WHERE t.location_id = :locationId
+              AND t.created_at >= :startOfDay
+              AND t.created_at < :endOfDay
+              AND (t.batch_id IS NULL OR pb.is_voided = 0)
+              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(
@@ -169,10 +187,14 @@ interface CashOperationDao {
             END), 0) FROM cash_operations)
             +
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'sale' THEN total_amount
-                WHEN type = 'purchase' THEN -total_amount
+                WHEN t.type = 'sale' THEN t.total_amount
+                WHEN t.type = 'purchase' THEN -t.total_amount
                 ELSE 0
-            END), 0) FROM transactions)
+            END), 0) FROM transactions t
+            LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+            WHERE (t.batch_id IS NULL OR pb.is_voided = 0)
+              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
         , 0)
     """)
     fun getTotalBalance(): Flow<java.math.BigDecimal>
@@ -187,17 +209,27 @@ interface CashOperationDao {
             WHERE created_at >= :startOfDay AND created_at < :endOfDay)
             +
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'sale' THEN total_amount
-                WHEN type = 'purchase' THEN -total_amount
+                WHEN t.type = 'sale' THEN t.total_amount
+                WHEN t.type = 'purchase' THEN -t.total_amount
                 ELSE 0
-            END), 0) FROM transactions
-            WHERE created_at >= :startOfDay AND created_at < :endOfDay)
+            END), 0) FROM transactions t
+            LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
+            WHERE t.created_at >= :startOfDay AND t.created_at < :endOfDay
+              AND (t.batch_id IS NULL OR pb.is_voided = 0)
+              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
 
     @Query("SELECT * FROM cash_operations WHERE local_id = :localId")
     suspend fun getByLocalId(localId: String): CashOperationEntity?
+
+    /**
+     * Get all existing local_ids for efficient batch deduplication during sync.
+     */
+    @Query("SELECT local_id FROM cash_operations")
+    suspend fun getAllLocalIds(): List<String>
 
     @Update
     suspend fun update(operation: CashOperationEntity)

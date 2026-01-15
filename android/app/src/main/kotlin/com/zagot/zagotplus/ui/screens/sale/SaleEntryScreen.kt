@@ -84,10 +84,18 @@ import java.util.UUID
 @Composable
 fun SaleEntryScreen(
     onNavigateBack: () -> Unit,
+    editingBatchId: String? = null,
     viewModel: SaleEntryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Load batch for editing if provided
+    LaunchedEffect(editingBatchId) {
+        if (editingBatchId != null) {
+            viewModel.loadBatchForEditing(editingBatchId)
+        }
+    }
 
     LaunchedEffect(uiState.navigateBack) {
         if (uiState.navigateBack) {
@@ -120,12 +128,13 @@ fun SaleEntryScreen(
         }
     }
 
+    val isEditing = uiState.editingBatchId != null
     val topBarTitle = when (uiState.screenState) {
-        SaleEntryScreenState.PRODUCT_GRID -> "Оберіть товар"
+        SaleEntryScreenState.PRODUCT_GRID -> if (isEditing) "Редагування" else "Оберіть товар"
         SaleEntryScreenState.WEIGHING -> uiState.selectedProduct?.name ?: "Зважування"
         SaleEntryScreenState.POSITION_REVIEW -> "Перевірка позиції"
         SaleEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
-        SaleEntryScreenState.SUMMARY -> "Підсумок"
+        SaleEntryScreenState.SUMMARY -> if (isEditing) "Виправлення" else "Підсумок"
     }
 
     val showTopBar = uiState.screenState != SaleEntryScreenState.SUMMARY

@@ -19,6 +19,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
+import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PurchaseEntryViewModelTest {
@@ -514,5 +515,225 @@ class PurchaseEntryViewModelTest {
         viewModel.dismissError()
 
         assertNull(viewModel.uiState.value.error)
+    }
+
+    // ==================== Editing/Correction Mode Tests ====================
+
+    @Test
+    fun `loadBatchForEditing sets editingBatchId and pre-fills positions`() = runTest {
+        val batchId = UUID.randomUUID()
+        val existingBatch = TestData.createPurchaseBatch(id = batchId, notes = "Original notes")
+        val existingTransactions = listOf(
+            TestData.createTransaction(
+                batchId = batchId,
+                productId = testProduct.id,
+                weightKg = BigDecimal("75.00"),
+                pricePerKg = BigDecimal("48.00"),
+                totalAmount = BigDecimal("3600.00")
+            )
+        )
+
+        coEvery { purchaseBatchRepository.getById(batchId) } returns existingBatch
+        coEvery { purchaseBatchRepository.getTransactionsForBatch(batchId) } returns existingTransactions
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing(batchId.toString())
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(batchId, state.editingBatchId)
+        assertEquals("Original notes", state.notes)
+        assertEquals(1, state.positions.size)
+        assertEquals(testProduct, state.positions[0].product)
+        assertEquals(BigDecimal("75.00"), state.positions[0].weightKg)
+        assertEquals(BigDecimal("48.00"), state.positions[0].pricePerKg)
+    }
+
+    @Test
+    fun `loadBatchForEditing shows error when batch not found`() = runTest {
+        val batchId = UUID.randomUUID()
+        coEvery { purchaseBatchRepository.getById(batchId) } returns null
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing(batchId.toString())
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.editingBatchId)
+    }
+
+    @Test
+    fun `loadBatchForEditing shows error for invalid UUID`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing("not-a-uuid")
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun `confirmSave in editing mode calls correctBatch instead of create`() = runTest {
+        val originalBatchId = UUID.randomUUID()
+        val existingBatch = TestData.createPurchaseBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createTransaction(
+                batchId = originalBatchId,
+                productId = testProduct.id,
+                weightKg = BigDecimal("50.00"),
+                pricePerKg = BigDecimal("45.00")
+            )
+        )
+
+        coEvery { purchaseBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { purchaseBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { purchaseBatchRepository.correctBatch(any(), any(), any(), any()) } returns existingBatch
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+
+        viewModel.onCorrectionReasonChange("Wrong weight")
+        viewModel.finalize()
+        viewModel.confirmSave()
+        advanceUntilIdle()
+
+        coVerify { 
+            purchaseBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Wrong weight"
+            ) 
+        }
+        coVerify(exactly = 0) { purchaseBatchRepository.createBatchWithTransactions(any(), any()) }
+        assertTrue(viewModel.uiState.value.navigateBack)
+    }
+
+    @Test
+    fun `confirmSave in editing mode uses default reason when not provided`() = runTest {
+        val originalBatchId = UUID.randomUUID()
+        val existingBatch = TestData.createPurchaseBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createTransaction(
+                batchId = originalBatchId,
+                productId = testProduct.id,
+                weightKg = BigDecimal("50.00"),
+                pricePerKg = BigDecimal("45.00")
+            )
+        )
+
+        coEvery { purchaseBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { purchaseBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { purchaseBatchRepository.correctBatch(any(), any(), any(), any()) } returns existingBatch
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        viewModel.finalize()
+        viewModel.confirmSave()
+        advanceUntilIdle()
+
+        coVerify { 
+            purchaseBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Виправлення помилки"
+            ) 
+        }
+    }
+
+    @Test
+    fun `onCorrectionReasonChange updates correction reason`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onCorrectionReasonChange("My reason")
+
+        assertEquals("My reason", viewModel.uiState.value.correctionReason)
+    }
+
+    @Test
+    fun `editing mode allows modifying positions before save`() = runTest {
+        val originalBatchId = UUID.randomUUID()
+        val existingBatch = TestData.createPurchaseBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createTransaction(
+                batchId = originalBatchId,
+                productId = testProduct.id,
+                weightKg = BigDecimal("50.00"),
+                pricePerKg = BigDecimal("45.00")
+            )
+        )
+
+        coEvery { purchaseBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { purchaseBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+
+        // Remove the loaded position
+        val positionId = viewModel.uiState.value.positions[0].id
+        viewModel.removePosition(positionId)
+
+        // Add a new position with different values
+        viewModel.addAnotherProduct()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("75")
+        viewModel.onPriceChange("50")
+        viewModel.addPosition()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.positions.size)
+        assertEquals(BigDecimal("75"), state.positions[0].weightKg)
+        assertEquals(BigDecimal("50"), state.positions[0].pricePerKg)
+    }
+
+    @Test
+    fun `loadBatchForEditing fetches products from repository when uiState products not loaded`() = runTest {
+        val batchId = UUID.randomUUID()
+        val existingBatch = TestData.createPurchaseBatch(id = batchId, notes = "Test notes")
+        val existingTransactions = listOf(
+            TestData.createTransaction(
+                batchId = batchId,
+                productId = testProduct.id,
+                weightKg = BigDecimal("50.00"),
+                pricePerKg = BigDecimal("45.00"),
+                totalAmount = BigDecimal("2250.00")
+            )
+        )
+
+        coEvery { purchaseBatchRepository.getById(batchId) } returns existingBatch
+        coEvery { purchaseBatchRepository.getTransactionsForBatch(batchId) } returns existingTransactions
+
+        // Create viewModel but don't wait for init to complete
+        viewModel = createViewModel()
+        
+        // Immediately call loadBatchForEditing before products are loaded
+        viewModel.loadBatchForEditing(batchId.toString())
+        advanceUntilIdle()
+
+        // Verify that even though init may not have completed first,
+        // loadBatchForEditing fetched products directly from repository
+        val state = viewModel.uiState.value
+        assertEquals(batchId, state.editingBatchId)
+        assertEquals("Test notes", state.notes)
+        assertEquals(1, state.positions.size)
+        assertEquals(testProduct, state.positions[0].product)
+        assertEquals(BigDecimal("50.00"), state.positions[0].weightKg)
+        assertEquals(BigDecimal("45.00"), state.positions[0].pricePerKg)
     }
 }

@@ -94,8 +94,10 @@ class InventoryViewModel @Inject constructor(
                     .groupBy { it.productId }
                     .mapValues { (_, items) -> items.sumOf { it.totalWeightKg } }
                 
-                state.products.map { product ->
+                state.products.mapNotNull { product ->
                     val weight = aggregatedInventory[product.id] ?: BigDecimal.ZERO
+                    // Only include products with non-zero weight
+                    if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
                     InventoryDisplayItem(
                         productId = product.id,
                         productName = product.name,
@@ -107,9 +109,11 @@ class InventoryViewModel @Inject constructor(
             } else {
                 // For location view, show inventory for selected location
                 val inventoryMap = state.inventory.associateBy { it.productId }
-                state.products.map { product ->
+                state.products.mapNotNull { product ->
                     val inventoryItem = inventoryMap[product.id]
                     val weight = inventoryItem?.totalWeightKg ?: BigDecimal.ZERO
+                    // Only include products with non-zero weight
+                    if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
                     InventoryDisplayItem(
                         productId = product.id,
                         productName = product.name,
@@ -223,5 +227,39 @@ class InventoryViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * Create an inventory adjustment transaction.
+     * 
+     * @param locationId Location where adjustment is made
+     * @param productId Product being adjusted
+     * @param actualWeightKg The actual weight from physical count
+     * @param currentWeightKg The current recorded weight
+     * @param reason Optional reason for adjustment
+     */
+    fun createAdjustment(
+        locationId: UUID,
+        productId: UUID,
+        actualWeightKg: BigDecimal,
+        currentWeightKg: BigDecimal,
+        reason: String?
+    ) {
+        viewModelScope.launch {
+            try {
+                val adjustmentKg = actualWeightKg - currentWeightKg
+                transactionRepository.createAdjustment(
+                    locationId = locationId,
+                    productId = productId,
+                    adjustmentKg = adjustmentKg,
+                    reason = reason
+                )
+                // Inventory will auto-update via Flow observation
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = e.message ?: "Помилка при коригуванні залишків")
+                }
+            }
+        }
     }
 }

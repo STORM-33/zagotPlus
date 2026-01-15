@@ -31,6 +31,12 @@ interface PurchaseBatchDao {
     @Query("SELECT * FROM purchase_batches WHERE local_id = :localId")
     suspend fun getByLocalId(localId: String): PurchaseBatchEntity?
 
+    /**
+     * Get all existing local_ids for efficient batch deduplication during sync.
+     */
+    @Query("SELECT local_id FROM purchase_batches")
+    suspend fun getAllLocalIds(): List<String>
+
     @Query("SELECT * FROM purchase_batches ORDER BY created_at DESC")
     fun observeAll(): Flow<List<PurchaseBatchEntity>>
 

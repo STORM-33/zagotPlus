@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.cash
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.domain.model.CashHistoryItem
+import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.CashRepository
@@ -28,7 +29,10 @@ enum class CashDialogType {
     DEPOSIT,
     WITHDRAW,
     PAYMENT,
-    CATEGORIES
+    CATEGORIES,
+    EDIT_DEPOSIT,
+    EDIT_WITHDRAW,
+    EDIT_PAYMENT
 }
 
 /**
@@ -52,7 +56,9 @@ data class CashUiState(
     val isSaving: Boolean = false,
     val error: String? = null,
     val hasMoreItems: Boolean = true,
-    val totalItemsCount: Int = 0
+    val totalItemsCount: Int = 0,
+    val editingOperationId: UUID? = null,
+    val editingOperationType: CashHistoryItemType? = null
 ) {
     val canConfirmDeposit: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
@@ -286,7 +292,9 @@ class CashViewModel @Inject constructor(
                 dialogAmount = "",
                 dialogNotes = "",
                 dialogCategoryId = null,
-                newCategoryName = ""
+                newCategoryName = "",
+                editingOperationId = null,
+                editingOperationType = null
             )
         }
     }
@@ -444,5 +452,82 @@ class CashViewModel @Inject constructor(
     fun selectTotalView() {
         _uiState.update { it.copy(selectedLocationId = null, isLoading = true) }
         loadHistoryAndBalance()
+    }
+
+    /**
+     * Show edit dialog for a cash operation.
+     * Only manual operations (deposit, withdrawal, payment) can be edited.
+     */
+    fun showEditDialog(item: CashHistoryItem) {
+        // Only allow editing manual cash operations (not purchases/sales)
+        if (item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE) {
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val operationId = UUID.fromString(item.id)
+                val operation = cashRepository.getOperationById(operationId) ?: return@launch
+
+                val dialogType = when (item.type) {
+                    CashHistoryItemType.DEPOSIT -> CashDialogType.EDIT_DEPOSIT
+                    CashHistoryItemType.WITHDRAWAL -> CashDialogType.EDIT_WITHDRAW
+                    CashHistoryItemType.PAYMENT -> CashDialogType.EDIT_PAYMENT
+                    else -> return@launch
+                }
+
+                _uiState.update {
+                    it.copy(
+                        dialogType = dialogType,
+                        dialogAmount = operation.amount.toPlainString(),
+                        dialogNotes = operation.notes ?: "",
+                        dialogCategoryId = operation.categoryId,
+                        editingOperationId = operationId,
+                        editingOperationType = item.type
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Помилка завантаження операції") }
+            }
+        }
+    }
+
+    /**
+     * Confirm edit of a cash operation.
+     */
+    fun confirmEdit() {
+        val state = _uiState.value
+        val operationId = state.editingOperationId ?: return
+        val amount = state.dialogAmount.toBigDecimalOrNull() ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            try {
+                cashRepository.updateOperation(
+                    id = operationId,
+                    amount = amount,
+                    categoryId = state.dialogCategoryId,
+                    notes = state.dialogNotes.takeIf { it.isNotBlank() }
+                )
+                dismissDialog()
+                _uiState.update { it.copy(isSaving = false) }
+                refreshOperations()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Помилка оновлення",
+                        isSaving = false
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Check if a cash history item can be edited.
+     * Only manual operations (deposit, withdrawal, payment) can be modified.
+     */
+    fun canModifyItem(item: CashHistoryItem): Boolean {
+        return item.type != CashHistoryItemType.PURCHASE && item.type != CashHistoryItemType.SALE
     }
 }

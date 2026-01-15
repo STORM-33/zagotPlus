@@ -280,5 +280,7 @@ class PinScreenTest {
         }
         override fun setAuthenticated(authenticated: Boolean) { this.authenticated = authenticated }
         override fun isAuthenticated(): Boolean = authenticated
+        override fun isSessionValid(): Boolean = authenticated
+        override fun getSessionRemainingMinutes(): Int = if (authenticated) 240 else 0
     }
 }

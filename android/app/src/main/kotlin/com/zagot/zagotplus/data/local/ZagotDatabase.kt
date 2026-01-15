@@ -26,7 +26,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 8 (added sale_batches table and sale_batch_id FK on transactions)
+ * Version: 10 (added batch correction support with is_voided, corrects_batch_id, correction_reason)
  */
 @Database(
     entities = [
@@ -38,7 +38,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         ExpenseCategoryEntity::class,
         CashOperationEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -409,6 +409,34 @@ abstract class ZagotDatabase : RoomDatabase() {
                     db.endTransaction()
                     db.execSQL("PRAGMA foreign_keys=on")
                 }
+            }
+        }
+
+        /**
+         * Migration from version 9 to 10: Add batch correction support.
+         * Adds is_voided, corrects_batch_id, and correction_reason columns to
+         * purchase_batches and sale_batches tables.
+         * 
+         * This enables the correction workflow where:
+         * - Original batch gets is_voided=true
+         * - New correction batch has corrects_batch_id pointing to original
+         * - Voided batches are excluded from inventory calculations
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add correction columns to purchase_batches
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN corrects_batch_id TEXT")
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN correction_reason TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_purchase_batches_is_voided ON purchase_batches(is_voided)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_purchase_batches_corrects_batch_id ON purchase_batches(corrects_batch_id)")
+
+                // Add correction columns to sale_batches
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN corrects_batch_id TEXT")
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN correction_reason TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_is_voided ON sale_batches(is_voided)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_corrects_batch_id ON sale_batches(corrects_batch_id)")
             }
         }
     }
