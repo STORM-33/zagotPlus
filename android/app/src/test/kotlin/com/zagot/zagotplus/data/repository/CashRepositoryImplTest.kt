@@ -453,4 +453,145 @@ class CashRepositoryImplTest {
         assertEquals(existing.localId, slot.captured.localId)
         assertEquals(existing.createdAt, slot.captured.createdAt)
     }
+
+    // ==================== Edge Case Tests ====================
+
+    @Test
+    fun `getTotalBalance returns zero when no operations exist`() = runTest {
+        every { cashOperationDao.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
+
+        val balance = repository.getTotalBalance().first()
+
+        assertEquals(BigDecimal.ZERO, balance)
+    }
+
+    @Test
+    fun `getBalance returns zero when location has no operations`() = runTest {
+        every { cashOperationDao.getBalanceByLocation(testLocationId) } returns flowOf(BigDecimal.ZERO)
+
+        val balance = repository.getBalance(testLocationId).first()
+
+        assertEquals(BigDecimal.ZERO, balance)
+    }
+
+    @Test
+    fun `deposit handles zero amount`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        repository.deposit(testLocationId, BigDecimal.ZERO, null)
+
+        assertEquals(BigDecimal.ZERO, slot.captured.amount)
+    }
+
+    @Test
+    fun `deposit handles very large amount`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        val largeAmount = BigDecimal("999999999.99")
+        repository.deposit(testLocationId, largeAmount, null)
+
+        assertEquals(largeAmount, slot.captured.amount)
+    }
+
+    @Test
+    fun `deposit handles high precision decimal`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        val preciseAmount = BigDecimal("123.456789")
+        repository.deposit(testLocationId, preciseAmount, null)
+
+        assertEquals(preciseAmount, slot.captured.amount)
+    }
+
+    @Test
+    fun `payment handles empty notes`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        repository.payment(testLocationId, BigDecimal("100.00"), testCategoryId, "")
+
+        assertEquals("", slot.captured.notes)
+    }
+
+    @Test
+    fun `payment handles very long notes`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        val longNotes = "a".repeat(1000)
+        repository.payment(testLocationId, BigDecimal("100.00"), testCategoryId, longNotes)
+
+        assertEquals(longNotes, slot.captured.notes)
+    }
+
+    @Test
+    fun `payment handles unicode notes`() = runTest {
+        val slot = slot<CashOperationEntity>()
+        coEvery { cashOperationDao.insert(capture(slot)) } returns Unit
+
+        val unicodeNotes = "Оплата за паливо 🚗 100₴"
+        repository.payment(testLocationId, BigDecimal("100.00"), testCategoryId, unicodeNotes)
+
+        assertEquals(unicodeNotes, slot.captured.notes)
+    }
+
+    @Test
+    fun `getOperationsPaged returns empty list for large offset`() = runTest {
+        coEvery { cashOperationDao.getOperationsPaged(1000, 10) } returns emptyList()
+
+        val result = repository.getOperationsPaged(1000, 10)
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `getOperationsPaged returns empty list for zero limit`() = runTest {
+        coEvery { cashOperationDao.getOperationsPaged(0, 0) } returns emptyList()
+
+        val result = repository.getOperationsPaged(0, 0)
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `createCategory handles empty name`() = runTest {
+        val slot = slot<ExpenseCategoryEntity>()
+        coEvery { expenseCategoryDao.insert(capture(slot)) } returns Unit
+
+        val result = repository.createCategory("")
+
+        assertEquals("", result.name)
+        assertEquals("", slot.captured.name)
+    }
+
+    @Test
+    fun `createCategory handles unicode name`() = runTest {
+        val slot = slot<ExpenseCategoryEntity>()
+        coEvery { expenseCategoryDao.insert(capture(slot)) } returns Unit
+
+        val unicodeName = "Пальне ⛽"
+        val result = repository.createCategory(unicodeName)
+
+        assertEquals(unicodeName, result.name)
+    }
+
+    @Test
+    fun `operations with unknown category return null categoryName`() = runTest {
+        val unknownCategoryId = UUID.randomUUID()
+        val operation = createOperationEntity(
+            type = CashOperationType.PAYMENT.toDbValue(),
+            categoryId = unknownCategoryId
+        )
+        
+        every { expenseCategoryDao.getAllCategories() } returns flowOf(emptyList())
+        every { cashOperationDao.getAllOperations() } returns flowOf(listOf(operation))
+
+        val result = repository.getAllOperations().first()
+
+        assertEquals(1, result.size)
+        assertNull(result[0].categoryName)
+    }
 }

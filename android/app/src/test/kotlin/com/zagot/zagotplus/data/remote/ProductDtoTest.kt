@@ -165,4 +165,245 @@ class ProductDtoTest {
 
         assertEquals("Насіння соняшникове смажене", entity.name)
     }
+
+    // ==================== Edge Case Tests ====================
+
+    @Test
+    fun `toEntity handles empty product name`() {
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-empty",
+            name = "",
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals("", entity.name)
+    }
+
+    @Test
+    fun `toEntity handles very long product name`() {
+        val longName = "a".repeat(500)
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-long",
+            name = longName,
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(longName, entity.name)
+    }
+
+    @Test
+    fun `toEntity handles special characters in name`() {
+        val specialName = "Product 'test' (new) - \"quoted\" & <special>"
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-special",
+            name = specialName,
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(specialName, entity.name)
+    }
+
+    @Test
+    fun `toEntity handles very small price values`() {
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-small",
+            name = "Cheap",
+            defaultBuyPrice = 0.001,
+            defaultSellPrice = 0.002,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(0.001, entity.defaultBuyPrice?.toDouble() ?: 0.0, 0.0001)
+        assertEquals(0.002, entity.defaultSellPrice?.toDouble() ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun `toEntity handles very large price values`() {
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-large",
+            name = "Expensive",
+            defaultBuyPrice = 999999.99,
+            defaultSellPrice = 1000000.00,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(999999.99, entity.defaultBuyPrice?.toDouble() ?: 0.0, 0.01)
+        assertEquals(1000000.00, entity.defaultSellPrice?.toDouble() ?: 0.0, 0.01)
+    }
+
+    @Test
+    fun `toEntity handles negative prices gracefully`() {
+        // While business logic should reject negative prices,
+        // the DTO layer should still convert them correctly
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-negative",
+            name = "Invalid",
+            defaultBuyPrice = -10.0,
+            defaultSellPrice = -5.0,
+            isActive = true,
+            createdAt = testInstant.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(-10.0, entity.defaultBuyPrice?.toDouble() ?: 0.0, 0.001)
+        assertEquals(-5.0, entity.defaultSellPrice?.toDouble() ?: 0.0, 0.001)
+    }
+
+    @Test
+    fun `toEntity handles empty imageUri`() {
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-empty-uri",
+            name = "Test",
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = testInstant.toString(),
+            imageUri = ""
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals("", entity.imageUri)
+    }
+
+    @Test
+    fun `fromEntity handles empty name`() {
+        val entity = ProductEntity(
+            id = testId,
+            localId = "local-empty-name",
+            name = "",
+            defaultBuyPrice = BigDecimal("10.00"),
+            defaultSellPrice = BigDecimal("15.00"),
+            isActive = true,
+            createdAt = testInstant,
+            syncedAt = null
+        )
+
+        val dto = ProductDto.fromEntity(entity)
+
+        assertEquals("", dto.name)
+    }
+
+    @Test
+    fun `fromEntity handles very high precision BigDecimal`() {
+        val entity = ProductEntity(
+            id = testId,
+            localId = "local-precision",
+            name = "Precision Test",
+            defaultBuyPrice = BigDecimal("123.456789012345"),
+            defaultSellPrice = BigDecimal("0.000000001"),
+            isActive = true,
+            createdAt = testInstant,
+            syncedAt = null
+        )
+
+        val dto = ProductDto.fromEntity(entity)
+
+        // Double may lose some precision, but conversion should not fail
+        assertNotNull(dto.defaultBuyPrice)
+        assertNotNull(dto.defaultSellPrice)
+    }
+
+    @Test
+    fun `roundtrip preserves boolean isActive true`() {
+        val originalEntity = ProductEntity(
+            id = testId,
+            localId = "roundtrip-active",
+            name = "Active",
+            defaultBuyPrice = BigDecimal("10.00"),
+            defaultSellPrice = BigDecimal("15.00"),
+            isActive = true,
+            createdAt = testInstant,
+            syncedAt = null
+        )
+
+        val dto = ProductDto.fromEntity(originalEntity)
+        val convertedEntity = dto.toEntity()
+
+        assertTrue(convertedEntity.isActive)
+    }
+
+    @Test
+    fun `roundtrip preserves boolean isActive false`() {
+        val originalEntity = ProductEntity(
+            id = testId,
+            localId = "roundtrip-inactive",
+            name = "Inactive",
+            defaultBuyPrice = BigDecimal("10.00"),
+            defaultSellPrice = BigDecimal("15.00"),
+            isActive = false,
+            createdAt = testInstant,
+            syncedAt = null
+        )
+
+        val dto = ProductDto.fromEntity(originalEntity)
+        val convertedEntity = dto.toEntity()
+
+        assertFalse(convertedEntity.isActive)
+    }
+
+    @Test
+    fun `toEntity handles timestamp with milliseconds`() {
+        val instantWithMillis = Instant.parse("2024-01-15T10:30:00.123Z")
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-millis",
+            name = "Millis Test",
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = instantWithMillis.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(instantWithMillis, entity.createdAt)
+    }
+
+    @Test
+    fun `toEntity handles timestamp with nanoseconds`() {
+        val instantWithNanos = Instant.parse("2024-01-15T10:30:00.123456789Z")
+        val dto = ProductDto(
+            id = testId.toString(),
+            localId = "local-nanos",
+            name = "Nanos Test",
+            defaultBuyPrice = 10.0,
+            defaultSellPrice = 15.0,
+            isActive = true,
+            createdAt = instantWithNanos.toString()
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals(instantWithNanos, entity.createdAt)
+    }
 }

@@ -287,4 +287,200 @@ class ProductDaoTest {
         assertEquals(BigDecimal("123.456789"), retrieved?.defaultBuyPrice)
         assertEquals(BigDecimal("0.0001"), retrieved?.defaultSellPrice)
     }
+
+    // ==================== Edge Case Tests ====================
+
+    @Test
+    fun `insert product with empty name succeeds`() = runTest {
+        val product = createProduct(name = "")
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertNotNull(retrieved)
+        assertEquals("", retrieved?.name)
+    }
+
+    @Test
+    fun `insert product with very long name succeeds`() = runTest {
+        val longName = "a".repeat(500)
+        val product = createProduct(name = longName)
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertEquals(longName, retrieved?.name)
+    }
+
+    @Test
+    fun `insert product with special characters in name`() = runTest {
+        val specialName = "Горіх 'білий' (новий) - тест!"
+        val product = createProduct(name = specialName)
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertEquals(specialName, retrieved?.name)
+    }
+
+    @Test
+    fun `insert product with SQL keywords in name`() = runTest {
+        val sqlKeywordName = "SELECT * FROM products; DROP TABLE--"
+        val product = createProduct(name = sqlKeywordName)
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertEquals(sqlKeywordName, retrieved?.name)
+    }
+
+    @Test
+    fun `insert product with null imageUri`() = runTest {
+        val product = ProductEntity(
+            id = UUID.randomUUID(),
+            localId = "test-null-image",
+            name = "Без фото",
+            defaultBuyPrice = BigDecimal("10.00"),
+            defaultSellPrice = BigDecimal("15.00"),
+            isActive = true,
+            createdAt = testInstant,
+            syncedAt = null,
+            imageUri = null
+        )
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertNotNull(retrieved)
+        assertNull(retrieved?.imageUri)
+    }
+
+    @Test
+    fun `insert product with imageUri succeeds`() = runTest {
+        val product = ProductEntity(
+            id = UUID.randomUUID(),
+            localId = "test-with-image",
+            name = "З фото",
+            defaultBuyPrice = BigDecimal("10.00"),
+            defaultSellPrice = BigDecimal("15.00"),
+            isActive = true,
+            createdAt = testInstant,
+            syncedAt = null,
+            imageUri = "content://media/external/images/12345"
+        )
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertEquals("content://media/external/images/12345", retrieved?.imageUri)
+    }
+
+    @Test
+    fun `getActive returns empty list when all products inactive`() = runTest {
+        productDao.insertAll(listOf(
+            createProduct(name = "Неактивний 1", isActive = false),
+            createProduct(name = "Неактивний 2", isActive = false)
+        ))
+        
+        val active = productDao.getActive()
+        
+        assertTrue(active.isEmpty())
+    }
+
+    @Test
+    fun `getAll returns empty list when database empty`() = runTest {
+        val all = productDao.getAll()
+        
+        assertTrue(all.isEmpty())
+    }
+
+    @Test
+    fun `getUnsynced returns empty list when all synced`() = runTest {
+        productDao.insertAll(listOf(
+            createProduct(name = "Синхронізований 1", syncedAt = testInstant),
+            createProduct(name = "Синхронізований 2", syncedAt = testInstant)
+        ))
+        
+        val unsynced = productDao.getUnsynced()
+        
+        assertTrue(unsynced.isEmpty())
+    }
+
+    @Test
+    fun `markSynced on non-existent product does not throw`() = runTest {
+        val nonExistentId = UUID.randomUUID()
+        
+        // Should complete without exception
+        productDao.markSynced(nonExistentId, Instant.now())
+        
+        // Verify product still doesn't exist
+        val retrieved = productDao.getById(nonExistentId)
+        assertNull(retrieved)
+    }
+
+    @Test
+    fun `deleteById on non-existent product does not throw`() = runTest {
+        val nonExistentId = UUID.randomUUID()
+        
+        // Should complete without exception
+        productDao.deleteById(nonExistentId)
+    }
+
+    @Test
+    fun `insert product with zero prices`() = runTest {
+        val product = ProductEntity(
+            id = UUID.randomUUID(),
+            localId = "test-zero-prices",
+            name = "Безкоштовний",
+            defaultBuyPrice = BigDecimal.ZERO,
+            defaultSellPrice = BigDecimal.ZERO,
+            isActive = true,
+            createdAt = testInstant
+        )
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertEquals(BigDecimal.ZERO, retrieved?.defaultBuyPrice)
+        assertEquals(BigDecimal.ZERO, retrieved?.defaultSellPrice)
+    }
+
+    @Test
+    fun `insert product with null prices`() = runTest {
+        val product = ProductEntity(
+            id = UUID.randomUUID(),
+            localId = "test-null-prices",
+            name = "Без ціни",
+            defaultBuyPrice = null,
+            defaultSellPrice = null,
+            isActive = true,
+            createdAt = testInstant
+        )
+        
+        productDao.insert(product)
+        
+        val retrieved = productDao.getById(product.id)
+        assertNull(retrieved?.defaultBuyPrice)
+        assertNull(retrieved?.defaultSellPrice)
+    }
+
+    @Test
+    fun `getAllFlow handles concurrent insertions`() = runTest {
+        // Insert initial product
+        productDao.insert(createProduct(name = "Перший"))
+        
+        // Get flow first value
+        val first = productDao.getAllFlow().first()
+        assertEquals(1, first.size)
+        
+        // Insert more products
+        productDao.insertAll(listOf(
+            createProduct(name = "Другий"),
+            createProduct(name = "Третій")
+        ))
+        
+        // Verify flow reflects changes
+        val updated = productDao.getAllFlow().first()
+        assertEquals(3, updated.size)
+    }
 }

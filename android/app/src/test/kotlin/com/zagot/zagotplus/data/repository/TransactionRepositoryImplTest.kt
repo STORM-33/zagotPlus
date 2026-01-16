@@ -144,4 +144,92 @@ class TransactionRepositoryImplTest {
         assertEquals(1, inventory.size)
         assertEquals(BigDecimal("100.00"), inventory[0].totalWeightKg)
     }
+
+    // ==================== Edge Case Tests ====================
+
+    @Test
+    fun `getInventory handles negative weight (oversold scenario)`() = runTest {
+        // Business allows negative inventory (flagged as warning, not error)
+        val aggregateResult = InventoryAggregateResult(
+            locationId = locationA.toString(),
+            productId = productApples.toString(),
+            totalWeightKg = "-25.50"
+        )
+        every { transactionDao.getInventoryAggregatedFlow() } returns flowOf(listOf(aggregateResult))
+
+        val inventory = repository.getInventory().first()
+
+        assertEquals(1, inventory.size)
+        assertEquals(BigDecimal("-25.50"), inventory[0].totalWeightKg)
+    }
+
+    @Test
+    fun `getInventory handles zero weight`() = runTest {
+        val aggregateResult = InventoryAggregateResult(
+            locationId = locationA.toString(),
+            productId = productApples.toString(),
+            totalWeightKg = "0.00"
+        )
+        every { transactionDao.getInventoryAggregatedFlow() } returns flowOf(listOf(aggregateResult))
+
+        val inventory = repository.getInventory().first()
+
+        assertEquals(1, inventory.size)
+        assertEquals(BigDecimal("0.00"), inventory[0].totalWeightKg)
+    }
+
+    @Test
+    fun `getInventory handles very large weight values`() = runTest {
+        val aggregateResult = InventoryAggregateResult(
+            locationId = locationA.toString(),
+            productId = productApples.toString(),
+            totalWeightKg = "999999999.99"
+        )
+        every { transactionDao.getInventoryAggregatedFlow() } returns flowOf(listOf(aggregateResult))
+
+        val inventory = repository.getInventory().first()
+
+        assertEquals(1, inventory.size)
+        assertEquals(BigDecimal("999999999.99"), inventory[0].totalWeightKg)
+    }
+
+    @Test
+    fun `getInventory handles high precision decimal values`() = runTest {
+        val aggregateResult = InventoryAggregateResult(
+            locationId = locationA.toString(),
+            productId = productApples.toString(),
+            totalWeightKg = "123.456789"
+        )
+        every { transactionDao.getInventoryAggregatedFlow() } returns flowOf(listOf(aggregateResult))
+
+        val inventory = repository.getInventory().first()
+
+        assertEquals(1, inventory.size)
+        assertEquals(BigDecimal("123.456789"), inventory[0].totalWeightKg)
+    }
+
+    @Test
+    fun `getInventoryByLocation returns empty list for location with no transactions`() = runTest {
+        every { transactionDao.getInventoryByLocationAggregatedFlow(locationA) } returns flowOf(emptyList())
+
+        val inventory = repository.getInventoryByLocation(locationA).first()
+
+        assertTrue(inventory.isEmpty())
+    }
+
+    @Test
+    fun `getInventory handles many products at same location`() = runTest {
+        val manyProducts = (1..100).map { i ->
+            InventoryAggregateResult(
+                locationId = locationA.toString(),
+                productId = UUID.randomUUID().toString(),
+                totalWeightKg = "$i.00"
+            )
+        }
+        every { transactionDao.getInventoryAggregatedFlow() } returns flowOf(manyProducts)
+
+        val inventory = repository.getInventory().first()
+
+        assertEquals(100, inventory.size)
+    }
 }
