@@ -46,6 +46,9 @@ data class CashOperationDto(
     @SerialName("synced_at")
     val syncedAt: String?,
 
+    @SerialName("is_transfer")
+    val isTransfer: Boolean = false,
+
     @SerialName("server_updated_at")
     val serverUpdatedAt: String? = null
 ) {
@@ -63,7 +66,8 @@ data class CashOperationDto(
         notes = notes,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
-        syncedAt = syncedAt?.let { Instant.parse(it) }
+        syncedAt = syncedAt?.let { Instant.parse(it) },
+        isTransfer = isTransfer
     )
 
     companion object {
@@ -81,7 +85,8 @@ data class CashOperationDto(
             notes = entity.notes,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
-            syncedAt = entity.syncedAt?.toString()
+            syncedAt = entity.syncedAt?.toString(),
+            isTransfer = entity.isTransfer
         )
     }
 }

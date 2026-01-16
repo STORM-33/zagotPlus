@@ -214,7 +214,7 @@ class CashRepositoryImpl @Inject constructor(
         val deviceId = devicePreferences.getDeviceId()
         val transferNote = notes?.let { "Переказ: $it" } ?: "Переказ"
         
-        // Withdrawal from source
+        // Withdrawal from source (marked as transfer)
         val withdrawalEntity = CashOperationEntity(
             id = UUID.randomUUID(),
             localId = UUID.randomUUID().toString(),
@@ -226,10 +226,11 @@ class CashRepositoryImpl @Inject constructor(
             notes = transferNote,
             deviceId = deviceId,
             createdAt = now,
-            syncedAt = null
+            syncedAt = null,
+            isTransfer = true
         )
         
-        // Deposit to destination
+        // Deposit to destination (marked as transfer)
         val depositEntity = CashOperationEntity(
             id = UUID.randomUUID(),
             localId = UUID.randomUUID().toString(),
@@ -241,7 +242,8 @@ class CashRepositoryImpl @Inject constructor(
             notes = transferNote,
             deviceId = deviceId,
             createdAt = now,
-            syncedAt = null
+            syncedAt = null,
+            isTransfer = true
         )
         
         cashOperationDao.insert(withdrawalEntity)
@@ -320,13 +322,15 @@ class CashRepositoryImpl @Inject constructor(
     )
 
     private fun CashHistoryProjection.toDomain(): CashHistoryItem {
-        val isTransferOperation = notes?.startsWith("Переказ") == true && (type == "deposit" || type == "withdrawal")
+        // Use is_transfer flag from database, fallback to notes pattern for legacy data
+        val isTransferOperation = isTransfer == true || 
+            (isTransfer == null && notes?.startsWith("Переказ") == true && (type == "deposit" || type == "withdrawal"))
         val isIncomingTransfer = isTransferOperation && type == "deposit"
         
         return CashHistoryItem(
             id = id,
             type = when {
-                // Detect transfers via notes pattern
+                // Detect transfers via is_transfer flag or fallback to notes pattern
                 isTransferOperation -> CashHistoryItemType.TRANSFER
                 type == "deposit" -> CashHistoryItemType.DEPOSIT
                 type == "withdrawal" -> CashHistoryItemType.WITHDRAWAL
