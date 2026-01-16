@@ -8,22 +8,22 @@ Fix critical memory management risks and business logic fragility identified in 
 
 ## Progress
 - Total sessions: 3
-- Completed: 0
+- Completed: 3
 - Blocked: 0
-- Remaining: 3
+- Remaining: 0
 
 ## Phases
 
 ### Phase: Core Fixes
-Status: pending
+Status: completed
 Remove deprecated memory-unsafe methods, optimize queries, fix transfer detection.
 
 Sessions:
 | # | Session | Complexity | Status | Depends On |
 |---|---------|------------|--------|------------|
-| 1 | remove-deprecated-dao-methods | high | pending | none |
-| 2 | optimize-cash-history-query | medium | pending | remove-deprecated-dao-methods |
-| 3 | fix-transfer-detection | medium | pending | optimize-cash-history-query |
+| 1 | remove-deprecated-dao-methods | high | completed | none |
+| 2 | optimize-cash-history-query | medium | completed | remove-deprecated-dao-methods |
+| 3 | fix-transfer-detection | medium | completed | optimize-cash-history-query |
 
 ## Dependencies Graph
 ```
