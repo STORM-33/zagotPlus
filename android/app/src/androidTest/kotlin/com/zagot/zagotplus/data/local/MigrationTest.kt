@@ -130,4 +130,89 @@ class MigrationTest {
         cursor.close()
         db.close()
     }
+    
+    /**
+     * Test migration from version 10 to 11.
+     * Verifies that:
+     * 1. is_transfer column is added with default false
+     * 2. Existing transfers (notes starting with 'Переказ') get is_transfer=1
+     * 3. Non-transfers keep is_transfer=0
+     */
+    @Test
+    @Throws(IOException::class)
+    fun migrate10To11() {
+        // Create database at version 10
+        helper.createDatabase(TEST_DB, 10).apply {
+            // Insert a transfer operation (notes starts with 'Переказ')
+            execSQL("""
+                INSERT INTO cash_operations (
+                    id, local_id, location_id, type, amount, 
+                    category_id, batch_id, notes, device_id, 
+                    created_at, synced_at
+                ) VALUES (
+                    'transfer-1', 'local-transfer-1', null, 'withdrawal', '500.00',
+                    null, null, 'Переказ: to branch B', 'device-1',
+                    1704067200000, null
+                )
+            """)
+            
+            // Insert a regular deposit (not a transfer)
+            execSQL("""
+                INSERT INTO cash_operations (
+                    id, local_id, location_id, type, amount, 
+                    category_id, batch_id, notes, device_id, 
+                    created_at, synced_at
+                ) VALUES (
+                    'deposit-1', 'local-deposit-1', null, 'deposit', '1000.00',
+                    null, null, 'Regular deposit', 'device-1',
+                    1704067200000, null
+                )
+            """)
+            
+            // Insert an operation with null notes
+            execSQL("""
+                INSERT INTO cash_operations (
+                    id, local_id, location_id, type, amount, 
+                    category_id, batch_id, notes, device_id, 
+                    created_at, synced_at
+                ) VALUES (
+                    'deposit-2', 'local-deposit-2', null, 'deposit', '200.00',
+                    null, null, null, 'device-1',
+                    1704067200000, null
+                )
+            """)
+            close()
+        }
+        
+        // Run migration
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB, 
+            11, 
+            true, 
+            ZagotDatabase.MIGRATION_10_11
+        )
+        
+        // Verify transfer operation has is_transfer=1
+        val transferCursor = db.query("SELECT is_transfer FROM cash_operations WHERE id = 'transfer-1'")
+        assert(transferCursor.moveToFirst()) { "Transfer operation should exist" }
+        val transferFlag = transferCursor.getInt(0)
+        assert(transferFlag == 1) { "Transfer should have is_transfer=1 after migration" }
+        transferCursor.close()
+        
+        // Verify regular deposit has is_transfer=0
+        val depositCursor = db.query("SELECT is_transfer FROM cash_operations WHERE id = 'deposit-1'")
+        assert(depositCursor.moveToFirst()) { "Deposit operation should exist" }
+        val depositFlag = depositCursor.getInt(0)
+        assert(depositFlag == 0) { "Regular deposit should have is_transfer=0" }
+        depositCursor.close()
+        
+        // Verify operation with null notes has is_transfer=0
+        val nullNotesCursor = db.query("SELECT is_transfer FROM cash_operations WHERE id = 'deposit-2'")
+        assert(nullNotesCursor.moveToFirst()) { "Operation with null notes should exist" }
+        val nullNotesFlag = nullNotesCursor.getInt(0)
+        assert(nullNotesFlag == 0) { "Operation with null notes should have is_transfer=0" }
+        nullNotesCursor.close()
+        
+        db.close()
+    }
 }

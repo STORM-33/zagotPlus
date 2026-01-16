@@ -327,7 +327,7 @@ class OrderPaymentLifecycleIntegrationTest {
         saleBatchRepository.createBatchWithTransactions(batch, listOf(transaction))
 
         // Verify transaction references the batch
-        val allTransactions = transactionRepository.getAllTransactions().first()
+        val allTransactions = transactionRepository.getPaginatedTransactions(100, 0).first()
         val saleTransaction = allTransactions.find { it.type == TransactionType.SALE }
         
         assertNotNull("Sale transaction should exist", saleTransaction)
@@ -394,7 +394,7 @@ class OrderPaymentLifecycleIntegrationTest {
         assertTrue(inventory[0].totalWeightKg.compareTo(BigDecimal("1200.00")) == 0)
 
         // All transactions should be recorded
-        val allTransactions = transactionRepository.getAllTransactions().first()
+        val allTransactions = transactionRepository.getPaginatedTransactions(100, 0).first()
         assertEquals(5, allTransactions.size) // 3 purchases + 2 sales
     }
 }

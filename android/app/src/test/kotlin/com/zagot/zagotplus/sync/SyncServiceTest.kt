@@ -164,7 +164,7 @@ class SyncServiceTest {
         coEvery { transactionDao.markAsSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-        coEvery { syncDataSource.pushTransaction(any()) } just Runs
+        coEvery { syncDataSource.pushTransactions(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
@@ -233,7 +233,7 @@ class SyncServiceTest {
         coEvery { transactionDao.getUnsynced() } returns listOf(testTransaction)
         coEvery { transactionDao.markAsSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
-        coEvery { syncDataSource.pushTransaction(any()) } just Runs
+        coEvery { syncDataSource.pushTransactions(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } throws RuntimeException("Connection timeout")
 
         // When
@@ -253,7 +253,7 @@ class SyncServiceTest {
     fun `sync returns Failure when push fails for all transactions`() = runTest {
         // Given: Pending transaction but push will fail
         coEvery { transactionDao.getUnsynced() } returns listOf(testTransaction)
-        coEvery { syncDataSource.pushTransaction(any()) } throws RuntimeException("Network unavailable")
+        coEvery { syncDataSource.pushTransactions(any()) } throws RuntimeException("Network unavailable")
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
@@ -261,10 +261,11 @@ class SyncServiceTest {
         // When
         val result = syncService.sync()
 
-        // Then - Since individual failures don't stop sync, it should succeed with 0 pushed
-        assertTrue(result is SyncResult.Success)
-        val success = result as SyncResult.Success
-        assertEquals(0, success.pushed)
+        // Then - Batch push failure now causes entire sync to fail
+        assertTrue(result is SyncResult.Failure)
+        val failure = result as SyncResult.Failure
+        assertEquals("Network unavailable", failure.error)
+        assertEquals(SyncPhase.PUSH, failure.phase)
     }
 
     // ==================== Reference Data Resilience ====================
@@ -319,8 +320,8 @@ class SyncServiceTest {
     // ==================== Push Edge Cases ====================
 
     @Test
-    fun `sync handles individual transaction push failure gracefully`() = runTest {
-        // Given: Two transactions, first will fail, second will succeed
+    fun `sync batch push failure causes sync to fail`() = runTest {
+        // Given: Two transactions, batch push will fail
         val transaction2 = testTransaction.copy(
             id = UUID.randomUUID(),
             localId = "test-local-id-2"
@@ -330,25 +331,20 @@ class SyncServiceTest {
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
 
-        var callCount = 0
-        coEvery { syncDataSource.pushTransaction(any()) } answers {
-            callCount++
-            if (callCount == 1) {
-                throw RuntimeException("First push failed")
-            }
-        }
+        coEvery { syncDataSource.pushTransactions(any()) } throws RuntimeException("Batch push failed")
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
         val result = syncService.sync()
 
-        // Then - Should be Success but with only 1 pushed (not 2)
-        assertTrue(result is SyncResult.Success)
-        val success = result as SyncResult.Success
-        assertEquals(1, success.pushed)
+        // Then - Batch push failure causes entire push phase to fail
+        assertTrue(result is SyncResult.Failure)
+        val failure = result as SyncResult.Failure
+        assertEquals("Batch push failed", failure.error)
+        assertEquals(SyncPhase.PUSH, failure.phase)
 
-        // Only second transaction should be marked as synced
-        coVerify(exactly = 1) { transactionDao.markAsSynced(any(), any()) }
+        // Neither transaction should be marked as synced
+        coVerify(exactly = 0) { transactionDao.markAsSynced(any(), any()) }
     }
 
     // ==================== Pull with Data ====================
@@ -438,7 +434,7 @@ class SyncServiceTest {
         coEvery { expenseCategoryDao.markSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-        coEvery { syncDataSource.pushExpenseCategory(any()) } just Runs
+        coEvery { syncDataSource.pushExpenseCategories(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
@@ -448,7 +444,7 @@ class SyncServiceTest {
         assertTrue(result is SyncResult.Success)
         val success = result as SyncResult.Success
         assertTrue(success.pushed >= 1)
-        coVerify { syncDataSource.pushExpenseCategory(any()) }
+        coVerify { syncDataSource.pushExpenseCategories(any()) }
         coVerify { expenseCategoryDao.markSynced(testExpenseCategory.id, any()) }
     }
 
@@ -510,8 +506,8 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync continues when expense category push fails for individual item`() = runTest {
-        // Given: Two categories, first will fail
+    fun `sync fails when expense category batch push fails`() = runTest {
+        // Given: Two categories, batch push will fail
         val category2 = testExpenseCategory.copy(
             id = UUID.randomUUID(),
             localId = "cat-local-id-2",
@@ -524,22 +520,16 @@ class SyncServiceTest {
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
-        var callCount = 0
-        coEvery { syncDataSource.pushExpenseCategory(any()) } answers {
-            callCount++
-            if (callCount == 1) {
-                throw RuntimeException("First category push failed")
-            }
-        }
+        coEvery { syncDataSource.pushExpenseCategories(any()) } throws RuntimeException("Batch push failed")
 
         // When
         val result = syncService.sync()
 
-        // Then - Should succeed with only 1 pushed
-        assertTrue(result is SyncResult.Success)
-        val success = result as SyncResult.Success
-        assertTrue(success.pushed >= 1)
-        coVerify(exactly = 1) { expenseCategoryDao.markSynced(any(), any()) }
+        // Then - Batch push failure causes sync to fail
+        assertTrue(result is SyncResult.Failure)
+        val failure = result as SyncResult.Failure
+        assertEquals("Batch push failed", failure.error)
+        coVerify(exactly = 0) { expenseCategoryDao.markSynced(any(), any()) }
     }
 
     // ==================== Cash Operation Tests ====================
@@ -552,7 +542,7 @@ class SyncServiceTest {
         coEvery { cashOperationDao.markSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-        coEvery { syncDataSource.pushCashOperation(any()) } just Runs
+        coEvery { syncDataSource.pushCashOperations(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
@@ -562,7 +552,7 @@ class SyncServiceTest {
         assertTrue(result is SyncResult.Success)
         val success = result as SyncResult.Success
         assertTrue(success.pushed >= 1)
-        coVerify { syncDataSource.pushCashOperation(any()) }
+        coVerify { syncDataSource.pushCashOperations(any()) }
         coVerify { cashOperationDao.markSynced(testCashOperation.id, any()) }
     }
 
@@ -634,8 +624,8 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync continues when cash operation push fails for individual item`() = runTest {
-        // Given: Two operations, first will fail
+    fun `sync fails when cash operation batch push fails`() = runTest {
+        // Given: Two operations, batch push will fail
         val cashOp2 = testCashOperation.copy(
             id = UUID.randomUUID(),
             localId = "cash-local-id-2",
@@ -649,20 +639,16 @@ class SyncServiceTest {
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
-        var callCount = 0
-        coEvery { syncDataSource.pushCashOperation(any()) } answers {
-            callCount++
-            if (callCount == 1) {
-                throw RuntimeException("First cash operation push failed")
-            }
-        }
+        coEvery { syncDataSource.pushCashOperations(any()) } throws RuntimeException("Batch push failed")
 
         // When
         val result = syncService.sync()
 
-        // Then - Should succeed with only 1 pushed
-        assertTrue(result is SyncResult.Success)
-        coVerify(exactly = 1) { cashOperationDao.markSynced(any(), any()) }
+        // Then - Batch push failure causes sync to fail
+        assertTrue(result is SyncResult.Failure)
+        val failure = result as SyncResult.Failure
+        assertEquals("Batch push failed", failure.error)
+        coVerify(exactly = 0) { cashOperationDao.markSynced(any(), any()) }
     }
 
     @Test
@@ -679,7 +665,7 @@ class SyncServiceTest {
         coEvery { cashOperationDao.markSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-        coEvery { syncDataSource.pushCashOperation(any()) } just Runs
+        coEvery { syncDataSource.pushCashOperations(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
@@ -688,8 +674,8 @@ class SyncServiceTest {
         // Then
         assertTrue(result is SyncResult.Success)
         coVerify { 
-            syncDataSource.pushCashOperation(match { 
-                it.type == "payment" && it.categoryId == categoryId.toString() 
+            syncDataSource.pushCashOperations(match { dtos ->
+                dtos.any { it.type == "payment" && it.categoryId == categoryId.toString() }
             }) 
         }
     }
@@ -708,7 +694,7 @@ class SyncServiceTest {
         coEvery { cashOperationDao.markSynced(any(), any()) } just Runs
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
-        coEvery { syncDataSource.pushCashOperation(any()) } just Runs
+        coEvery { syncDataSource.pushCashOperations(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
 
         // When
@@ -717,8 +703,8 @@ class SyncServiceTest {
         // Then
         assertTrue(result is SyncResult.Success)
         coVerify { 
-            syncDataSource.pushCashOperation(match { 
-                it.type == "purchase" && it.batchId == batchId.toString() 
+            syncDataSource.pushCashOperations(match { dtos ->
+                dtos.any { it.type == "purchase" && it.batchId == batchId.toString() }
             }) 
         }
     }

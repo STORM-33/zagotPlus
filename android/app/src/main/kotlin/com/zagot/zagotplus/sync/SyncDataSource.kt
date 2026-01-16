@@ -40,41 +40,40 @@ import java.time.Instant
 interface SyncDataSource {
 
     /**
-     * Push a transaction to the remote server.
+     * Push transactions to the remote server in batch.
      * Uses upsert with local_id as conflict key.
      * 
-     * @param dto Transaction data to push
+     * @param dtos List of transactions to push
      * @throws Exception on network or server error
      */
-    suspend fun pushTransaction(dto: TransactionDto)
+    suspend fun pushTransactions(dtos: List<TransactionDto>)
 
     /**
-     * Push a purchase batch to the remote server.
+     * Push purchase batches to the remote server in batch.
      * Uses upsert with local_id as conflict key.
      * 
-     * @param dto Purchase batch data to push
+     * @param dtos List of purchase batches to push
      * @throws Exception on network or server error
      */
-    suspend fun pushBatch(dto: PurchaseBatchDto)
+    suspend fun pushBatches(dtos: List<PurchaseBatchDto>)
 
     /**
-     * Push a sale batch to the remote server.
+     * Push sale batches to the remote server in batch.
      * Uses upsert with local_id as conflict key.
      * 
-     * @param dto Sale batch data to push
+     * @param dtos List of sale batches to push
      * @throws Exception on network or server error
      */
-    suspend fun pushSaleBatch(dto: SaleBatchDto)
+    suspend fun pushSaleBatches(dtos: List<SaleBatchDto>)
 
     /**
-     * Push a product to the remote server.
+     * Push products to the remote server in batch.
      * Uses upsert with local_id as conflict key.
-     * Products are master data that can be edited on any device.
      * 
-     * @param dto Product data to push
+     * @param dtos List of products to push
      * @throws Exception on network or server error
      */
-    suspend fun pushProduct(dto: ProductDto)
+    suspend fun pushProducts(dtos: List<ProductDto>)
 
     /**
      * Delete a product from the remote server.
@@ -85,22 +84,22 @@ interface SyncDataSource {
     suspend fun deleteProduct(id: String)
 
     /**
-     * Push an expense category to the remote server.
+     * Push expense categories to the remote server in batch.
      * Uses upsert with local_id as conflict key.
      * 
-     * @param dto Expense category data to push
+     * @param dtos List of expense categories to push
      * @throws Exception on network or server error
      */
-    suspend fun pushExpenseCategory(dto: ExpenseCategoryDto)
+    suspend fun pushExpenseCategories(dtos: List<ExpenseCategoryDto>)
 
     /**
-     * Push a cash operation to the remote server.
+     * Push cash operations to the remote server in batch.
      * Uses upsert with local_id as conflict key.
      * 
-     * @param dto Cash operation data to push
+     * @param dtos List of cash operations to push
      * @throws Exception on network or server error
      */
-    suspend fun pushCashOperation(dto: CashOperationDto)
+    suspend fun pushCashOperations(dtos: List<CashOperationDto>)
 
     /**
      * Pull transactions created/updated after the given timestamp.

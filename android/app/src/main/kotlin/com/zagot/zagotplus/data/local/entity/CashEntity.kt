@@ -87,7 +87,9 @@ data class CashHistoryProjection(
     @ColumnInfo(name = "location_id")
     val locationId: String?, // UUID of location (null for older records without location)
     @ColumnInfo(name = "location_name")
-    val locationName: String? // Name of location for display in totals view
+    val locationName: String?, // Name of location for display in totals view
+    @ColumnInfo(name = "is_transfer")
+    val isTransfer: Boolean? // True for transfer operations, null for aggregates
 )
 
 @Entity(
@@ -119,7 +121,8 @@ data class CashHistoryProjection(
         Index(value = ["batch_id"]),
         Index(value = ["synced_at"]),
         Index(value = ["created_at"]),
-        Index(value = ["type"])
+        Index(value = ["type"]),
+        Index(value = ["is_transfer"])
     ]
 )
 data class CashOperationEntity(
@@ -155,5 +158,8 @@ data class CashOperationEntity(
     val createdAt: Instant,
 
     @ColumnInfo(name = "synced_at")
-    val syncedAt: Instant? = null
+    val syncedAt: Instant? = null,
+
+    @ColumnInfo(name = "is_transfer", defaultValue = "0")
+    val isTransfer: Boolean = false
 )

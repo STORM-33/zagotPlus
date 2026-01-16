@@ -33,20 +33,24 @@ class SupabaseSyncDataSource @Inject constructor(
         private const val TABLE_CASH_OPERATIONS = "cash_operations"
     }
 
-    override suspend fun pushTransaction(dto: TransactionDto) {
-        supabaseClient.postgrest[TABLE_TRANSACTIONS].upsert(dto, onConflict = "local_id")
+    override suspend fun pushTransactions(dtos: List<TransactionDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_TRANSACTIONS].upsert(dtos, onConflict = "local_id")
     }
 
-    override suspend fun pushBatch(dto: PurchaseBatchDto) {
-        supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dto, onConflict = "local_id")
+    override suspend fun pushBatches(dtos: List<PurchaseBatchDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_PURCHASE_BATCHES].upsert(dtos, onConflict = "local_id")
     }
 
-    override suspend fun pushSaleBatch(dto: SaleBatchDto) {
-        supabaseClient.postgrest[TABLE_SALE_BATCHES].upsert(dto, onConflict = "local_id")
+    override suspend fun pushSaleBatches(dtos: List<SaleBatchDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_SALE_BATCHES].upsert(dtos, onConflict = "local_id")
     }
 
-    override suspend fun pushProduct(dto: ProductDto) {
-        supabaseClient.postgrest[TABLE_PRODUCTS].upsert(dto, onConflict = "local_id")
+    override suspend fun pushProducts(dtos: List<ProductDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_PRODUCTS].upsert(dtos, onConflict = "local_id")
     }
 
     override suspend fun deleteProduct(id: String) {
@@ -57,12 +61,14 @@ class SupabaseSyncDataSource @Inject constructor(
         }
     }
 
-    override suspend fun pushExpenseCategory(dto: ExpenseCategoryDto) {
-        supabaseClient.postgrest[TABLE_EXPENSE_CATEGORIES].upsert(dto, onConflict = "local_id")
+    override suspend fun pushExpenseCategories(dtos: List<ExpenseCategoryDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_EXPENSE_CATEGORIES].upsert(dtos, onConflict = "local_id")
     }
 
-    override suspend fun pushCashOperation(dto: CashOperationDto) {
-        supabaseClient.postgrest[TABLE_CASH_OPERATIONS].upsert(dto, onConflict = "local_id")
+    override suspend fun pushCashOperations(dtos: List<CashOperationDto>) {
+        if (dtos.isEmpty()) return
+        supabaseClient.postgrest[TABLE_CASH_OPERATIONS].upsert(dtos, onConflict = "local_id")
     }
 
     override suspend fun pullTransactions(since: Instant): List<TransactionDto> {

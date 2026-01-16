@@ -119,21 +119,21 @@ class TransactionDaoTest {
         
         transactionDao.insertAll(transactions)
         
-        val all = transactionDao.getAll()
+        val all = transactionDao.getAllPaginated(limit = 100, offset = 0)
         assertEquals(3, all.size)
     }
 
     // ==================== Query Tests ====================
 
     @Test
-    fun `getAll returns transactions ordered by created_at DESC`() = runTest {
+    fun `getAllPaginated returns transactions ordered by created_at DESC`() = runTest {
         val earlier = Instant.parse("2024-01-01T10:00:00Z")
         val later = Instant.parse("2024-01-15T10:00:00Z")
         
         transactionDao.insert(createTransaction(createdAt = earlier))
         transactionDao.insert(createTransaction(createdAt = later))
         
-        val all = transactionDao.getAll()
+        val all = transactionDao.getAllPaginated(limit = 100, offset = 0)
         
         assertEquals(2, all.size)
         assertTrue(all[0].createdAt >= all[1].createdAt)
@@ -307,7 +307,7 @@ class TransactionDaoTest {
         
         transactionDao.deleteAll()
         
-        val all = transactionDao.getAll()
+        val all = transactionDao.getAllPaginated(limit = 100, offset = 0)
         assertTrue(all.isEmpty())
     }
 

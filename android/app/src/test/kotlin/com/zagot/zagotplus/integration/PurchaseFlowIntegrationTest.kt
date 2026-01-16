@@ -126,7 +126,7 @@ class PurchaseFlowIntegrationTest {
         assertTrue(transaction.pricePerKg!!.compareTo(BigDecimal("45.00")) == 0)
 
         // Verify persisted to database
-        val allTransactions = transactionRepository.getAllTransactions().first()
+        val allTransactions = transactionRepository.getPaginatedTransactions(100, 0).first()
         assertEquals(1, allTransactions.size)
         assertEquals(transaction.id, allTransactions[0].id)
     }

@@ -173,7 +173,7 @@ class MultiDeviceConcurrencyIntegrationTest {
         tabletRepo.createPurchase(location1Id, productId, BigDecimal("50.00"), BigDecimal("46.00"))
 
         // Verify both transactions exist with correct device IDs
-        val allTransactions = phoneRepo.getAllTransactions().first()
+        val allTransactions = phoneRepo.getPaginatedTransactions(100, 0).first()
         assertEquals(2, allTransactions.size)
 
         val phoneTransaction = allTransactions.find { it.deviceId == devicePhoneId }
@@ -237,7 +237,7 @@ class MultiDeviceConcurrencyIntegrationTest {
             tabletRepo.createPurchase(location1Id, productId, BigDecimal("10.00"), BigDecimal("45.00"))
         }
 
-        val allTransactions = phoneRepo.getAllTransactions().first()
+        val allTransactions = phoneRepo.getPaginatedTransactions(100, 0).first()
         assertEquals(10, allTransactions.size)
 
         // All localIds should be unique
@@ -301,7 +301,7 @@ class MultiDeviceConcurrencyIntegrationTest {
         val inventory = repo1.getInventory().first()
         assertTrue(inventory[0].totalWeightKg.compareTo(BigDecimal("200.00")) == 0)
 
-        val transactions = repo1.getAllTransactions().first()
+        val transactions = repo1.getPaginatedTransactions(100, 0).first()
         assertEquals(20, transactions.size)
     }
 
@@ -347,7 +347,7 @@ class MultiDeviceConcurrencyIntegrationTest {
         Thread.sleep(10)
         phoneRepo.createPurchase(location1Id, productId, BigDecimal("30.00"), BigDecimal("45.00"))
 
-        val transactions = phoneRepo.getAllTransactions().first()
+        val transactions = phoneRepo.getPaginatedTransactions(100, 0).first()
             .sortedBy { it.createdAt }
 
         // Verify chronological order

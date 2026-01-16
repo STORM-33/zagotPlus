@@ -26,7 +26,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 10 (added batch correction support with is_voided, corrects_batch_id, correction_reason)
+ * Version: 11 (added is_transfer flag for explicit transfer detection, optimized date grouping queries)
  */
 @Database(
     entities = [
@@ -38,7 +38,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         ExpenseCategoryEntity::class,
         CashOperationEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -437,6 +437,28 @@ abstract class ZagotDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE sale_batches ADD COLUMN correction_reason TEXT")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_is_voided ON sale_batches(is_voided)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_corrects_batch_id ON sale_batches(corrects_batch_id)")
+            }
+        }
+
+        /**
+         * Migration from version 10 to 11: Add is_transfer flag to cash_operations.
+         * Replaces fragile pattern-matching (notes LIKE 'Переказ%') with explicit boolean flag.
+         * 
+         * This fixes:
+         * - Transfer detection no longer relies on text pattern matching
+         * - Queries can use index on is_transfer for better performance
+         * - Legacy transfers are migrated based on notes pattern
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add is_transfer column with default false
+                db.execSQL("ALTER TABLE cash_operations ADD COLUMN is_transfer INTEGER NOT NULL DEFAULT 0")
+                
+                // Migrate existing transfers: set is_transfer=1 where notes starts with 'Переказ'
+                db.execSQL("UPDATE cash_operations SET is_transfer = 1 WHERE notes LIKE 'Переказ%'")
+                
+                // Create index for efficient filtering
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_is_transfer ON cash_operations(is_transfer)")
             }
         }
     }

@@ -370,7 +370,7 @@ class TransferFlowIntegrationTest {
             weightKg = BigDecimal("20.0")
         )
 
-        val allTransactions = transactionRepository.getAllTransactions().first()
+        val allTransactions = transactionRepository.getPaginatedTransactions(100, 0).first()
 
         // Should have 3 transactions: 1 purchase + 1 transfer_out + 1 transfer_in
         assertEquals(3, allTransactions.size)

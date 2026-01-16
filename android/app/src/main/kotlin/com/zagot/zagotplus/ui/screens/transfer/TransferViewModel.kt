@@ -126,6 +126,12 @@ class TransferViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    companion object {
+        // Pre-compiled regex patterns for input validation (avoid recompilation on each keystroke)
+        private val DECIMAL_PATTERN = Regex("^\\d*\\.?\\d*$")
+        private val INTEGER_PATTERN = Regex("^\\d+$")
+    }
+
     // Prefilled data from navigation arguments
     private val prefilledProductId: String? = savedStateHandle[Destination.Transfer.ARG_PRODUCT_ID]
     private val prefilledSourceLocationId: String? = savedStateHandle[Destination.Transfer.ARG_SOURCE_LOCATION_ID]
@@ -288,20 +294,20 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onWeightChange(weight: String) {
-        // Allow only valid decimal input
-        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+        // Allow only valid decimal input (uses pre-compiled pattern)
+        if (weight.isEmpty() || DECIMAL_PATTERN.matches(weight)) {
             _uiState.update { it.copy(currentWeight = weight) }
         }
     }
 
     fun onTareCountChange(count: String) {
-        if (count.isEmpty() || count.matches(Regex("^\\d+$"))) {
+        if (count.isEmpty() || INTEGER_PATTERN.matches(count)) {
             _uiState.update { it.copy(currentTareCount = count) }
         }
     }
 
     fun onTareWeightPerUnitChange(weight: String) {
-        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+        if (weight.isEmpty() || DECIMAL_PATTERN.matches(weight)) {
             _uiState.update { it.copy(tareWeightPerUnit = weight) }
         }
     }

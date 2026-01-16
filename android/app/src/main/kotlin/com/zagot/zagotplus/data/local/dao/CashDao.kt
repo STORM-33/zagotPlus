@@ -151,13 +151,6 @@ interface CashOperationDao {
     fun getRecentByLocation(locationId: UUID, limit: Int): Flow<List<CashOperationEntity>>
 
     // Global operations (across all locations)
-    /**
-     * @deprecated Use getRecentOperations(limit) or getOperationsPaged for large datasets.
-     * This method loads ALL operations into memory which can cause OOM on large datasets.
-     */
-    @Deprecated("Use getRecentOperations(limit) or getOperationsPaged instead", ReplaceWith("getRecentOperations(100)"))
-    @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT 1000")
-    fun getAllOperations(): Flow<List<CashOperationEntity>>
 
     @Query("SELECT * FROM cash_operations ORDER BY created_at DESC LIMIT :limit")
     fun getRecentOperations(limit: Int): Flow<List<CashOperationEntity>>
@@ -224,7 +217,11 @@ interface CashOperationDao {
      *
      * Note: cash_operations with type='purchase' are excluded to avoid double-counting
      * since purchase data is already aggregated from purchase_batches.
-     * Note: Transfers are detected by notes starting with 'Переказ' pattern.
+     * Note: Transfers are detected by is_transfer flag (or notes pattern for legacy data).
+     * 
+     * Optimization: Uses integer arithmetic for day grouping instead of date() function
+     * to enable index usage on created_at column. Groups by (created_at / 86400000) which
+     * represents days since epoch in milliseconds.
      */
     @Query("""
         SELECT
@@ -238,7 +235,8 @@ interface CashOperationDao {
             created_at,
             batch_count,
             location_id,
-            location_name
+            location_name,
+            is_transfer
         FROM (
             SELECT
                 CAST(co.id AS TEXT) as id,
@@ -251,14 +249,15 @@ interface CashOperationDao {
                 co.created_at,
                 NULL as batch_count,
                 CAST(co.location_id AS TEXT) as location_id,
-                l.name as location_name
+                l.name as location_name,
+                co.is_transfer as is_transfer
             FROM cash_operations co
             LEFT JOIN expense_categories ec ON co.category_id = ec.id
             LEFT JOIN locations l ON co.location_id = l.id
-            WHERE co.type != 'purchase' AND (co.notes IS NULL OR co.notes NOT LIKE 'Переказ%')
+            WHERE co.type != 'purchase' AND co.is_transfer = 0
             UNION ALL
             SELECT 
-                'purchase_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase_' || CAST((pb.created_at / 86400000) AS TEXT) as id,
                 'purchase' as type,
                 SUM(pb.total_amount) as amount,
                 NULL as notes,
@@ -268,10 +267,11 @@ interface CashOperationDao {
                 MAX(pb.created_at) as created_at,
                 COUNT(*) as batch_count,
                 NULL as location_id,
-                NULL as location_name
+                NULL as location_name,
+                NULL as is_transfer
             FROM purchase_batches pb
             WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0
-            GROUP BY date(pb.created_at / 1000, 'unixepoch', 'localtime')
+            GROUP BY (pb.created_at / 86400000)
         )
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
@@ -284,6 +284,8 @@ interface CashOperationDao {
      *
      * Note: cash_operations with type='purchase' are excluded to avoid double-counting
      * since purchase data is already aggregated from purchase_batches.
+     * 
+     * Optimization: Uses integer arithmetic for day grouping instead of date() function.
      */
     @Query("""
         SELECT
@@ -297,7 +299,8 @@ interface CashOperationDao {
             created_at,
             batch_count,
             location_id,
-            location_name
+            location_name,
+            is_transfer
         FROM (
             SELECT
                 CAST(co.id AS TEXT) as id,
@@ -310,14 +313,15 @@ interface CashOperationDao {
                 co.created_at,
                 NULL as batch_count,
                 CAST(co.location_id AS TEXT) as location_id,
-                l.name as location_name
+                l.name as location_name,
+                co.is_transfer as is_transfer
             FROM cash_operations co
             LEFT JOIN expense_categories ec ON co.category_id = ec.id
             LEFT JOIN locations l ON co.location_id = l.id
             WHERE co.location_id = :locationId AND co.type != 'purchase'
             UNION ALL
             SELECT 
-                'purchase_' || pb.location_id || '_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase_' || CAST(pb.location_id AS TEXT) || '_' || CAST((pb.created_at / 86400000) AS TEXT) as id,
                 'purchase' as type,
                 SUM(pb.total_amount) as amount,
                 NULL as notes,
@@ -327,11 +331,12 @@ interface CashOperationDao {
                 MAX(pb.created_at) as created_at,
                 COUNT(*) as batch_count,
                 CAST(pb.location_id AS TEXT) as location_id,
-                l.name as location_name
+                l.name as location_name,
+                NULL as is_transfer
             FROM purchase_batches pb
             LEFT JOIN locations l ON pb.location_id = l.id
             WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0 AND pb.location_id = :locationId
-            GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
+            GROUP BY pb.location_id, (pb.created_at / 86400000)
         )
         ORDER by created_at DESC
         LIMIT :limit OFFSET :offset
@@ -343,12 +348,14 @@ interface CashOperationDao {
      * Sales are excluded from cash history.
      * Cash_operations with type='purchase' are excluded to avoid double-counting.
      * Purchases are counted by unique days only (not per-location) to match getCashHistoryPaged.
-     * Transfers (detected by notes starting with 'Переказ') are excluded in totals view.
+     * Transfers (is_transfer=1) are excluded in totals view.
+     * 
+     * Optimization: Uses integer division for day counting instead of date() function.
      */
     @Query("""
         SELECT
-            (SELECT COUNT(*) FROM cash_operations WHERE type != 'purchase' AND (notes IS NULL OR notes NOT LIKE 'Переказ%')) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0)
+            (SELECT COUNT(*) FROM cash_operations WHERE type != 'purchase' AND is_transfer = 0) +
+            (SELECT COUNT(DISTINCT (created_at / 86400000)) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0)
     """)
     suspend fun getTotalHistoryCount(): Int
 
@@ -356,11 +363,13 @@ interface CashOperationDao {
      * Get count of cash history items for a specific location.
      * Sales are excluded from cash history.
      * Cash_operations with type='purchase' are excluded to avoid double-counting.
+     * 
+     * Optimization: Uses integer division for day counting instead of date() function.
      */
     @Query("""
         SELECT
             (SELECT COUNT(*) FROM cash_operations WHERE location_id = :locationId AND type != 'purchase') +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId)
+            (SELECT COUNT(DISTINCT (created_at / 86400000)) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId)
     """)
     suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int
     

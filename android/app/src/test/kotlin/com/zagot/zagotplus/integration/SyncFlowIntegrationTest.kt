@@ -379,7 +379,7 @@ class SyncFlowIntegrationTest {
         assertTrue("Should pull transactions", success.pulled >= 1)
 
         // Verify local has remote data
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         assertTrue(
             "Local should have remote transaction",
             localTransactions.any { it.localId == "remote-tx-1" }
@@ -448,7 +448,7 @@ class SyncFlowIntegrationTest {
         }
 
         // Verify transactions match
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         val remoteTransactions = fakeSyncDataSource.transactions
 
         assertEquals(
@@ -634,7 +634,7 @@ class SyncFlowIntegrationTest {
         assertTrue("Should pull remote data", success.pulled >= 1)
 
         // Local should have both transactions
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         assertTrue(
             "Local should have local-only-tx",
             localTransactions.any { it.localId == "local-only-tx" }
@@ -687,40 +687,48 @@ class FakeSyncDataSource : SyncDataSource {
         purchaseBatches.addAll(items)
     }
 
-    // Push operations - upsert by localId
-    override suspend fun pushTransaction(dto: TransactionDto) {
-        val existing = transactions.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            transactions[existing] = dto
-        } else {
-            transactions.add(dto)
+    // Push operations - batch upsert by localId
+    override suspend fun pushTransactions(dtos: List<TransactionDto>) {
+        dtos.forEach { dto ->
+            val existing = transactions.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                transactions[existing] = dto
+            } else {
+                transactions.add(dto)
+            }
         }
     }
 
-    override suspend fun pushBatch(dto: PurchaseBatchDto) {
-        val existing = purchaseBatches.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            purchaseBatches[existing] = dto
-        } else {
-            purchaseBatches.add(dto)
+    override suspend fun pushBatches(dtos: List<PurchaseBatchDto>) {
+        dtos.forEach { dto ->
+            val existing = purchaseBatches.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                purchaseBatches[existing] = dto
+            } else {
+                purchaseBatches.add(dto)
+            }
         }
     }
 
-    override suspend fun pushSaleBatch(dto: SaleBatchDto) {
-        val existing = saleBatches.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            saleBatches[existing] = dto
-        } else {
-            saleBatches.add(dto)
+    override suspend fun pushSaleBatches(dtos: List<SaleBatchDto>) {
+        dtos.forEach { dto ->
+            val existing = saleBatches.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                saleBatches[existing] = dto
+            } else {
+                saleBatches.add(dto)
+            }
         }
     }
 
-    override suspend fun pushProduct(dto: ProductDto) {
-        val existing = products.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            products[existing] = dto
-        } else {
-            products.add(dto)
+    override suspend fun pushProducts(dtos: List<ProductDto>) {
+        dtos.forEach { dto ->
+            val existing = products.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                products[existing] = dto
+            } else {
+                products.add(dto)
+            }
         }
     }
 
@@ -728,21 +736,25 @@ class FakeSyncDataSource : SyncDataSource {
         products.removeIf { it.id == id }
     }
 
-    override suspend fun pushExpenseCategory(dto: ExpenseCategoryDto) {
-        val existing = expenseCategories.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            expenseCategories[existing] = dto
-        } else {
-            expenseCategories.add(dto)
+    override suspend fun pushExpenseCategories(dtos: List<ExpenseCategoryDto>) {
+        dtos.forEach { dto ->
+            val existing = expenseCategories.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                expenseCategories[existing] = dto
+            } else {
+                expenseCategories.add(dto)
+            }
         }
     }
 
-    override suspend fun pushCashOperation(dto: CashOperationDto) {
-        val existing = cashOperations.indexOfFirst { it.localId == dto.localId }
-        if (existing >= 0) {
-            cashOperations[existing] = dto
-        } else {
-            cashOperations.add(dto)
+    override suspend fun pushCashOperations(dtos: List<CashOperationDto>) {
+        dtos.forEach { dto ->
+            val existing = cashOperations.indexOfFirst { it.localId == dto.localId }
+            if (existing >= 0) {
+                cashOperations[existing] = dto
+            } else {
+                cashOperations.add(dto)
+            }
         }
     }
 
