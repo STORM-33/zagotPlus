@@ -119,6 +119,11 @@ class PurchaseEntryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    companion object {
+        // Pre-compiled regex pattern for decimal input validation (avoid recompilation on each keystroke)
+        private val DECIMAL_PATTERN = Regex("^\\d*\\.?\\d*$")
+    }
+
     // Editing batch ID from navigation arguments
     private val editingBatchIdArg: String? = savedStateHandle[Destination.PurchaseEntry.ARG_BATCH_ID]
     
@@ -170,8 +175,8 @@ class PurchaseEntryViewModel @Inject constructor(
     }
 
     fun onWeightChange(weight: String) {
-        // Allow only valid decimal input
-        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+        // Allow only valid decimal input (uses pre-compiled pattern)
+        if (weight.isEmpty() || DECIMAL_PATTERN.matches(weight)) {
             _uiState.update { it.copy(currentWeight = weight) }
         }
     }
@@ -193,8 +198,8 @@ class PurchaseEntryViewModel @Inject constructor(
     }
 
     fun onPriceChange(price: String) {
-        // Allow only valid decimal input
-        if (price.isEmpty() || price.matches(Regex("^\\d*\\.?\\d*$"))) {
+        // Allow only valid decimal input (uses pre-compiled pattern)
+        if (price.isEmpty() || DECIMAL_PATTERN.matches(price)) {
             _uiState.update { it.copy(currentPrice = price) }
         }
     }

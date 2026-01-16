@@ -84,6 +84,11 @@ fun HistoryScreen(
     onNavigateToEditSale: (batchId: String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Separate state flows for expansion - only recomposes affected items
+    val expandedBatchIds by viewModel.expandedBatchIds.collectAsStateWithLifecycle()
+    val expandedBatchTransactions by viewModel.expandedBatchTransactions.collectAsStateWithLifecycle()
+    val isLoadingBatchDetails by viewModel.isLoadingBatchDetails.collectAsStateWithLifecycle()
+    
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
     val listState = rememberLazyListState()
@@ -214,9 +219,9 @@ fun HistoryScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(uiState.batches, key = { it.id }) { batch ->
-                            val isExpanded = batch.id in uiState.expandedBatchIds
-                            val transactions = uiState.expandedBatchTransactions[batch.id]
-                            val isLoadingTransactions = batch.id in uiState.isLoadingBatchDetails
+                            val isExpanded = batch.id in expandedBatchIds
+                            val transactions = expandedBatchTransactions[batch.id]
+                            val isLoadingTransactions = batch.id in isLoadingBatchDetails
 
                             ExpandableBatchCard(
                                 batch = batch,

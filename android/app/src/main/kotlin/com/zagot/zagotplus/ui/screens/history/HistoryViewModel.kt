@@ -37,9 +37,8 @@ import javax.inject.Inject
 data class HistoryUiState(
     // Batch list
     val batches: List<HistoryBatchDisplayItem> = emptyList(),
-    val expandedBatchIds: Set<String> = emptySet(),
-    val expandedBatchTransactions: Map<String, List<HistoryDisplayItem>> = emptyMap(),
-    val isLoadingBatchDetails: Set<String> = emptySet(),
+    // Note: expandedBatchIds, expandedBatchTransactions, isLoadingBatchDetails moved to separate flows
+    // for better recomposition performance
 
     // Pagination
     val totalCount: Int = 0,
@@ -89,6 +88,16 @@ class HistoryViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
+
+    // Separate flows for frequently-changing state to avoid full screen recomposition
+    private val _expandedBatchIds = MutableStateFlow<Set<String>>(emptySet())
+    val expandedBatchIds: StateFlow<Set<String>> = _expandedBatchIds.asStateFlow()
+
+    private val _expandedBatchTransactions = MutableStateFlow<Map<String, List<HistoryDisplayItem>>>(emptyMap())
+    val expandedBatchTransactions: StateFlow<Map<String, List<HistoryDisplayItem>>> = _expandedBatchTransactions.asStateFlow()
+
+    private val _isLoadingBatchDetails = MutableStateFlow<Set<String>>(emptySet())
+    val isLoadingBatchDetails: StateFlow<Set<String>> = _isLoadingBatchDetails.asStateFlow()
 
     private var products: Map<UUID, Product> = emptyMap()
     private var locationsMap: Map<UUID, Location> = emptyMap()
@@ -425,25 +434,17 @@ class HistoryViewModel @Inject constructor(
      */
     fun toggleBatchExpansion(batchId: String) {
         viewModelScope.launch {
-            val isCurrentlyExpanded = _uiState.value.expandedBatchIds.contains(batchId)
+            val isCurrentlyExpanded = _expandedBatchIds.value.contains(batchId)
 
             if (isCurrentlyExpanded) {
                 // Collapse
-                _uiState.update { state ->
-                    state.copy(
-                        expandedBatchIds = state.expandedBatchIds - batchId
-                    )
-                }
+                _expandedBatchIds.update { it - batchId }
             } else {
                 // Expand - load transactions if not already loaded
-                if (!_uiState.value.expandedBatchTransactions.containsKey(batchId)) {
+                if (!_expandedBatchTransactions.value.containsKey(batchId)) {
                     loadBatchTransactions(batchId)
                 }
-                _uiState.update { state ->
-                    state.copy(
-                        expandedBatchIds = state.expandedBatchIds + batchId
-                    )
-                }
+                _expandedBatchIds.update { it + batchId }
             }
         }
     }
@@ -452,7 +453,7 @@ class HistoryViewModel @Inject constructor(
      * Load transactions for a specific batch (lazy loading).
      */
     private suspend fun loadBatchTransactions(batchId: String) {
-        _uiState.update { it.copy(isLoadingBatchDetails = it.isLoadingBatchDetails + batchId) }
+        _isLoadingBatchDetails.update { it + batchId }
 
         try {
             val transactions: List<Transaction> = when {
@@ -509,19 +510,11 @@ class HistoryViewModel @Inject constructor(
                 )
             }
 
-            _uiState.update { state ->
-                state.copy(
-                    expandedBatchTransactions = state.expandedBatchTransactions + (batchId to displayItems),
-                    isLoadingBatchDetails = state.isLoadingBatchDetails - batchId
-                )
-            }
+            _expandedBatchTransactions.update { it + (batchId to displayItems) }
+            _isLoadingBatchDetails.update { it - batchId }
         } catch (e: Exception) {
-            _uiState.update {
-                it.copy(
-                    error = e.message,
-                    isLoadingBatchDetails = it.isLoadingBatchDetails - batchId
-                )
-            }
+            _uiState.update { it.copy(error = e.message) }
+            _isLoadingBatchDetails.update { it - batchId }
         }
     }
 
@@ -593,13 +586,10 @@ class HistoryViewModel @Inject constructor(
 
     private fun reloadWithFilter() {
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    expandedBatchIds = emptySet(),
-                    expandedBatchTransactions = emptyMap()
-                )
-            }
+            _uiState.update { it.copy(isLoading = true) }
+            // Clear expansion state on filter change
+            _expandedBatchIds.value = emptySet()
+            _expandedBatchTransactions.value = emptyMap()
             loadBatches(resetPage = true)
         }
     }

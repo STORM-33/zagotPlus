@@ -177,6 +177,12 @@ class SaleEntryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    companion object {
+        // Pre-compiled regex patterns for input validation (avoid recompilation on each keystroke)
+        private val DECIMAL_PATTERN = Regex("^\\d*\\.?\\d*$")
+        private val INTEGER_PATTERN = Regex("^\\d+$")
+    }
+
     // Editing batch ID from navigation arguments
     private val editingBatchIdArg: String? = savedStateHandle[Destination.SaleEntry.ARG_BATCH_ID]
 
@@ -260,13 +266,13 @@ class SaleEntryViewModel @Inject constructor(
     }
 
     fun onWeightChange(weight: String) {
-        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+        if (weight.isEmpty() || DECIMAL_PATTERN.matches(weight)) {
             _uiState.update { it.copy(currentWeight = weight) }
         }
     }
 
     fun onTareCountChange(count: String) {
-        if (count.isEmpty() || count.matches(Regex("^\\d+$"))) {
+        if (count.isEmpty() || INTEGER_PATTERN.matches(count)) {
             _uiState.update { it.copy(currentTareCount = count) }
         }
     }
@@ -307,13 +313,13 @@ class SaleEntryViewModel @Inject constructor(
     }
 
     fun onTareWeightPerUnitChange(weight: String) {
-        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+        if (weight.isEmpty() || DECIMAL_PATTERN.matches(weight)) {
             _uiState.update { it.copy(tareWeightPerUnit = weight) }
         }
     }
 
     fun onPriceChange(price: String) {
-        if (price.isEmpty() || price.matches(Regex("^\\d*\\.?\\d*$"))) {
+        if (price.isEmpty() || DECIMAL_PATTERN.matches(price)) {
             _uiState.update { it.copy(pricePerKg = price) }
         }
     }

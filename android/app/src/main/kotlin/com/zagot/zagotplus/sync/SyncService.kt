@@ -242,28 +242,19 @@ class SyncService @Inject constructor(
     private data class PushResult(val successCount: Int, val failedCount: Int)
 
     /**
-     * Push all unsynced local transactions to Supabase.
+     * Push all unsynced local transactions to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
      * ## Atomicity & Crash Safety
      * 
-     * Each transaction is pushed and marked synced individually (not in a Room @Transaction).
-     * This is intentional for the following reasons:
+     * All pending items are pushed in a single batch request. If the request succeeds,
+     * all items are marked as synced. If it fails, none are marked.
      * 
-     * 1. **Network calls can't be in DB transactions**: Room transactions are for local 
-     *    atomicity only. Network calls inside would hold locks too long.
-     * 
-     * 2. **Crash after network success, before markAsSynced**: The record remains "unsynced"
-     *    locally and will be pushed again on next sync. Supabase's upsert with 
-     *    `onConflict="local_id"` ensures this is idempotent - duplicate pushes are safe.
-     * 
-     * 3. **Crash after markAsSynced**: Normal completion, no issue.
-     * 
-     * 4. **Network failure**: Transaction stays unsynced, will retry on next sync.
-     * 
-     * This eventually-consistent design trades theoretical duplicate pushes (handled by 
-     * Supabase upsert) for simplicity and reliability. The alternative (optimistic locking,
-     * pending_sync flags) adds complexity without meaningful benefit.
+     * Crash scenarios:
+     * - Crash before network call: Items remain unsynced, will retry on next sync
+     * - Crash after success, before markAsSynced: Items pushed but still marked unsynced.
+     *   Will be re-pushed on next sync, but Supabase upsert with local_id handles duplicates.
+     * - Crash after markAsSynced: Normal completion
      *
      * @throws Exception if network or critical error occurs
      */
@@ -276,24 +267,16 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending transactions")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = TransactionDto.fromEntity(entity)
-                syncDataSource.pushTransaction(dto)
-                // Mark as synced locally
-                transactionDao.markAsSynced(entity.localId, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push transaction ${entity.localId}", e)
-                failedCount++
-                // Continue with next transaction - individual failures don't stop sync
-            }
+        val dtos = pending.map { TransactionDto.fromEntity(it) }
+        syncDataSource.pushTransactions(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            transactionDao.markAsSynced(entity.localId, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**
@@ -334,7 +317,7 @@ class SyncService @Inject constructor(
     }
 
     /**
-     * Push all unsynced local batches to Supabase.
+     * Push all unsynced local batches to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
      * @throws Exception if network or critical error occurs
@@ -348,28 +331,20 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending batches")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = PurchaseBatchDto.fromEntity(entity)
-                syncDataSource.pushBatch(dto)
-                // Mark as synced locally
-                purchaseBatchDao.markSynced(entity.id, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push batch ${entity.localId}", e)
-                failedCount++
-                // Continue with next batch - individual failures don't stop sync
-            }
+        val dtos = pending.map { PurchaseBatchDto.fromEntity(it) }
+        syncDataSource.pushBatches(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            purchaseBatchDao.markSynced(entity.id, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**
-     * Push all unsynced local products to Supabase.
+     * Push all unsynced local products to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
      * @throws Exception if network or critical error occurs
@@ -383,24 +358,16 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending products")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = ProductDto.fromEntity(entity)
-                syncDataSource.pushProduct(dto)
-                // Mark as synced locally
-                productDao.markSynced(entity.id, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push product ${entity.localId}", e)
-                failedCount++
-                // Continue with next product - individual failures don't stop sync
-            }
+        val dtos = pending.map { ProductDto.fromEntity(it) }
+        syncDataSource.pushProducts(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            productDao.markSynced(entity.id, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**
@@ -454,24 +421,16 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending sale batches")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = SaleBatchDto.fromEntity(entity)
-                syncDataSource.pushSaleBatch(dto)
-                // Mark as synced locally
-                saleBatchDao.markSynced(entity.id, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push sale batch ${entity.localId}", e)
-                failedCount++
-                // Continue with next batch - individual failures don't stop sync
-            }
+        val dtos = pending.map { SaleBatchDto.fromEntity(it) }
+        syncDataSource.pushSaleBatches(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            saleBatchDao.markSynced(entity.id, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**
@@ -563,7 +522,7 @@ class SyncService @Inject constructor(
     }
 
     /**
-     * Push all unsynced local expense categories to Supabase.
+     * Push all unsynced local expense categories to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
      * @throws Exception if network or critical error occurs
@@ -577,27 +536,20 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending expense categories")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = ExpenseCategoryDto.fromEntity(entity)
-                syncDataSource.pushExpenseCategory(dto)
-                // Mark as synced locally
-                expenseCategoryDao.markSynced(entity.id, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push expense category ${entity.localId}", e)
-                failedCount++
-            }
+        val dtos = pending.map { ExpenseCategoryDto.fromEntity(it) }
+        syncDataSource.pushExpenseCategories(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            expenseCategoryDao.markSynced(entity.id, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**
-     * Push all unsynced local cash operations to Supabase.
+     * Push all unsynced local cash operations to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
      * @throws Exception if network or critical error occurs
@@ -611,23 +563,16 @@ class SyncService @Inject constructor(
 
         Log.d(TAG, "Pushing ${pending.size} pending cash operations")
 
-        var successCount = 0
-        var failedCount = 0
-
-        for (entity in pending) {
-            try {
-                val dto = CashOperationDto.fromEntity(entity)
-                syncDataSource.pushCashOperation(dto)
-                // Mark as synced locally
-                cashOperationDao.markSynced(entity.id, Instant.now())
-                successCount++
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to push cash operation ${entity.localId}", e)
-                failedCount++
-            }
+        val dtos = pending.map { CashOperationDto.fromEntity(it) }
+        syncDataSource.pushCashOperations(dtos)
+        
+        // Mark all as synced after successful batch push
+        val now = Instant.now()
+        pending.forEach { entity ->
+            cashOperationDao.markSynced(entity.id, now)
         }
 
-        return PushResult(successCount, failedCount)
+        return PushResult(pending.size, 0)
     }
 
     /**

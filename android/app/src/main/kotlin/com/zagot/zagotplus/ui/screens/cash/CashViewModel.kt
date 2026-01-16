@@ -111,6 +111,9 @@ class CashViewModel @Inject constructor(
         private const val TAG = "CashViewModel"
         private const val PAGE_SIZE = 20
         private val MAX_AMOUNT = java.math.BigDecimal("999999999.99")
+        // Pre-compiled regex patterns for input validation (avoid recompilation on each keystroke)
+        private val AMOUNT_PATTERN = Regex("^\\d+\\.?\\d*$")
+        private val DECIMAL_START_PATTERN = Regex("^0\\.\\d*$")
     }
 
     init {
@@ -420,8 +423,9 @@ class CashViewModel @Inject constructor(
     fun onAmountChange(amount: String) {
         // Allow empty input or valid positive decimal format
         // Rejects: "." alone, leading zeros like "00.5", negative values
+        // Uses pre-compiled regex patterns from companion object
         val isValidFormat = amount.isEmpty() || 
-            (amount.matches(Regex("^\\d+\\.?\\d*$")) && !amount.startsWith("0") || amount == "0" || amount.matches(Regex("^0\\.\\d*$")))
+            (AMOUNT_PATTERN.matches(amount) && !amount.startsWith("0") || amount == "0" || DECIMAL_START_PATTERN.matches(amount))
         if (isValidFormat && (amount.toBigDecimalOrNull()?.let { it <= MAX_AMOUNT } ?: true)) {
             _uiState.update { it.copy(dialogAmount = amount) }
         }
