@@ -379,7 +379,7 @@ class SyncFlowIntegrationTest {
         assertTrue("Should pull transactions", success.pulled >= 1)
 
         // Verify local has remote data
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         assertTrue(
             "Local should have remote transaction",
             localTransactions.any { it.localId == "remote-tx-1" }
@@ -448,7 +448,7 @@ class SyncFlowIntegrationTest {
         }
 
         // Verify transactions match
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         val remoteTransactions = fakeSyncDataSource.transactions
 
         assertEquals(
@@ -634,7 +634,7 @@ class SyncFlowIntegrationTest {
         assertTrue("Should pull remote data", success.pulled >= 1)
 
         // Local should have both transactions
-        val localTransactions = database.transactionDao().getAll()
+        val localTransactions = database.transactionDao().getAllPaginated(limit = 1000, offset = 0)
         assertTrue(
             "Local should have local-only-tx",
             localTransactions.any { it.localId == "local-only-tx" }

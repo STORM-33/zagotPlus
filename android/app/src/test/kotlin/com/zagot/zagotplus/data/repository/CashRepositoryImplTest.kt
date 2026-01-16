@@ -174,14 +174,14 @@ class CashRepositoryImplTest {
     }
 
     @Test
-    fun `getAllOperations returns all operations`() = runTest {
+    fun `getRecentOperationsGlobal returns recent operations`() = runTest {
         val operations = listOf(
             createOperationEntity(locationId = testLocationId),
             createOperationEntity(locationId = null)
         )
-        every { cashOperationDao.getAllOperations() } returns flowOf(operations)
+        every { cashOperationDao.getRecentOperations(100) } returns flowOf(operations)
 
-        val result = repository.getAllOperations().first()
+        val result = repository.getRecentOperationsGlobal(100).first()
 
         assertEquals(2, result.size)
     }
@@ -296,9 +296,9 @@ class CashRepositoryImplTest {
         )
         
         every { expenseCategoryDao.getAllCategories() } returns flowOf(listOf(category))
-        every { cashOperationDao.getAllOperations() } returns flowOf(listOf(operation))
+        every { cashOperationDao.getRecentOperations(100) } returns flowOf(listOf(operation))
 
-        val result = repository.getAllOperations().first()
+        val result = repository.getRecentOperationsGlobal(100).first()
 
         assertEquals(1, result.size)
         assertEquals("Fuel", result[0].categoryName)
@@ -308,9 +308,9 @@ class CashRepositoryImplTest {
     fun `operations without category have null categoryName`() = runTest {
         val operation = createOperationEntity(categoryId = null)
         
-        every { cashOperationDao.getAllOperations() } returns flowOf(listOf(operation))
+        every { cashOperationDao.getRecentOperations(100) } returns flowOf(listOf(operation))
 
-        val result = repository.getAllOperations().first()
+        val result = repository.getRecentOperationsGlobal(100).first()
 
         assertNull(result[0].categoryName)
     }
@@ -587,9 +587,9 @@ class CashRepositoryImplTest {
         )
         
         every { expenseCategoryDao.getAllCategories() } returns flowOf(emptyList())
-        every { cashOperationDao.getAllOperations() } returns flowOf(listOf(operation))
+        every { cashOperationDao.getRecentOperations(100) } returns flowOf(listOf(operation))
 
-        val result = repository.getAllOperations().first()
+        val result = repository.getRecentOperationsGlobal(100).first()
 
         assertEquals(1, result.size)
         assertNull(result[0].categoryName)

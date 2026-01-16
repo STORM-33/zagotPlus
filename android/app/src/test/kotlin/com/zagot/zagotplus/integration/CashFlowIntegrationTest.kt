@@ -368,7 +368,7 @@ class CashFlowIntegrationTest {
         cashRepository.deposit(locationId, BigDecimal("1000.00"), "Loc1")
         cashRepository.deposit(location2Id, BigDecimal("2000.00"), "Loc2")
 
-        val allOps = cashRepository.getAllOperations().first()
+        val allOps = cashRepository.getRecentOperationsGlobal(100).first()
         assertEquals(2, allOps.size)
     }
 
@@ -380,7 +380,7 @@ class CashFlowIntegrationTest {
         val totalBalance = cashRepository.getTotalBalance().first()
         assertTrue(totalBalance.compareTo(BigDecimal("5000.00")) == 0)
 
-        val allOps = cashRepository.getAllOperations().first()
+        val allOps = cashRepository.getRecentOperationsGlobal(100).first()
         assertEquals(1, allOps.size)
         assertNull(allOps[0].locationId)
     }

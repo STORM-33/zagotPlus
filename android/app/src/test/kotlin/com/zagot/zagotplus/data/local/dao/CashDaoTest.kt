@@ -380,19 +380,19 @@ class CashDaoTest {
         
         cashOperationDao.insertAll(operations)
 
-        val all = cashOperationDao.getAllOperations().first()
+        val all = cashOperationDao.getRecentOperations(limit = 100).first()
         assertEquals(3, all.size)
     }
 
     @Test
-    fun `getAllOperations returns all operations ordered by date`() = runTest {
+    fun `getRecentOperations returns all operations ordered by date`() = runTest {
         val op1 = createCashOperation(createdAt = Instant.parse("2024-01-15T08:00:00Z"))
         val op2 = createCashOperation(createdAt = Instant.parse("2024-01-15T10:00:00Z"))
         
         cashOperationDao.insert(op1)
         cashOperationDao.insert(op2)
 
-        val result = cashOperationDao.getAllOperations().first()
+        val result = cashOperationDao.getRecentOperations(limit = 100).first()
 
         assertEquals(2, result.size)
         assertEquals(op2.id, result[0].id) // Most recent first
