@@ -3,8 +3,9 @@ package com.zagot.zagotplus.ui.screens.history
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionFilter
@@ -30,8 +31,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
-import java.time.temporal.WeekFields
-import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -49,12 +48,11 @@ data class HistoryUiState(
     val isLoadingMore: Boolean = false,
     val hasMorePages: Boolean = false,
     val error: String? = null,
+    val successMessage: String? = null,
 
     // Filter state
     val selectedTypes: Set<BatchType> = emptySet(),
-    val dateRangePreset: DateRangePreset = DateRangePreset.ALL,
-    val customStartDate: Instant? = null,
-    val customEndDate: Instant? = null,
+    val dateRange: DateRange? = null, // null means ALL time
     val selectedLocationId: UUID? = null,
     val searchQuery: String = "",
 
@@ -63,7 +61,7 @@ data class HistoryUiState(
 ) {
     val hasActiveFilters: Boolean
         get() = selectedTypes.isNotEmpty() ||
-                dateRangePreset != DateRangePreset.ALL ||
+                dateRange != null ||
                 selectedLocationId != null ||
                 searchQuery.isNotBlank()
 }
@@ -73,6 +71,7 @@ data class HistoryDisplayItem(
     val type: TransactionType,
     val productName: String,
     val locationName: String,
+    val transferLocationName: String? = null,
     val weightKg: BigDecimal,
     val totalAmount: BigDecimal?,
     val createdAt: Instant,
@@ -155,7 +154,7 @@ class HistoryViewModel @Inject constructor(
         locationsList: List<Location>? = null
     ) {
         val state = _uiState.value
-        val (startDate, endDate) = getDateRange(state.dateRangePreset, state.customStartDate, state.customEndDate)
+        val (startDate, endDate) = getDateRangeInstants(state.dateRange)
 
         try {
             // Build transaction filter for getting unbatched transactions
@@ -171,8 +170,13 @@ class HistoryViewModel @Inject constructor(
             val offset = if (resetPage) 0 else (state.currentPage + 1) * PAGE_SIZE
             val realPurchaseBatches = purchaseBatchRepository.getAllBatchesPaginated(PAGE_SIZE, if (resetPage) 0 else offset)
 
-            // Convert purchase batches to display items, filtering by location if needed
+            // Convert purchase batches to display items, filtering by location and date
             val purchaseBatchDisplayItems = realPurchaseBatches
+                .filter { batch ->
+                    // Apply date filter
+                    (startDate == null || !batch.createdAt.isBefore(startDate)) &&
+                    (endDate == null || !batch.createdAt.isAfter(endDate))
+                }
                 .filter { batch ->
                     // Apply location filter
                     state.selectedLocationId == null || batch.locationId == state.selectedLocationId
@@ -201,8 +205,13 @@ class HistoryViewModel @Inject constructor(
             // Load real sale batches
             val realSaleBatches = saleBatchRepository.getAllBatchesPaginated(PAGE_SIZE, if (resetPage) 0 else offset)
 
-            // Convert sale batches to display items, filtering by location if needed
+            // Convert sale batches to display items, filtering by location and date
             val saleBatchDisplayItems = realSaleBatches
+                .filter { batch ->
+                    // Apply date filter
+                    (startDate == null || !batch.createdAt.isBefore(startDate)) &&
+                    (endDate == null || !batch.createdAt.isAfter(endDate))
+                }
                 .filter { batch ->
                     // Apply location filter
                     state.selectedLocationId == null || batch.locationId == state.selectedLocationId
@@ -284,21 +293,82 @@ class HistoryViewModel @Inject constructor(
     }
 
     /**
-     * Groups unbatched transactions into virtual batches by type, location, and hour.
+     * Groups unbatched transactions into virtual batches and transfer batches.
+     * Transfers are paired by their localId prefix to show as single "from → to" operations.
+     * Adjustments are grouped by type, location, and hour.
      */
     private fun groupIntoVirtualBatches(
         transactions: List<Transaction>
-    ): List<HistoryBatchDisplayItem.VirtualBatch> {
-        return transactions
+    ): List<HistoryBatchDisplayItem> {
+        val result = mutableListOf<HistoryBatchDisplayItem>()
+        
+        // Separate transfers from other transactions
+        val transfers = transactions.filter { 
+            it.type == TransactionType.TRANSFER_IN || it.type == TransactionType.TRANSFER_OUT 
+        }
+        val otherTransactions = transactions.filter { 
+            it.type != TransactionType.TRANSFER_IN && it.type != TransactionType.TRANSFER_OUT 
+        }
+        
+        // Group transfers by their localId prefix (e.g., "abc-out" and "abc-in" share prefix "abc")
+        val transfersByPrefix = transfers.groupBy { tx ->
+            tx.localId.removeSuffix("-out").removeSuffix("-in")
+        }
+        
+        // Create TransferBatch items for paired transfers
+        transfersByPrefix.forEach { (_, txPair) ->
+            val outTx = txPair.find { it.type == TransactionType.TRANSFER_OUT }
+            val inTx = txPair.find { it.type == TransactionType.TRANSFER_IN }
+            
+            if (outTx != null && inTx != null) {
+                // Paired transfer - show as single operation
+                val fromLocationName = locationsMap[outTx.locationId]?.name ?: "Невідома локація"
+                val toLocationName = locationsMap[inTx.locationId]?.name ?: "Невідома локація"
+                
+                result.add(HistoryBatchDisplayItem.TransferBatch(
+                    transactionIds = listOf(outTx.id, inTx.id),
+                    fromLocationName = fromLocationName,
+                    toLocationName = toLocationName,
+                    createdAt = outTx.createdAt,
+                    totalWeightKg = inTx.weightKg.abs(), // Use positive weight from TRANSFER_IN
+                    itemCount = 1, // One transfer operation
+                    isSynced = outTx.syncedAt != null && inTx.syncedAt != null
+                ))
+            } else {
+                // Orphan transfer (shouldn't happen normally, but handle gracefully)
+                txPair.forEach { tx ->
+                    val locationName = locationsMap[tx.locationId]?.name ?: "Невідома локація"
+                    val targetName = tx.transferLocationId?.let { locationsMap[it]?.name } ?: "?"
+                    
+                    val (from, to) = if (tx.type == TransactionType.TRANSFER_OUT) {
+                        locationName to targetName
+                    } else {
+                        targetName to locationName
+                    }
+                    
+                    result.add(HistoryBatchDisplayItem.TransferBatch(
+                        transactionIds = listOf(tx.id),
+                        fromLocationName = from,
+                        toLocationName = to,
+                        createdAt = tx.createdAt,
+                        totalWeightKg = tx.weightKg.abs(),
+                        itemCount = 1,
+                        isSynced = tx.syncedAt != null
+                    ))
+                }
+            }
+        }
+        
+        // Group other transactions (adjustments) by type, location, and hour
+        val virtualBatches = otherTransactions
             .groupBy { tx ->
-                // Group key: type category + location + hour-aligned timestamp
                 val hourStart = tx.createdAt.truncatedTo(ChronoUnit.HOURS)
                 val batchType = tx.type.toBatchType()
                 Triple(batchType, tx.locationId, hourStart)
             }
             .map { (key, txList) ->
                 val (batchType, locationId, hourStart) = key
-                // For adjustments, sum signed values; for others, sum absolute values
+                // For adjustments, sum signed values
                 val totalWeight = if (batchType == BatchType.ADJUSTMENT) {
                     txList.sumOf { it.weightKg }
                 } else {
@@ -318,6 +388,9 @@ class HistoryViewModel @Inject constructor(
                     isSynced = txList.all { it.syncedAt != null }
                 )
             }
+        
+        result.addAll(virtualBatches)
+        return result
     }
 
     private fun TransactionType.toBatchType(): BatchType = when (this) {
@@ -334,36 +407,17 @@ class HistoryViewModel @Inject constructor(
         BatchType.ADJUSTMENT -> setOf(TransactionType.ADJUSTMENT)
     }
 
-    private fun getDateRange(
-        preset: DateRangePreset,
-        customStart: Instant?,
-        customEnd: Instant?
-    ): Pair<Instant?, Instant?> {
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
+    /**
+     * Converts DateRange to Instant pair for filtering.
+     * Returns (null, null) if dateRange is null (meaning ALL time).
+     */
+    private fun getDateRangeInstants(dateRange: DateRange?): Pair<Instant?, Instant?> {
+        if (dateRange == null) return null to null
 
-        return when (preset) {
-            DateRangePreset.TODAY -> {
-                val start = today.atStartOfDay(zone).toInstant()
-                val end = today.atTime(LocalTime.MAX).atZone(zone).toInstant()
-                start to end
-            }
-            DateRangePreset.THIS_WEEK -> {
-                val weekFields = WeekFields.of(Locale.getDefault())
-                val firstDayOfWeek = today.with(weekFields.dayOfWeek(), 1)
-                val start = firstDayOfWeek.atStartOfDay(zone).toInstant()
-                val end = today.atTime(LocalTime.MAX).atZone(zone).toInstant()
-                start to end
-            }
-            DateRangePreset.THIS_MONTH -> {
-                val firstDayOfMonth = today.withDayOfMonth(1)
-                val start = firstDayOfMonth.atStartOfDay(zone).toInstant()
-                val end = today.atTime(LocalTime.MAX).atZone(zone).toInstant()
-                start to end
-            }
-            DateRangePreset.CUSTOM -> customStart to customEnd
-            DateRangePreset.ALL -> null to null
-        }
+        val zone = ZoneId.systemDefault()
+        val start = dateRange.startDate.atStartOfDay(zone).toInstant()
+        val end = dateRange.endDate.atTime(LocalTime.MAX).atZone(zone).toInstant()
+        return start to end
     }
 
     /**
@@ -418,6 +472,17 @@ class HistoryViewModel @Inject constructor(
                     Log.d("HistoryViewModel", "Found ${result.size} transactions for sale batch $uuid")
                     result
                 }
+                batchId.startsWith("transfer_") -> {
+                    // Transfer batch - get transaction IDs from the batch item
+                    // Only show TRANSFER_IN transactions (positive weight) to avoid duplicates
+                    val batch = _uiState.value.batches.find { it.id == batchId }
+                    if (batch is HistoryBatchDisplayItem.TransferBatch) {
+                        transactionRepository.getTransactionsByIds(batch.transactionIds)
+                            .filter { it.type == TransactionType.TRANSFER_IN }
+                    } else {
+                        emptyList()
+                    }
+                }
                 batchId.startsWith("virtual_") -> {
                     // Virtual batch - get transaction IDs from the batch item
                     val batch = _uiState.value.batches.find { it.id == batchId }
@@ -436,6 +501,7 @@ class HistoryViewModel @Inject constructor(
                     type = tx.type,
                     productName = tx.productId?.let { products[it]?.name } ?: "Невідомий товар",
                     locationName = tx.locationId?.let { locationsMap[it]?.name } ?: "Невідома локація",
+                    transferLocationName = tx.transferLocationId?.let { locationsMap[it]?.name },
                     weightKg = tx.weightKg,
                     totalAmount = tx.totalAmount,
                     createdAt = tx.createdAt,
@@ -490,21 +556,11 @@ class HistoryViewModel @Inject constructor(
         reloadWithFilter()
     }
 
-    fun setDateRangePreset(preset: DateRangePreset) {
-        _uiState.update { it.copy(dateRangePreset = preset) }
-        if (preset != DateRangePreset.CUSTOM) {
-            reloadWithFilter()
-        }
-    }
-
-    fun setCustomDateRange(start: Instant?, end: Instant?) {
-        _uiState.update {
-            it.copy(
-                dateRangePreset = DateRangePreset.CUSTOM,
-                customStartDate = start,
-                customEndDate = end
-            )
-        }
+    /**
+     * Sets the date range filter. Pass null to show all dates.
+     */
+    fun setDateRange(dateRange: DateRange?) {
+        _uiState.update { it.copy(dateRange = dateRange) }
         reloadWithFilter()
     }
 
@@ -527,9 +583,7 @@ class HistoryViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedTypes = emptySet(),
-                dateRangePreset = DateRangePreset.ALL,
-                customStartDate = null,
-                customEndDate = null,
+                dateRange = null,
                 selectedLocationId = null,
                 searchQuery = ""
             )
@@ -562,6 +616,7 @@ class HistoryViewModel @Inject constructor(
                     BatchType.TRANSFER -> { /* Transfers can't be voided */ }
                     BatchType.ADJUSTMENT -> { /* Adjustments can't be voided - they are individual transactions */ }
                 }
+                _uiState.update { it.copy(successMessage = "✅ Партію анульовано") }
                 reloadWithFilter()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Помилка скасування") }
@@ -571,6 +626,10 @@ class HistoryViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun dismissSuccess() {
+        _uiState.update { it.copy(successMessage = null) }
     }
 
     companion object {

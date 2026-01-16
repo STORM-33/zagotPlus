@@ -1,34 +1,41 @@
 package com.zagot.zagotplus.ui.screens.reports
 
-import android.content.Context
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,11 +51,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import java.math.BigDecimal
@@ -67,55 +78,12 @@ fun ReportsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
-    var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             snackbarHostState.showSnackbar(error)
             viewModel.dismissError()
-        }
-    }
-
-    LaunchedEffect(uiState.copySuccess) {
-        if (uiState.copySuccess) {
-            snackbarHostState.showSnackbar("Скопійовано в буфер обміну")
-            viewModel.dismissCopySuccess()
-        }
-    }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.selectedDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val date = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        viewModel.selectDate(date)
-                    }
-                    showDatePicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Скасувати")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 
@@ -128,17 +96,6 @@ fun ReportsScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
                     }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.copyReportToClipboard() }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = "Копіювати")
-                    }
-                    IconButton(onClick = {
-                        val intent = viewModel.createShareIntent()
-                        context.startActivity(intent)
-                    }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Поділитися")
-                    }
                 }
             )
         },
@@ -149,30 +106,54 @@ fun ReportsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Date selector
-            OutlinedCard(
+            // Date range selector (with "all time" option)
+            DateRangeSelector(
+                dateRange = uiState.dateRange,
+                onDateRangeChange = { viewModel.setDateRange(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-                    .clickable { showDatePicker = true }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            // Summary panels
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = dateFormatter.format(uiState.selectedDate),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Icon(
-                        imageVector = Icons.Filled.DateRange,
-                        contentDescription = "Вибрати дату"
-                    )
-                }
+                SummaryPanel(
+                    title = "Витрати",
+                    amount = uiState.totalSpendings,
+                    decimalFormat = decimalFormat,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryPanel(
+                    title = "Прибуток",
+                    amount = uiState.totalEarnings,
+                    decimalFormat = decimalFormat,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f)
+                )
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Location selector (scrollable chips)
+            if (uiState.locations.isNotEmpty()) {
+                LocationSelector(
+                    locations = uiState.locations,
+                    selectedLocationId = uiState.selectedLocationId,
+                    onLocationSelect = { viewModel.selectLocation(it) },
+                    onTotalSelect = { viewModel.selectTotalView() },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Content
             when {
@@ -192,98 +173,35 @@ fun ReportsScreen(
                         EmptyState(
                             icon = EmptyStateIcons.Transactions,
                             title = "Немає даних",
-                            description = "За ${dateFormatter.format(uiState.selectedDate)} транзакцій не знайдено"
+                            description = "За вибраний період закупівель не знайдено"
+                        )
+                    }
+                }
+                uiState.productItems.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EmptyState(
+                            icon = EmptyStateIcons.Products,
+                            title = "Немає закупівель",
+                            description = "За вибраний період товарів не закуповували"
                         )
                     }
                 }
                 else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 16.dp,
-                            vertical = 8.dp
-                        )
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Summary cards
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                SummaryCard(
-                                    title = "Закупки",
-                                    weightKg = uiState.purchaseSummary.totalWeightKg,
-                                    amount = uiState.purchaseSummary.totalAmount,
-                                    decimalFormat = decimalFormat,
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                SummaryCard(
-                                    title = "Продажі",
-                                    weightKg = uiState.saleSummary.totalWeightKg,
-                                    amount = uiState.saleSummary.totalAmount,
-                                    decimalFormat = decimalFormat,
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                        items(uiState.productItems, key = { it.productId }) { item ->
+                            ProductReportCard(
+                                item = item,
+                                decimalFormat = decimalFormat
+                            )
                         }
-
-                        // Product breakdown
-                        if (uiState.productBreakdown.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "По товарах",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                            items(uiState.productBreakdown) { item ->
-                                ProductBreakdownRow(
-                                    item = item,
-                                    decimalFormat = decimalFormat
-                                )
-                            }
-                        }
-
-                        // Location breakdown
-                        if (uiState.locationBreakdown.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "По точках",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                            items(uiState.locationBreakdown) { item ->
-                                LocationBreakdownRow(
-                                    item = item,
-                                    decimalFormat = decimalFormat
-                                )
-                            }
-                        }
-
-                        // Transfers
-                        if (uiState.transferSummary.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "Переміщення",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                            items(uiState.transferSummary) { transfer ->
-                                TransferRow(
-                                    transfer = transfer,
-                                    decimalFormat = decimalFormat
-                                )
-                            }
-                        }
-
+                        
                         item { Spacer(modifier = Modifier.height(16.dp)) }
                     }
                 }
@@ -293,12 +211,12 @@ fun ReportsScreen(
 }
 
 @Composable
-private fun SummaryCard(
+private fun SummaryPanel(
     title: String,
-    weightKg: BigDecimal,
     amount: BigDecimal,
     decimalFormat: DecimalFormat,
     containerColor: androidx.compose.ui.graphics.Color,
+    contentColor: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -310,174 +228,286 @@ private fun SummaryCard(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "${decimalFormat.format(weightKg)} кг",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "${decimalFormat.format(amount)} грн",
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProductBreakdownRow(
-    item: ProductBreakdownItem,
-    decimalFormat: DecimalFormat,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp)
-        ) {
-            Text(
-                text = item.productName,
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
+                color = contentColor
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                if (item.purchaseWeightKg > BigDecimal.ZERO) {
-                    Column {
-                        Text(
-                            text = "Закупка",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.purchaseWeightKg)} кг",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.purchaseAmount)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (item.saleWeightKg > BigDecimal.ZERO) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Продаж",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.saleWeightKg)} кг",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.saleAmount)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationBreakdownRow(
-    item: LocationBreakdownItem,
-    decimalFormat: DecimalFormat,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp)
-        ) {
             Text(
-                text = item.locationName,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
+                text = "₴${decimalFormat.format(amount)}",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = contentColor
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                if (item.purchaseWeightKg > BigDecimal.ZERO) {
-                    Column {
-                        Text(
-                            text = "Закупка",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.purchaseWeightKg)} кг",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.purchaseAmount)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (item.saleWeightKg > BigDecimal.ZERO) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Продаж",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.saleWeightKg)} кг",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${decimalFormat.format(item.saleAmount)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun TransferRow(
-    transfer: TransferSummaryItem,
+private fun LocationSelector(
+    locations: List<com.zagot.zagotplus.domain.model.Location>,
+    selectedLocationId: java.util.UUID?,
+    onLocationSelect: (java.util.UUID) -> Unit,
+    onTotalSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Individual locations
+        locations.forEach { location ->
+            FilterChip(
+                selected = selectedLocationId == location.id,
+                onClick = { onLocationSelect(location.id) },
+                label = { Text(location.name) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+        
+        // "Всього" option at the end
+        FilterChip(
+            selected = selectedLocationId == null,
+            onClick = { onTotalSelect() },
+            label = { Text("Всього") },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        )
+    }
+}
+
+@Composable
+private fun ProductReportCard(
+    item: ProductReportItem,
     decimalFormat: DecimalFormat,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            // Product image
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                if (item.imageUri != null) {
+                    AsyncImage(
+                        model = item.imageUri,
+                        contentDescription = item.productName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Image,
+                        contentDescription = "Фото товару",
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Product info
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${transfer.fromLocationName} → ${transfer.toLocationName}",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = item.productName,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = transfer.productName,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "${decimalFormat.format(item.totalWeightKg)} кг",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            // Amount spent
             Text(
-                text = "${decimalFormat.format(transfer.weightKg)} кг",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                text = "₴${decimalFormat.format(item.totalSpent)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateRangeSelector(
+    dateRange: DateRange?,
+    onDateRangeChange: (DateRange?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var customStartDate by remember { mutableStateOf(LocalDate.now()) }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM") }
+
+    val presetOptions = listOf(
+        null to "Весь час",
+        DateRangePreset.TODAY to "Сьогодні",
+        DateRangePreset.YESTERDAY to "Вчора",
+        DateRangePreset.LAST_7_DAYS to "7 днів",
+        DateRangePreset.LAST_30_DAYS to "30 днів",
+        DateRangePreset.THIS_MONTH to "Цей місяць",
+        DateRangePreset.LAST_MONTH to "Минулий місяць"
+    )
+
+    val displayText = when {
+        dateRange == null -> "Весь час"
+        dateRange.preset == DateRangePreset.CUSTOM -> {
+            if (dateRange.startDate == dateRange.endDate) {
+                dateRange.startDate.format(dateFormatter)
+            } else {
+                "${dateRange.startDate.format(dateFormatter)} - ${dateRange.endDate.format(dateFormatter)}"
+            }
+        }
+        else -> presetOptions.find { it.first == dateRange.preset }?.second ?: dateRange.preset.label
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Період") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            presetOptions.forEach { (preset, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        if (preset == null) {
+                            onDateRangeChange(null)
+                        } else {
+                            onDateRangeChange(DateRange.fromPreset(preset))
+                        }
+                        expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Вибрати період...") },
+                onClick = {
+                    expanded = false
+                    customStartDate = dateRange?.startDate ?: LocalDate.now()
+                    showStartDatePicker = true
+                }
+            )
+        }
+    }
+
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = customStartDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val date = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        customStartDate = date
+                        showStartDatePicker = false
+                        showEndDatePicker = true
+                    }
+                }) {
+                    Text("Далі")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) {
+                    Text("Скасувати")
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = { Text("Початкова дата", modifier = Modifier.padding(16.dp)) }
+            )
+        }
+    }
+
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = (dateRange?.endDate ?: LocalDate.now())
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val endDate = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        val finalEndDate = if (endDate.isBefore(customStartDate)) customStartDate else endDate
+                        onDateRangeChange(
+                            DateRange(
+                                startDate = customStartDate,
+                                endDate = finalEndDate,
+                                preset = DateRangePreset.CUSTOM
+                            )
+                        )
+                        showEndDatePicker = false
+                    }
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Скасувати")
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = { Text("Кінцева дата", modifier = Modifier.padding(16.dp)) }
             )
         }
     }

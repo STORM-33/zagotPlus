@@ -42,6 +42,7 @@ fun PurchaseSummaryOverlay(
     totalWeight: BigDecimal,
     totalAmount: BigDecimal,
     isSaving: Boolean,
+    isEditing: Boolean = false,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -167,7 +168,7 @@ fun PurchaseSummaryOverlay(
                         )
                     ) {
                         Text(
-                            text = "ПІДТВЕРДИТИ ЗАКУПКУ",
+                            text = if (isEditing) "ПІДТВЕРДИТИ ЗМІНИ" else "ПІДТВЕРДИТИ ЗАКУПКУ",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

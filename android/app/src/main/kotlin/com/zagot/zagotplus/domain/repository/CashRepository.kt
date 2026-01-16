@@ -58,6 +58,19 @@ interface CashRepository {
     suspend fun deposit(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun withdraw(locationId: UUID?, amount: BigDecimal, notes: String? = null)
     suspend fun payment(locationId: UUID?, amount: BigDecimal, categoryId: UUID?, notes: String? = null)
+    
+    /**
+     * Transfer cash from source location to destination location.
+     * Creates a withdrawal at source and deposit at destination.
+     */
+    suspend fun transfer(sourceLocationId: UUID, destinationLocationId: UUID, amount: BigDecimal, notes: String? = null)
+    
+    /**
+     * Get today's total deposits (additions) for a location.
+     * Used to determine if negative daily change is due to transfers.
+     */
+    fun getDailyDeposits(locationId: UUID, date: LocalDate): Flow<BigDecimal>
+    fun getDailyDepositsGlobal(date: LocalDate): Flow<BigDecimal>
 
     // Update operations
     suspend fun getOperationById(id: UUID): CashOperation?

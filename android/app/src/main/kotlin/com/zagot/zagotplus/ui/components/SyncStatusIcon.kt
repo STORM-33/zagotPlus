@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.components
 
+import android.util.Log
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -16,20 +17,46 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import com.zagot.zagotplus.sync.SyncStatus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+
+private const val TAG = "SyncStatusIcon"
 
 @Composable
 fun SyncStatusIcon(
     syncStatusFlow: Flow<SyncStatus>,
+    isOnline: Boolean,
     onSyncClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val syncStatus by syncStatusFlow.collectAsState(initial = SyncStatus.idle())
+
+    // Track if we should show success checkmark (temporary state)
+    var showSuccessCheckmark by remember { mutableStateOf(false) }
+
+    // Log connectivity changes
+    LaunchedEffect(isOnline) {
+        Log.d(TAG, "isOnline changed: $isOnline")
+    }
+
+    // When sync status changes to SUCCESS, show checkmark for 2 seconds then hide
+    LaunchedEffect(syncStatus.state) {
+        Log.d(TAG, "syncStatus changed: ${syncStatus.state}")
+        if (syncStatus.state == SyncStatus.State.SUCCESS) {
+            showSuccessCheckmark = true
+            delay(2000)
+            showSuccessCheckmark = false
+        }
+    }
     
     val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
     val rotation by infiniteTransition.animateFloat(
@@ -42,9 +69,35 @@ fun SyncStatusIcon(
         label = "sync_rotation"
     )
     
-    IconButton(onClick = onSyncClick, modifier = modifier) {
-        when (syncStatus.state) {
-            SyncStatus.State.SYNCING -> {
+    // When offline, disable the button
+    val isEnabled = isOnline && syncStatus.state != SyncStatus.State.SYNCING
+
+    // Log which icon will be shown
+    val iconState = when {
+        !isOnline -> "OFFLINE"
+        syncStatus.state == SyncStatus.State.SYNCING -> "SYNCING"
+        syncStatus.state == SyncStatus.State.ERROR -> "ERROR"
+        syncStatus.state == SyncStatus.State.WARNING -> "WARNING"
+        showSuccessCheckmark -> "SUCCESS_CHECKMARK"
+        else -> "IDLE"
+    }
+    Log.d(TAG, "Rendering icon: $iconState (isOnline=$isOnline, syncState=${syncStatus.state}, showSuccessCheckmark=$showSuccessCheckmark)")
+
+    IconButton(
+        onClick = onSyncClick,
+        modifier = modifier,
+        enabled = isEnabled
+    ) {
+        when {
+            // Offline state takes priority - show crossed-out grayed cloud
+            !isOnline -> {
+                Icon(
+                    imageVector = Icons.Filled.CloudOff,
+                    contentDescription = "Немає з'єднання",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+            syncStatus.state == SyncStatus.State.SYNCING -> {
                 Icon(
                     imageVector = Icons.Filled.Sync,
                     contentDescription = "Синхронізація...",
@@ -52,34 +105,35 @@ fun SyncStatusIcon(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
-            SyncStatus.State.ERROR -> {
+            syncStatus.state == SyncStatus.State.ERROR -> {
                 Icon(
                     imageVector = Icons.Filled.CloudOff,
                     contentDescription = "Помилка синхронізації",
                     tint = MaterialTheme.colorScheme.error
                 )
             }
-            SyncStatus.State.WARNING -> {
+            syncStatus.state == SyncStatus.State.WARNING -> {
                 Icon(
                     imageVector = Icons.Filled.Warning,
                     contentDescription = syncStatus.warningMessage ?: "Часткова синхронізація",
                     tint = MaterialTheme.colorScheme.tertiary
                 )
             }
-            SyncStatus.State.IDLE -> {
-                if (syncStatus.lastSyncTime != null) {
-                    Icon(
-                        imageVector = Icons.Filled.CloudDone,
-                        contentDescription = "Синхронізовано",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Cloud,
-                        contentDescription = "Не синхронізовано",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            // SUCCESS state or IDLE with recent success
+            showSuccessCheckmark -> {
+                Icon(
+                    imageVector = Icons.Filled.CloudDone,
+                    contentDescription = "Синхронізовано",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            // IDLE state - just show cloud
+            else -> {
+                Icon(
+                    imageVector = Icons.Filled.Cloud,
+                    contentDescription = if (syncStatus.lastSyncTime != null) "Синхронізовано" else "Не синхронізовано",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

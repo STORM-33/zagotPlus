@@ -123,6 +123,7 @@ fun SettingsScreen(
                                         "Синхронізовано"
                                     }
                                 }
+                                SyncStatus.State.SUCCESS -> "Синхронізовано"
                                 SyncStatus.State.SYNCING -> "Синхронізація..."
                                 SyncStatus.State.WARNING -> uiState.syncStatus.warningMessage ?: "Часткова синхронізація"
                                 SyncStatus.State.ERROR -> "Помилка"
@@ -263,7 +264,7 @@ fun SettingsScreen(
                                     Text(
                                         text = when (location.type) {
                                             com.zagot.zagotplus.domain.model.LocationType.KIOSK -> "Кіоск"
-                                            com.zagot.zagotplus.domain.model.LocationType.MOBILE -> "Мобільний"
+                                            com.zagot.zagotplus.domain.model.LocationType.MOBILE -> "Склад"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant

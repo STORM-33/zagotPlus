@@ -1,16 +1,19 @@
 package com.zagot.zagotplus.ui.screens.reports
 
-import android.content.ClipboardManager
-import android.content.Context
+import com.zagot.zagotplus.domain.model.CashHistoryItem
+import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -28,7 +31,6 @@ import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -37,7 +39,7 @@ class ReportsViewModelTest {
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
-    private lateinit var context: Context
+    private lateinit var cashRepository: CashRepository
     private lateinit var viewModel: ReportsViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -47,7 +49,8 @@ class ReportsViewModelTest {
         defaultBuyPrice = BigDecimal("45.00"),
         defaultSellPrice = BigDecimal("50.00"),
         isActive = true,
-        createdAt = Instant.now()
+        createdAt = Instant.now(),
+        imageUri = "content://image/1"
     )
 
     private val testProduct2 = Product(
@@ -68,7 +71,7 @@ class ReportsViewModelTest {
 
     private val testLocation2 = Location(
         id = UUID.randomUUID(),
-        name = "Мобільний",
+        name = "Склад",
         type = LocationType.MOBILE,
         createdAt = Instant.now()
     )
@@ -105,20 +108,26 @@ class ReportsViewModelTest {
         syncedAt = null
     )
 
-    private val transferOutTransaction = Transaction(
-        id = UUID.randomUUID(),
-        localId = "transfer-1",
-        locationId = testLocation.id,
-        type = TransactionType.TRANSFER_OUT,
-        transferLocationId = testLocation2.id,
-        productId = testProduct.id,
-        weightKg = BigDecimal("3.00"),
-        pricePerKg = null,
-        totalAmount = null,
-        notes = null,
-        deviceId = "test-device",
-        createdAt = Instant.now(),
-        syncedAt = null
+    private val paymentHistoryItem = CashHistoryItem(
+        id = UUID.randomUUID().toString(),
+        type = CashHistoryItemType.PAYMENT,
+        amount = BigDecimal("100.00"),
+        notes = "Test payment",
+        categoryName = null,
+        itemCount = null,
+        weightKg = null,
+        createdAt = Instant.now()
+    )
+
+    private val withdrawalHistoryItem = CashHistoryItem(
+        id = UUID.randomUUID().toString(),
+        type = CashHistoryItemType.WITHDRAWAL,
+        amount = BigDecimal("50.00"),
+        notes = "Test withdrawal",
+        categoryName = null,
+        itemCount = null,
+        weightKg = null,
+        createdAt = Instant.now()
     )
 
     @Before
@@ -127,29 +136,40 @@ class ReportsViewModelTest {
         transactionRepository = mockk()
         productRepository = mockk()
         locationRepository = mockk()
-        context = mockk(relaxed = true)
-
-        val clipboardManager = mockk<ClipboardManager>(relaxed = true)
-        every { context.getSystemService(Context.CLIPBOARD_SERVICE) } returns clipboardManager
+        cashRepository = mockk()
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct, testProduct2))
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation, testLocation2))
         every { transactionRepository.getTotalTransactionCount() } returns flowOf(3)
         coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns 
-            listOf(purchaseTransaction, saleTransaction, transferOutTransaction)
+            listOf(purchaseTransaction, saleTransaction)
+        coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns 
+            listOf(paymentHistoryItem, withdrawalHistoryItem)
+        coEvery { cashRepository.getCashHistoryByLocationPaged(any(), any(), any()) } returns 
+            listOf(paymentHistoryItem)
     }
 
     private fun createViewModel(): ReportsViewModel {
-        return ReportsViewModel(transactionRepository, productRepository, locationRepository, context)
+        return ReportsViewModel(transactionRepository, productRepository, locationRepository, cashRepository)
     }
 
     @Test
-    fun `initial state has today's date selected`() = runTest {
+    fun `initial state has all time date range (null)`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(LocalDate.now(), state.selectedDate)
+        assertNull(state.dateRange)
+    }
+
+    @Test
+    fun `initial state shows all locations (totals view)`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.selectedLocationId)
+        assertTrue(state.isTotalsView)
     }
 
     @Test
@@ -163,7 +183,7 @@ class ReportsViewModelTest {
     }
 
     @Test
-    fun `selectDate changes date and reloads data`() = runTest {
+    fun `setDateRange changes date range and reloads data`() = runTest {
         val filterSlot = slot<TransactionFilter>()
         coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns 
             listOf(purchaseTransaction)
@@ -171,133 +191,151 @@ class ReportsViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        val yesterday = LocalDate.now().minusDays(1)
-        viewModel.selectDate(yesterday)
+        val newDateRange = DateRange.last7Days()
+        viewModel.setDateRange(newDateRange)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(yesterday, state.selectedDate)
+        assertNotNull(state.dateRange)
+        assertEquals(newDateRange.startDate, state.dateRange!!.startDate)
+        assertEquals(newDateRange.endDate, state.dateRange!!.endDate)
         
-        // Verify the filter uses correct date range
         val capturedFilter = filterSlot.captured
         assertNotNull(capturedFilter.startDate)
         assertNotNull(capturedFilter.endDate)
     }
 
     @Test
-    fun `selectDate same date does nothing`() = runTest {
+    fun `setDateRange to null shows all time`() = runTest {
+        val filterSlot = slot<TransactionFilter>()
+        coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns 
+            listOf(purchaseTransaction)
+
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        val today = viewModel.uiState.value.selectedDate
-        viewModel.selectDate(today)
+        // First set a date range
+        viewModel.setDateRange(DateRange.today())
+        advanceUntilIdle()
+        assertNotNull(viewModel.uiState.value.dateRange)
+
+        // Then set to null (all time)
+        viewModel.setDateRange(null)
         advanceUntilIdle()
 
-        // Should still be same date, no additional calls
-        assertEquals(today, viewModel.uiState.value.selectedDate)
+        val state = viewModel.uiState.value
+        assertNull(state.dateRange)
+        
+        // Filter should have null dates for all time
+        val capturedFilter = filterSlot.captured
+        assertNull(capturedFilter.startDate)
+        assertNull(capturedFilter.endDate)
     }
 
     @Test
-    fun `purchase summary calculates totals correctly`() = runTest {
+    fun `selectLocation filters by location`() = runTest {
+        val filterSlot = slot<TransactionFilter>()
+        coEvery { transactionRepository.getFilteredTransactions(capture(filterSlot), any(), any()) } returns 
+            listOf(purchaseTransaction)
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocation.id)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(testLocation.id, state.selectedLocationId)
+        assertFalse(state.isTotalsView)
+        
+        val capturedFilter = filterSlot.captured
+        assertEquals(testLocation.id, capturedFilter.locationId)
+    }
+
+    @Test
+    fun `selectTotalView clears location filter`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocation.id)
+        advanceUntilIdle()
+        
+        viewModel.selectTotalView()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.selectedLocationId)
+        assertTrue(state.isTotalsView)
+    }
+
+    @Test
+    fun `earnings calculated from sales correctly`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(BigDecimal("10.00"), state.purchaseSummary.totalWeightKg)
-        assertEquals(BigDecimal("450.00"), state.purchaseSummary.totalAmount)
+        assertEquals(BigDecimal("250.00"), state.totalEarnings)
     }
 
     @Test
-    fun `sale summary calculates totals correctly`() = runTest {
+    fun `spendings include purchases payments and withdrawals`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(BigDecimal("5.00"), state.saleSummary.totalWeightKg)
-        assertEquals(BigDecimal("250.00"), state.saleSummary.totalAmount)
+        // Purchases: 450 + Payments: 100 + Withdrawals: 50 = 600
+        assertEquals(BigDecimal("600.00"), state.totalSpendings)
     }
 
     @Test
-    fun `product breakdown aggregates by product`() = runTest {
+    fun `product items sorted by spending descending`() = runTest {
+        val purchase1 = purchaseTransaction.copy(
+            id = UUID.randomUUID(),
+            productId = testProduct.id,
+            totalAmount = BigDecimal("450.00")
+        )
+        val purchase2 = purchaseTransaction.copy(
+            id = UUID.randomUUID(),
+            productId = testProduct2.id,
+            totalAmount = BigDecimal("600.00")
+        )
+        
+        coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns 
+            listOf(purchase1, purchase2)
+
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.productBreakdown.size)
-
-        val productItem = state.productBreakdown.first()
-        assertEquals(testProduct.id, productItem.productId)
-        assertEquals(testProduct.name, productItem.productName)
-        assertEquals(BigDecimal("10.00"), productItem.purchaseWeightKg)
-        assertEquals(BigDecimal("450.00"), productItem.purchaseAmount)
-        assertEquals(BigDecimal("5.00"), productItem.saleWeightKg)
-        assertEquals(BigDecimal("250.00"), productItem.saleAmount)
+        assertEquals(2, state.productItems.size)
+        // Product2 has higher spending, should be first
+        assertEquals(testProduct2.id, state.productItems[0].productId)
+        assertEquals(testProduct.id, state.productItems[1].productId)
     }
 
     @Test
-    fun `location breakdown aggregates by location`() = runTest {
+    fun `product items include image uri`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.locationBreakdown.size)
-
-        val locationItem = state.locationBreakdown.first()
-        assertEquals(testLocation.id, locationItem.locationId)
-        assertEquals(testLocation.name, locationItem.locationName)
-        assertEquals(BigDecimal("10.00"), locationItem.purchaseWeightKg)
-        assertEquals(BigDecimal("5.00"), locationItem.saleWeightKg)
-    }
-
-    @Test
-    fun `transfer summary shows transfers`() = runTest {
-        viewModel = createViewModel()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(1, state.transferSummary.size)
-
-        val transfer = state.transferSummary.first()
-        assertEquals(testLocation.name, transfer.fromLocationName)
-        assertEquals(testLocation2.name, transfer.toLocationName)
-        assertEquals(testProduct.name, transfer.productName)
-        assertEquals(BigDecimal("3.00"), transfer.weightKg)
+        val productItem = state.productItems.find { it.productId == testProduct.id }
+        assertNotNull(productItem)
+        assertEquals("content://image/1", productItem?.imageUri)
     }
 
     @Test
     fun `empty transactions shows hasData false`() = runTest {
         coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns emptyList()
+        coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns emptyList()
 
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertFalse(state.hasData)
-        assertEquals(BigDecimal.ZERO, state.purchaseSummary.totalWeightKg)
-        assertEquals(BigDecimal.ZERO, state.saleSummary.totalAmount)
-    }
-
-    @Test
-    fun `copyReportToClipboard sets copySuccess`() = runTest {
-        // Note: The actual clipboard interaction can't be unit tested without Robolectric
-        // since ClipData.newPlainText is an Android static method.
-        // This test is skipped - the functionality is integration tested.
-        viewModel = createViewModel()
-        advanceUntilIdle()
-
-        // Verify the state is accessible and report text can be generated
-        assertTrue(viewModel.uiState.value.hasData)
-    }
-
-    @Test
-    fun `dismissCopySuccess clears flag`() = runTest {
-        viewModel = createViewModel()
-        advanceUntilIdle()
-
-        // Manually set the flag since we can't call copyReportToClipboard
-        // Test that dismissCopySuccess works
-        viewModel.dismissCopySuccess()
-        assertFalse(viewModel.uiState.value.copySuccess)
+        assertEquals(BigDecimal.ZERO, state.totalSpendings)
+        assertEquals(BigDecimal.ZERO, state.totalEarnings)
     }
 
     @Test
@@ -313,5 +351,14 @@ class ReportsViewModelTest {
         assertNull(viewModel.uiState.value.error)
     }
 
-    // Note: createShareIntent test removed - requires Robolectric for Intent mocking
+    @Test
+    fun `locations list is populated`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(2, state.locations.size)
+        assertTrue(state.locations.any { it.id == testLocation.id })
+        assertTrue(state.locations.any { it.id == testLocation2.id })
+    }
 }

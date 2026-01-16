@@ -1,14 +1,18 @@
 package com.zagot.zagotplus.ui.screens.cash
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
+import com.zagot.zagotplus.domain.model.DayCashGroup
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
 
@@ -29,6 +34,7 @@ enum class CashDialogType {
     DEPOSIT,
     WITHDRAW,
     PAYMENT,
+    TRANSFER,
     CATEGORIES,
     EDIT_DEPOSIT,
     EDIT_WITHDRAW,
@@ -41,7 +47,10 @@ enum class CashDialogType {
 data class CashUiState(
     val balance: BigDecimal = BigDecimal.ZERO,
     val dailyChange: BigDecimal = BigDecimal.ZERO,
+    val dailyAddition: BigDecimal = BigDecimal.ZERO, // Today's deposits only (for color logic)
     val historyItems: List<CashHistoryItem> = emptyList(),
+    val dayGroups: List<DayCashGroup> = emptyList(), // Grouped by day for collapsible panels
+    val expandedDays: Set<LocalDate> = emptySet(), // Which days are expanded
     val categories: List<ExpenseCategory> = emptyList(),
     val locations: List<Location> = emptyList(),
     val selectedLocationId: UUID? = null, // null = totals view (all locations)
@@ -50,11 +59,13 @@ data class CashUiState(
     val dialogAmount: String = "",
     val dialogNotes: String = "",
     val dialogCategoryId: UUID? = null,
+    val dialogTransferDestinationId: UUID? = null, // For transfer dialog
     val newCategoryName: String = "",
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val isSaving: Boolean = false,
     val error: String? = null,
+    val successMessage: String? = null,
     val hasMoreItems: Boolean = true,
     val totalItemsCount: Int = 0,
     val editingOperationId: UUID? = null,
@@ -69,11 +80,19 @@ data class CashUiState(
     val canConfirmPayment: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true
 
+    val canConfirmTransfer: Boolean
+        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true 
+            && dialogTransferDestinationId != null
+
     val isTotalsView: Boolean
         get() = selectedLocationId == null
 
     val selectedLocationName: String?
         get() = selectedLocationId?.let { id -> locations.find { it.id == id }?.name }
+    
+    /** Locations available as transfer destinations (excludes current location) */
+    val transferDestinations: List<Location>
+        get() = locations.filter { it.id != selectedLocationId }
 }
 
 @HiltViewModel
@@ -85,12 +104,17 @@ class CashViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CashUiState())
     val uiState: StateFlow<CashUiState> = _uiState.asStateFlow()
 
+    /** Job for balance/categories flow collection - cancelled when location changes */
+    private var balanceCollectionJob: Job? = null
+
     companion object {
+        private const val TAG = "CashViewModel"
         private const val PAGE_SIZE = 20
         private val MAX_AMOUNT = java.math.BigDecimal("999999999.99")
     }
 
     init {
+        Log.d(TAG, "CashViewModel init")
         loadData()
     }
 
@@ -101,7 +125,7 @@ class CashViewModel @Inject constructor(
                 // Load locations first
                 val locations = locationRepository.getAllLocations().first()
                 _uiState.update { it.copy(locations = locations) }
-                
+
                 // Load history and balance based on selected location
                 loadHistoryAndBalance()
             } catch (e: Exception) {
@@ -116,64 +140,62 @@ class CashViewModel @Inject constructor(
     }
 
     private fun loadHistoryAndBalance() {
+        // Cancel any existing balance collection job to prevent race conditions
+        balanceCollectionJob?.cancel()
+
+        val selectedLocationId = _uiState.value.selectedLocationId
+        Log.d(TAG, "loadHistoryAndBalance called, selectedLocationId=$selectedLocationId")
+
         viewModelScope.launch {
-            val state = _uiState.value
-            val selectedLocationId = state.selectedLocationId
-            
             try {
-                // Load initial page of history items based on location
+                // Load history items (one-time fetch)
                 val totalCount: Int
-                val initialItems: List<CashHistoryItem>
-                
+                val items: List<CashHistoryItem>
+
                 if (selectedLocationId == null) {
-                    // Totals view - all locations
+                    // Totals view - all locations, transfers are excluded in SQL query
                     totalCount = cashRepository.getTotalHistoryCount()
-                    initialItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
+                    Log.d(TAG, "TOTALS VIEW: totalCount=$totalCount")
+                    items = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
+                    Log.d(TAG, "TOTALS VIEW: fetched ${items.size} items from repository")
+
+                    // Log each item for debugging
+                    items.forEachIndexed { index, item ->
+                        Log.d(TAG, "  Item[$index]: id=${item.id}, type=${item.type}, amount=${item.amount}, " +
+                            "locationId=${item.locationId}, locationName=${item.locationName}, " +
+                            "batchCount=${item.batchCount}, isTransfer=${item.isTransfer}")
+                    }
+
+                    // Log purchase items specifically
+                    val purchaseItems = items.filter { it.type == CashHistoryItemType.PURCHASE }
+                    Log.d(TAG, "TOTALS VIEW: purchase items count=${purchaseItems.size}")
+                    purchaseItems.forEach { item ->
+                        Log.d(TAG, "  PURCHASE: id=${item.id}, amount=${item.amount}, batchCount=${item.batchCount}")
+                    }
                 } else {
-                    // Specific location
+                    // Specific location - show all including transfers
                     totalCount = cashRepository.getTotalHistoryCountByLocation(selectedLocationId)
-                    initialItems = cashRepository.getCashHistoryByLocationPaged(selectedLocationId, PAGE_SIZE, 0)
+                    items = cashRepository.getCashHistoryByLocationPaged(selectedLocationId, PAGE_SIZE, 0)
+                    Log.d(TAG, "LOCATION VIEW: locationId=$selectedLocationId, totalCount=$totalCount, fetched ${items.size} items")
                 }
-                
-                // Collect balance and categories as flows based on location
-                if (selectedLocationId == null) {
-                    combine(
-                        cashRepository.getTotalBalance(),
-                        cashRepository.getDailyChangeGlobal(LocalDate.now()),
-                        cashRepository.getActiveCategories()
-                    ) { balance, dailyChange, categories ->
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                balance = balance,
-                                dailyChange = dailyChange,
-                                historyItems = initialItems,
-                                categories = categories,
-                                isLoading = false,
-                                totalItemsCount = totalCount,
-                                hasMoreItems = initialItems.size < totalCount
-                            )
-                        }
-                    }.collect { }
-                } else {
-                    combine(
-                        cashRepository.getBalance(selectedLocationId),
-                        cashRepository.getDailyChange(selectedLocationId, LocalDate.now()),
-                        cashRepository.getActiveCategories()
-                    ) { balance, dailyChange, categories ->
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                balance = balance,
-                                dailyChange = dailyChange,
-                                historyItems = initialItems,
-                                categories = categories,
-                                isLoading = false,
-                                totalItemsCount = totalCount,
-                                hasMoreItems = initialItems.size < totalCount
-                            )
-                        }
-                    }.collect { }
+
+                // Group items by day
+                val dayGroups = groupItemsByDay(items)
+                Log.d(TAG, "Grouped into ${dayGroups.size} day groups")
+
+                // Update state with history items immediately
+                _uiState.update { currentState ->
+                    Log.d(TAG, "Updating state with ${items.size} history items")
+                    currentState.copy(
+                        historyItems = items,
+                        dayGroups = dayGroups,
+                        totalItemsCount = totalCount,
+                        hasMoreItems = items.size < totalCount,
+                        isLoading = false
+                    )
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading history", e)
                 _uiState.update {
                     it.copy(
                         error = e.message ?: "Помилка завантаження",
@@ -182,25 +204,101 @@ class CashViewModel @Inject constructor(
                 }
             }
         }
+
+        // Start balance/categories collection in a separate tracked job
+        balanceCollectionJob = viewModelScope.launch {
+            try {
+                if (selectedLocationId == null) {
+                    combine(
+                        cashRepository.getTotalBalance(),
+                        cashRepository.getDailyChangeGlobal(LocalDate.now()),
+                        cashRepository.getDailyDepositsGlobal(LocalDate.now()),
+                        cashRepository.getActiveCategories()
+                    ) { balance, dailyChange, dailyAddition, categories ->
+                        _uiState.update { currentState ->
+                            currentState.copy(
+                                balance = balance,
+                                dailyChange = dailyChange,
+                                dailyAddition = dailyAddition,
+                                categories = categories
+                            )
+                        }
+                    }.collect { }
+                } else {
+                    combine(
+                        cashRepository.getBalance(selectedLocationId),
+                        cashRepository.getDailyChange(selectedLocationId, LocalDate.now()),
+                        cashRepository.getDailyDeposits(selectedLocationId, LocalDate.now()),
+                        cashRepository.getActiveCategories()
+                    ) { balance, dailyChange, dailyAddition, categories ->
+                        _uiState.update { currentState ->
+                            currentState.copy(
+                                balance = balance,
+                                dailyChange = dailyChange,
+                                dailyAddition = dailyAddition,
+                                categories = categories
+                            )
+                        }
+                    }.collect { }
+                }
+            } catch (e: CancellationException) {
+                // Expected when switching locations, don't treat as error
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message ?: "Помилка завантаження балансу") }
+            }
+        }
+    }
+    
+    /** Group history items by day for collapsible panels */
+    private fun groupItemsByDay(items: List<CashHistoryItem>): List<DayCashGroup> {
+        val zone = ZoneId.systemDefault()
+        return items
+            .groupBy { it.createdAt.atZone(zone).toLocalDate() }
+            .map { (date, dayItems) ->
+                DayCashGroup(
+                    date = date,
+                    items = dayItems,
+                    totalAmount = dayItems.sumOf { it.signedAmount }
+                )
+            }
+            .sortedByDescending { it.date }
+    }
+    
+    /** Toggle a day's expanded state */
+    fun toggleDayExpansion(date: LocalDate) {
+        _uiState.update { state ->
+            val newExpanded = if (date in state.expandedDays) {
+                state.expandedDays - date
+            } else {
+                state.expandedDays + date
+            }
+            state.copy(expandedDays = newExpanded)
+        }
     }
 
     fun loadMoreOperations() {
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMoreItems) return
+        Log.d(TAG, "loadMoreOperations called, offset=${state.historyItems.size}")
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMore = true) }
             try {
                 val offset = state.historyItems.size
                 val moreItems = if (state.selectedLocationId == null) {
+                    // Totals view - transfers are excluded in SQL query
                     cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
                 } else {
                     cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, PAGE_SIZE, offset)
                 }
+                Log.d(TAG, "loadMoreOperations: loaded ${moreItems.size} more items")
                 _uiState.update { currentState ->
                     val newItems = currentState.historyItems + moreItems
+                    val newDayGroups = groupItemsByDay(newItems)
                     currentState.copy(
                         historyItems = newItems,
+                        dayGroups = newDayGroups,
                         isLoadingMore = false,
                         hasMoreItems = newItems.size < currentState.totalItemsCount
                     )
@@ -217,24 +315,32 @@ class CashViewModel @Inject constructor(
     }
 
     fun refreshOperations() {
+        Log.d(TAG, "refreshOperations called")
         viewModelScope.launch {
             try {
                 val state = _uiState.value
                 val totalCount: Int
                 val items: List<CashHistoryItem>
                 val currentCount = state.historyItems.size.coerceAtLeast(PAGE_SIZE)
-                
+                Log.d(TAG, "refreshOperations: selectedLocationId=${state.selectedLocationId}, currentCount=$currentCount")
+
                 if (state.selectedLocationId == null) {
                     totalCount = cashRepository.getTotalHistoryCount()
+                    // Totals view - transfers are excluded in SQL query
                     items = cashRepository.getCashHistoryPaged(currentCount, 0)
+                    Log.d(TAG, "refreshOperations TOTALS: totalCount=$totalCount, items=${items.size}")
                 } else {
                     totalCount = cashRepository.getTotalHistoryCountByLocation(state.selectedLocationId)
                     items = cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, currentCount, 0)
+                    Log.d(TAG, "refreshOperations LOCATION: totalCount=$totalCount, items=${items.size}")
                 }
+                
+                val dayGroups = groupItemsByDay(items)
                 
                 _uiState.update { currentState ->
                     currentState.copy(
                         historyItems = items,
+                        dayGroups = dayGroups,
                         totalItemsCount = totalCount,
                         hasMoreItems = items.size < totalCount
                     )
@@ -275,6 +381,17 @@ class CashViewModel @Inject constructor(
             )
         }
     }
+    
+    fun showTransferDialog() {
+        _uiState.update {
+            it.copy(
+                dialogType = CashDialogType.TRANSFER,
+                dialogAmount = "",
+                dialogNotes = "",
+                dialogTransferDestinationId = null
+            )
+        }
+    }
 
     fun showCategoriesDialog() {
         _uiState.update {
@@ -292,6 +409,7 @@ class CashViewModel @Inject constructor(
                 dialogAmount = "",
                 dialogNotes = "",
                 dialogCategoryId = null,
+                dialogTransferDestinationId = null,
                 newCategoryName = "",
                 editingOperationId = null,
                 editingOperationType = null
@@ -316,6 +434,10 @@ class CashViewModel @Inject constructor(
     fun onCategorySelect(categoryId: UUID?) {
         _uiState.update { it.copy(dialogCategoryId = categoryId) }
     }
+    
+    fun onTransferDestinationSelect(locationId: UUID?) {
+        _uiState.update { it.copy(dialogTransferDestinationId = locationId) }
+    }
 
     fun onNewCategoryNameChange(name: String) {
         _uiState.update { it.copy(newCategoryName = name) }
@@ -334,7 +456,7 @@ class CashViewModel @Inject constructor(
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
                 dismissDialog()
-                _uiState.update { it.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false, successMessage = "✅ Поповнення на ${amount}₴ збережено") }
                 refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
@@ -365,7 +487,7 @@ class CashViewModel @Inject constructor(
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
                 dismissDialog()
-                _uiState.update { it.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false, successMessage = "✅ Видача ${amount}₴ збережена") }
                 refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
@@ -397,12 +519,48 @@ class CashViewModel @Inject constructor(
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
                 dismissDialog()
-                _uiState.update { it.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false, successMessage = "✅ Витрату ${amount}₴ збережено") }
                 refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         error = e.message ?: "Помилка оплати",
+                        isSaving = false
+                    )
+                }
+            }
+        }
+    }
+    
+    fun confirmTransfer() {
+        val state = _uiState.value
+        val amount = state.dialogAmount.toBigDecimalOrNull() ?: return
+        val sourceLocationId = state.selectedLocationId ?: return
+        val destinationLocationId = state.dialogTransferDestinationId ?: return
+
+        if (amount > state.balance) {
+            _uiState.update { it.copy(error = "Недостатньо коштів") }
+            return
+        }
+
+        val destName = state.locations.find { it.id == destinationLocationId }?.name ?: ""
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            try {
+                cashRepository.transfer(
+                    sourceLocationId = sourceLocationId,
+                    destinationLocationId = destinationLocationId,
+                    amount = amount,
+                    notes = state.dialogNotes.takeIf { it.isNotBlank() }
+                )
+                dismissDialog()
+                _uiState.update { it.copy(isSaving = false, successMessage = "✅ Переказ ${amount}₴ → $destName виконано") }
+                refreshOperations()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Помилка переказу",
                         isSaving = false
                     )
                 }
@@ -428,6 +586,7 @@ class CashViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 cashRepository.deactivateCategory(categoryId)
+                _uiState.update { it.copy(successMessage = "✅ Категорію видалено") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Помилка видалення категорії") }
             }
@@ -438,10 +597,15 @@ class CashViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
+    fun dismissSuccess() {
+        _uiState.update { it.copy(successMessage = null) }
+    }
+
     /**
      * Select a specific location to filter cash history and balance.
      */
     fun selectLocation(locationId: UUID) {
+        Log.d(TAG, "selectLocation called: locationId=$locationId")
         _uiState.update { it.copy(selectedLocationId = locationId, isLoading = true) }
         loadHistoryAndBalance()
     }
@@ -450,6 +614,7 @@ class CashViewModel @Inject constructor(
      * Switch to totals view showing all locations.
      */
     fun selectTotalView() {
+        Log.d(TAG, "selectTotalView called")
         _uiState.update { it.copy(selectedLocationId = null, isLoading = true) }
         loadHistoryAndBalance()
     }
@@ -459,8 +624,10 @@ class CashViewModel @Inject constructor(
      * Only manual operations (deposit, withdrawal, payment) can be edited.
      */
     fun showEditDialog(item: CashHistoryItem) {
-        // Only allow editing manual cash operations (not purchases/sales)
-        if (item.type == CashHistoryItemType.PURCHASE || item.type == CashHistoryItemType.SALE) {
+        // Only allow editing manual cash operations (not purchases/sales/transfers)
+        if (item.type == CashHistoryItemType.PURCHASE || 
+            item.type == CashHistoryItemType.SALE ||
+            item.type == CashHistoryItemType.TRANSFER) {
             return
         }
 
@@ -510,7 +677,7 @@ class CashViewModel @Inject constructor(
                     notes = state.dialogNotes.takeIf { it.isNotBlank() }
                 )
                 dismissDialog()
-                _uiState.update { it.copy(isSaving = false) }
+                _uiState.update { it.copy(isSaving = false, successMessage = "✅ Операцію оновлено") }
                 refreshOperations()
             } catch (e: Exception) {
                 _uiState.update {
@@ -526,8 +693,11 @@ class CashViewModel @Inject constructor(
     /**
      * Check if a cash history item can be edited.
      * Only manual operations (deposit, withdrawal, payment) can be modified.
+     * Transfers, purchases, and sales cannot be edited.
      */
     fun canModifyItem(item: CashHistoryItem): Boolean {
-        return item.type != CashHistoryItemType.PURCHASE && item.type != CashHistoryItemType.SALE
+        return item.type != CashHistoryItemType.PURCHASE && 
+               item.type != CashHistoryItemType.SALE &&
+               item.type != CashHistoryItemType.TRANSFER
     }
 }

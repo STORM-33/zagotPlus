@@ -36,7 +36,7 @@ class LocationDtoTest {
     fun `toEntity handles mobile type correctly`() {
         val dto = LocationDto(
             id = testId.toString(),
-            name = "Мобільний",
+            name = "Склад",
             type = "mobile",
             createdAt = testInstant.toString()
         )

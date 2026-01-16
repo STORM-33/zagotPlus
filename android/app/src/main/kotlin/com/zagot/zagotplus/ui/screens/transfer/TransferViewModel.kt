@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.transfer
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
@@ -9,6 +10,7 @@ import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.ui.navigation.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,9 +29,17 @@ import javax.inject.Inject
 data class TransferPosition(
     val id: String = UUID.randomUUID().toString(),
     val product: Product,
-    val weightKg: BigDecimal,
+    val grossWeightKg: BigDecimal,
+    val tareCount: Int = 0,
+    val tareWeightPerUnit: BigDecimal = BigDecimal.ZERO,
     val availableStock: BigDecimal
-)
+) {
+    val totalTareWeight: BigDecimal
+        get() = tareWeightPerUnit.multiply(BigDecimal(tareCount))
+    
+    val netWeightKg: BigDecimal
+        get() = (grossWeightKg - totalTareWeight).max(BigDecimal.ZERO)
+}
 
 /**
  * Screen state for the transfer entry flow.
@@ -54,6 +64,8 @@ data class TransferUiState(
     val selectedProduct: Product? = null,
     val selectedAvailableStock: BigDecimal = BigDecimal.ZERO,
     val currentWeight: String = "",
+    val currentTareCount: String = "",
+    val tareWeightPerUnit: String = "0.1", // Default 100g per sack
     val positions: List<TransferPosition> = emptyList(),
     val notes: String = "",
     val screenState: TransferScreenState = TransferScreenState.PRODUCT_GRID,
@@ -63,11 +75,26 @@ data class TransferUiState(
     val error: String? = null,
     val navigateBack: Boolean = false
 ) {
+    val currentGrossWeight: BigDecimal
+        get() = currentWeight.toBigDecimalOrNull() ?: BigDecimal.ZERO
+    
+    val currentTareCountInt: Int
+        get() = if (currentTareCount.isBlank()) 0 else currentTareCount.toIntOrNull() ?: 0
+    
+    val currentTareWeightPerUnitDecimal: BigDecimal
+        get() = tareWeightPerUnit.toBigDecimalOrNull() ?: BigDecimal.ZERO
+    
+    val currentTotalTareWeight: BigDecimal
+        get() = currentTareWeightPerUnitDecimal.multiply(BigDecimal(currentTareCountInt))
+    
+    val currentNetWeight: BigDecimal
+        get() = (currentGrossWeight - currentTotalTareWeight).max(BigDecimal.ZERO)
+
     val canAddPosition: Boolean
         get() = selectedProduct != null &&
-                currentWeight.toBigDecimalOrNull()?.let { 
-                    it > BigDecimal.ZERO && it <= selectedAvailableStock 
-                } == true
+                currentNetWeight > BigDecimal.ZERO &&
+                currentNetWeight <= selectedAvailableStock &&
+                (currentTareCount.isBlank() || currentTareCount.toIntOrNull()?.let { it >= 0 } == true)
 
     val canFinalize: Boolean
         get() = positions.isNotEmpty()
@@ -76,13 +103,10 @@ data class TransferUiState(
         get() = positions.isNotEmpty() && destinationLocation != null
 
     val totalWeight: BigDecimal
-        get() = positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.weightKg) }
+        get() = positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.netWeightKg) }
 
     val exceedsAvailableStock: Boolean
-        get() {
-            val weight = currentWeight.toBigDecimalOrNull() ?: BigDecimal.ZERO
-            return weight > selectedAvailableStock
-        }
+        get() = currentNetWeight > selectedAvailableStock
 }
 
 /**
@@ -98,10 +122,18 @@ class TransferViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val productRepository: ProductRepository,
     private val locationRepository: LocationRepository,
-    private val devicePreferences: DevicePreferences
+    private val devicePreferences: DevicePreferences,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TransferUiState())
+    // Prefilled data from navigation arguments
+    private val prefilledProductId: String? = savedStateHandle[Destination.Transfer.ARG_PRODUCT_ID]
+    private val prefilledSourceLocationId: String? = savedStateHandle[Destination.Transfer.ARG_SOURCE_LOCATION_ID]
+    private val prefilledDestinationLocationId: String? = savedStateHandle[Destination.Transfer.ARG_DESTINATION_LOCATION_ID]
+    private val hasPrefill = prefilledProductId != null || prefilledSourceLocationId != null || prefilledDestinationLocationId != null
+
+    // Start with loading=true to prevent flash when we have prefilled data
+    private val _uiState = MutableStateFlow(TransferUiState(isLoading = true))
     val uiState: StateFlow<TransferUiState> = _uiState.asStateFlow()
     
     private var allLocations: List<Location> = emptyList()
@@ -113,28 +145,64 @@ class TransferViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
             try {
-                val locationId = devicePreferences.getSelectedLocationId()
+                // Determine source location - prefer prefilled, then device preference
+                val defaultLocationId = devicePreferences.getSelectedLocationId()
+                val sourceLocationId = prefilledSourceLocationId?.let { 
+                    try { UUID.fromString(it) } catch (_: Exception) { null }
+                } ?: defaultLocationId
                 
                 // Load source location
-                val sourceLocation = locationId?.let { locationRepository.getLocationById(it) }
+                val sourceLocation = sourceLocationId?.let { locationRepository.getLocationById(it) }
                 
                 // Load all locations
                 allLocations = locationRepository.getAllLocations().first()
-                val destinations = allLocations.filter { it.id != locationId }
+                val destinations = allLocations.filter { it.id != sourceLocationId }
+                
+                // Pre-select destination if provided
+                val destinationLocation = prefilledDestinationLocationId?.let { idStr ->
+                    try {
+                        val destId = UUID.fromString(idStr)
+                        destinations.find { it.id == destId }
+                    } catch (_: Exception) { null }
+                }
                 
                 // Store products for later use
                 allProducts = productRepository.getActiveProducts().first()
                 
-                // Load inventory for current location with product details
-                loadInventoryForLocation(locationId ?: UUID.randomUUID())
+                // Load inventory for source location with product details
+                loadInventoryForLocation(sourceLocationId ?: UUID.randomUUID())
+                
+                // Wait for inventory to be loaded
+                val currentState = _uiState.value
+                
+                // Find prefilled product if specified
+                var selectedProduct: Product? = null
+                var selectedAvailableStock = BigDecimal.ZERO
+                var screenState = TransferScreenState.PRODUCT_GRID
+                
+                prefilledProductId?.let { idStr ->
+                    try {
+                        val productId = UUID.fromString(idStr)
+                        val inventoryWithProduct = currentState.inventoryItems.find { it.product.id == productId }
+                            ?: _uiState.value.inventoryItems.find { it.product.id == productId }
+                        inventoryWithProduct?.let {
+                            selectedProduct = it.product
+                            selectedAvailableStock = it.inventory.totalWeightKg
+                            screenState = TransferScreenState.WEIGHT_ENTRY
+                        }
+                    } catch (_: Exception) { /* Invalid UUID */ }
+                }
                 
                 _uiState.update {
                     it.copy(
                         sourceLocation = sourceLocation,
                         allLocations = allLocations,
                         availableDestinations = destinations,
+                        destinationLocation = destinationLocation,
+                        selectedProduct = selectedProduct ?: it.selectedProduct,
+                        selectedAvailableStock = if (selectedProduct != null) selectedAvailableStock else it.selectedAvailableStock,
+                        screenState = if (selectedProduct != null) screenState else it.screenState,
                         isLoading = false
                     )
                 }
@@ -198,24 +266,43 @@ class TransferViewModel @Inject constructor(
         // Calculate already added weight for this product
         val alreadyAdded = _uiState.value.positions
             .filter { it.product.id == inventoryWithProduct.product.id }
-            .fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.weightKg) }
-        
+            .fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.netWeightKg) }
+
         val remainingStock = inventoryWithProduct.inventory.totalWeightKg.subtract(alreadyAdded)
-        
+
         _uiState.update {
             it.copy(
                 selectedProduct = inventoryWithProduct.product,
                 selectedAvailableStock = remainingStock,
                 currentWeight = "",
+                currentTareCount = "",
+                tareWeightPerUnit = "0.1",
                 screenState = TransferScreenState.WEIGHT_ENTRY
             )
         }
+    }
+
+    fun selectProductById(productId: UUID) {
+        val inventoryWithProduct = _uiState.value.inventoryItems.find { it.product.id == productId }
+        inventoryWithProduct?.let { selectProduct(it) }
     }
 
     fun onWeightChange(weight: String) {
         // Allow only valid decimal input
         if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
             _uiState.update { it.copy(currentWeight = weight) }
+        }
+    }
+
+    fun onTareCountChange(count: String) {
+        if (count.isEmpty() || count.matches(Regex("^\\d+$"))) {
+            _uiState.update { it.copy(currentTareCount = count) }
+        }
+    }
+
+    fun onTareWeightPerUnitChange(weight: String) {
+        if (weight.isEmpty() || weight.matches(Regex("^\\d*\\.?\\d*$"))) {
+            _uiState.update { it.copy(tareWeightPerUnit = weight) }
         }
     }
 
@@ -226,13 +313,18 @@ class TransferViewModel @Inject constructor(
     fun addPosition() {
         val state = _uiState.value
         val product = state.selectedProduct ?: return
-        val weight = state.currentWeight.toBigDecimalOrNull() ?: return
+        val grossWeight = state.currentGrossWeight
+        val netWeight = state.currentNetWeight
+        val tareCount = state.currentTareCountInt
+        val tareWeightPerUnit = state.currentTareWeightPerUnitDecimal
 
-        if (weight <= BigDecimal.ZERO || weight > state.selectedAvailableStock) return
+        if (netWeight <= BigDecimal.ZERO || netWeight > state.selectedAvailableStock) return
 
         val position = TransferPosition(
             product = product,
-            weightKg = weight,
+            grossWeightKg = grossWeight,
+            tareCount = tareCount,
+            tareWeightPerUnit = tareWeightPerUnit,
             availableStock = state.selectedAvailableStock
         )
 
@@ -241,6 +333,8 @@ class TransferViewModel @Inject constructor(
                 positions = it.positions + position,
                 selectedProduct = null,
                 currentWeight = "",
+                currentTareCount = "",
+                tareWeightPerUnit = "0.1",
                 selectedAvailableStock = BigDecimal.ZERO,
                 screenState = TransferScreenState.POSITIONS_LIST
             )
@@ -265,6 +359,8 @@ class TransferViewModel @Inject constructor(
             it.copy(
                 selectedProduct = null,
                 currentWeight = "",
+                currentTareCount = "",
+                tareWeightPerUnit = "0.1",
                 selectedAvailableStock = BigDecimal.ZERO,
                 screenState = if (it.positions.isNotEmpty()) 
                     TransferScreenState.POSITIONS_LIST 
@@ -277,6 +373,50 @@ class TransferViewModel @Inject constructor(
     fun addAnotherProduct() {
         _uiState.update {
             it.copy(screenState = TransferScreenState.PRODUCT_GRID)
+        }
+    }
+
+    /**
+     * Add all inventory items as positions (transfer everything).
+     * This takes all items with positive stock and adds them as positions
+     * with their full available weight (no tare deduction for bulk transfer).
+     */
+    fun transferAll() {
+        val state = _uiState.value
+        if (state.inventoryItems.isEmpty()) return
+
+        // Calculate already added weights per product
+        val alreadyAddedByProduct = state.positions
+            .groupBy { it.product.id }
+            .mapValues { (_, positions) ->
+                positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.netWeightKg) }
+            }
+
+        // Create positions for all items with remaining stock
+        val newPositions = state.inventoryItems.mapNotNull { item ->
+            val alreadyAdded = alreadyAddedByProduct[item.product.id] ?: BigDecimal.ZERO
+            val remainingStock = item.inventory.totalWeightKg.subtract(alreadyAdded)
+
+            if (remainingStock > BigDecimal.ZERO) {
+                TransferPosition(
+                    product = item.product,
+                    grossWeightKg = remainingStock,
+                    tareCount = 0,
+                    tareWeightPerUnit = BigDecimal.ZERO,
+                    availableStock = remainingStock
+                )
+            } else {
+                null
+            }
+        }
+
+        if (newPositions.isNotEmpty()) {
+            _uiState.update {
+                it.copy(
+                    positions = it.positions + newPositions,
+                    screenState = TransferScreenState.DESTINATION
+                )
+            }
         }
     }
 
@@ -312,13 +452,13 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                // Create transfers for each position
+                // Create transfers for each position (use net weight after tare deduction)
                 state.positions.forEach { position ->
                     transactionRepository.createTransfer(
                         fromLocationId = sourceLocationId,
                         toLocationId = state.destinationLocation.id,
                         productId = position.product.id,
-                        weightKg = position.weightKg
+                        weightKg = position.netWeightKg
                     )
                 }
 
@@ -362,10 +502,15 @@ class TransferViewModel @Inject constructor(
     
     /**
      * Apply prefilled data from navigation (e.g., from inventory screen).
-     * Selects the product and optionally pre-selects destination location.
+     * Sets source location, selects the product, and pre-selects destination location.
+     * When all three are provided, navigates directly to weight entry for the specific product.
      */
-    fun applyPrefilledData(productIdStr: String?, destinationLocationIdStr: String?) {
-        if (productIdStr == null && destinationLocationIdStr == null) return
+    fun applyPrefilledData(
+        productIdStr: String?, 
+        sourceLocationIdStr: String?,
+        destinationLocationIdStr: String?
+    ) {
+        if (productIdStr == null && sourceLocationIdStr == null && destinationLocationIdStr == null) return
         
         viewModelScope.launch {
             // Wait for initial data to load
@@ -375,13 +520,28 @@ class TransferViewModel @Inject constructor(
                 _uiState.first { !it.isLoading }
             }
             
-            val state = _uiState.value
+            // First, set source location if provided (this will reload inventory)
+            sourceLocationIdStr?.let { idStr ->
+                try {
+                    val locationId = UUID.fromString(idStr)
+                    val sourceLocation = allLocations.find { it.id == locationId }
+                    sourceLocation?.let { selectSourceLocation(it) }
+                    
+                    // Wait for inventory to reload after source location change
+                    kotlinx.coroutines.delay(100)
+                } catch (_: IllegalArgumentException) {
+                    // Invalid UUID, ignore
+                }
+            }
+            
+            // Re-fetch state after source location change
+            val stateAfterSource = _uiState.value
             
             // Find and select the product
             productIdStr?.let { idStr ->
                 try {
                     val productId = UUID.fromString(idStr)
-                    val inventoryWithProduct = state.inventoryItems.find { it.product.id == productId }
+                    val inventoryWithProduct = stateAfterSource.inventoryItems.find { it.product.id == productId }
                     inventoryWithProduct?.let { selectProduct(it) }
                 } catch (_: IllegalArgumentException) {
                     // Invalid UUID, ignore
@@ -392,7 +552,7 @@ class TransferViewModel @Inject constructor(
             destinationLocationIdStr?.let { idStr ->
                 try {
                     val locationId = UUID.fromString(idStr)
-                    val destination = state.availableDestinations.find { it.id == locationId }
+                    val destination = stateAfterSource.availableDestinations.find { it.id == locationId }
                     destination?.let { 
                         _uiState.update { current -> 
                             current.copy(destinationLocation = it) 

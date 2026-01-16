@@ -28,6 +28,7 @@
     <string name="cash_deposit_action">Deposit</string>
     <string name="cash_withdraw_action">Withdraw</string>
     <string name="cash_payment_action">Pay</string>
+    <string name="cash_transfer_action">Transfer</string>
     <string name="cash_history_title">Transaction History</string>
     <string name="cash_no_operations">No operations</string>
     <string name="cash_all_loaded">All operations loaded</string>
@@ -52,6 +53,11 @@
     <string name="cash_edit_deposit_title">Edit Deposit</string>
     <string name="cash_edit_withdraw_title">Edit Withdrawal</string>
     <string name="cash_edit_payment_title">Edit Payment</string>
+    <string name="cash_transfer_dialog_title">Transfer to Location</string>
+    <string name="cash_transfer_destination">Destination</string>
+    <string name="cash_transfer_select_location">Select location</string>
+    <string name="cash_history_transfer_out">Transfer Out</string>
+    <string name="cash_history_transfer_in">Transfer In</string>
     <string name="cash_delete_title">Delete Operation</string>
     <string name="cash_delete_confirm">Are you sure you want to delete this %1$s?</string>
     <string name="cash_operation">operation</string>

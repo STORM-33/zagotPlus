@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
@@ -63,7 +64,7 @@ private enum class InventoryItemAction {
 @Composable
 fun InventoryScreen(
     modifier: Modifier = Modifier,
-    onNavigateToTransfer: (productId: String, destinationLocationId: String) -> Unit = { _, _ -> },
+    onNavigateToTransfer: (productId: String, sourceLocationId: String) -> Unit = { _, _ -> },
     viewModel: InventoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -189,24 +190,24 @@ fun InventoryScreen(
         if (showMoveDialog && selectedItem != null) {
             val item = selectedItem!!
             val currentLocationId = item.locationId
-            val otherLocations = uiState.locations.filter { it.id != currentLocationId }
-            
-            MoveProductDialog(
-                productName = item.productName,
-                availableLocations = otherLocations,
-                onDismiss = { 
-                    showMoveDialog = false
-                    selectedItem = null
-                },
-                onLocationSelected = { destinationLocation ->
-                    onNavigateToTransfer(
-                        item.productId.toString(),
-                        destinationLocation.id.toString()
-                    )
-                    showMoveDialog = false
-                    selectedItem = null
-                }
-            )
+
+            if (currentLocationId != null) {
+                MoveProductDialog(
+                    productName = item.productName,
+                    onDismiss = {
+                        showMoveDialog = false
+                        selectedItem = null
+                    },
+                    onConfirm = {
+                        onNavigateToTransfer(
+                            item.productId.toString(),
+                            currentLocationId.toString()
+                        )
+                        showMoveDialog = false
+                        selectedItem = null
+                    }
+                )
+            }
         }
         
         // Adjustment dialog
@@ -243,39 +244,50 @@ fun InventoryScreen(
 @Composable
 private fun MoveProductDialog(
     productName: String,
-    availableLocations: List<Location>,
     onDismiss: () -> Unit,
-    onLocationSelected: (Location) -> Unit
+    onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Перемістити товар") },
+        title = {
+            Text(
+                text = "Перемістити",
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
         text = {
-            Column {
-                Text(
-                    text = productName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Оберіть куди перемістити:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
-                )
-                availableLocations.forEach { location ->
-                    TextButton(
-                        onClick = { onLocationSelected(location) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = location.name,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Product name card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Text(
+                        text = productName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
+
+                Text(
+                    text = "Ви хочете перемістити цей товар на іншу точку?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Перемістити")
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Скасувати")

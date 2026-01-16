@@ -1,7 +1,8 @@
 package com.zagot.zagotplus.ui.screens.history
 
-import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.PurchaseBatch
@@ -194,15 +195,14 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `setDateRangePreset updates filter`() = testScope.runTest {
+    fun `setDateRange updates filter`() = testScope.runTest {
         viewModel = createViewModel()
-        
 
-        viewModel.setDateRangePreset(DateRangePreset.TODAY)
-        
+        val todayRange = DateRange.today()
+        viewModel.setDateRange(todayRange)
 
         val state = viewModel.uiState.value
-        assertEquals(DateRangePreset.TODAY, state.dateRangePreset)
+        assertEquals(todayRange, state.dateRange)
         assertTrue(state.hasActiveFilters)
     }
 
@@ -253,7 +253,7 @@ class HistoryViewModelTest {
         assertTrue(state.selectedTypes.isEmpty())
         assertNull(state.selectedLocationId)
         assertEquals("", state.searchQuery)
-        assertEquals(DateRangePreset.ALL, state.dateRangePreset)
+        assertNull(state.dateRange) // null means ALL time
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.repository.ProductRepository
@@ -65,7 +66,8 @@ class SaleEntryViewModelTest {
             transactionRepository = transactionRepository,
             saleBatchRepository = saleBatchRepository,
             devicePreferences = devicePreferences,
-            productOrderPreferences = productOrderPreferences
+            productOrderPreferences = productOrderPreferences,
+            savedStateHandle = SavedStateHandle()
         )
     }
 
@@ -181,7 +183,7 @@ class SaleEntryViewModelTest {
         assertEquals(BigDecimal("30"), state.currentBatches[0].grossWeightKg)
         assertEquals(3, state.currentBatches[0].tareCount)
         assertEquals("", state.currentWeight) // Reset after adding
-        assertEquals("0", state.currentTareCount) // Reset to default
+        assertEquals("", state.currentTareCount) // Reset to default
     }
 
     @Test

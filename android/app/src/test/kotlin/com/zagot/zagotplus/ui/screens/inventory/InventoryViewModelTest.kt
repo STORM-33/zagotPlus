@@ -64,7 +64,7 @@ class InventoryViewModelTest {
 
     private val testLocation2 = Location(
         id = UUID.randomUUID(),
-        name = "Мобільний",
+        name = "Склад",
         type = LocationType.MOBILE,
         createdAt = Instant.now()
     )

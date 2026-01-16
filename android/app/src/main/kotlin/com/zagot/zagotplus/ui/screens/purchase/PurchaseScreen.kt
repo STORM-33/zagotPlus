@@ -70,7 +70,8 @@ fun PurchaseScreen(
             // Cash balance card
             CashBalanceCard(
                 balance = uiState.cashBalance,
-                currencyFormat = currencyFormat
+                currencyFormat = currencyFormat,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -174,7 +175,7 @@ private fun CashBalanceCard(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "₴${currencyFormat.format(balance)}",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )

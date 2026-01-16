@@ -3,19 +3,23 @@ package com.zagot.zagotplus
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import java.util.Locale
+
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.data.connectivity.ConnectivityObserver
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.sync.SyncManager
@@ -27,6 +31,8 @@ import com.zagot.zagotplus.ui.screens.auth.PinScreen
 import com.zagot.zagotplus.ui.theme.ZagotPlusTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+
+private const val TAG = "MainActivity"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -42,6 +48,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var devicePreferences: DevicePreferences
+
+    @Inject
+    lateinit var connectivityObserver: ConnectivityObserver
 
     private var isAuthenticated by mutableStateOf(false)
     private var needsLocationSelection by mutableStateOf(false)
@@ -68,6 +77,19 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ZagotPlusTheme {
+                // Note: isCurrentlyConnected() returns false for VPN to be conservative.
+                // The Flow will perform an active check and update the state.
+                val initialConnected = connectivityObserver.isCurrentlyConnected()
+                Log.d(TAG, "Initial connectivity check (sync): $initialConnected")
+
+                val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(
+                    initialValue = initialConnected
+                )
+
+                LaunchedEffect(isOnline) {
+                    Log.d(TAG, "MainActivity isOnline state changed: $isOnline")
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -92,7 +114,8 @@ class MainActivity : ComponentActivity() {
                             // Show main UI behind the dialog
                             NavGraph(
                                 syncStatusFlow = syncStatusRepository.syncStatus,
-                                onSyncClick = { syncManager.triggerManualSync() }
+                                isOnline = isOnline,
+                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() }
                             )
 
                             // Show blocking location selection dialog
@@ -110,7 +133,8 @@ class MainActivity : ComponentActivity() {
                         else -> {
                             NavGraph(
                                 syncStatusFlow = syncStatusRepository.syncStatus,
-                                onSyncClick = { syncManager.triggerManualSync() }
+                                isOnline = isOnline,
+                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() }
                             )
                         }
                     }

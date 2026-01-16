@@ -107,15 +107,21 @@ sealed class Destination(
         title = "Переміщення",
         icon = Icons.Filled.SwapHoriz
     ) {
-        const val ROUTE_WITH_ARGS = "transfer?productId={productId}&destinationLocationId={destinationLocationId}"
+        const val ROUTE_WITH_ARGS = "transfer?productId={productId}&sourceLocationId={sourceLocationId}&destinationLocationId={destinationLocationId}"
         const val ARG_PRODUCT_ID = "productId"
+        const val ARG_SOURCE_LOCATION_ID = "sourceLocationId"
         const val ARG_DESTINATION_LOCATION_ID = "destinationLocationId"
         
-        fun createRoute(productId: String? = null, destinationLocationId: String? = null): String {
+        fun createRoute(
+            productId: String? = null, 
+            sourceLocationId: String? = null,
+            destinationLocationId: String? = null
+        ): String {
             return buildString {
                 append("transfer")
                 val params = mutableListOf<String>()
                 productId?.let { params.add("productId=$it") }
+                sourceLocationId?.let { params.add("sourceLocationId=$it") }
                 destinationLocationId?.let { params.add("destinationLocationId=$it") }
                 if (params.isNotEmpty()) {
                     append("?")

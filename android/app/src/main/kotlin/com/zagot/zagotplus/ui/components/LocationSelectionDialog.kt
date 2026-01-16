@@ -104,7 +104,7 @@ fun LocationSelectionDialog(
                                     Text(
                                         text = when (location.type) {
                                             LocationType.KIOSK -> "Кіоск"
-                                            LocationType.MOBILE -> "Мобільний"
+                                            LocationType.MOBILE -> "Склад"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant

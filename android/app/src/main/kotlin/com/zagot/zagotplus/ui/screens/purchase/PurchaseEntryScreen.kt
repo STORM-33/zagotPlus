@@ -59,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -86,12 +88,7 @@ fun PurchaseEntryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load batch for editing if provided
-    LaunchedEffect(editingBatchId) {
-        if (editingBatchId != null) {
-            viewModel.loadBatchForEditing(editingBatchId)
-        }
-    }
+    // Batch for editing is now loaded via SavedStateHandle in ViewModel - no LaunchedEffect needed
 
     // Handle navigation
     LaunchedEffect(uiState.navigateBack) {
@@ -167,6 +164,7 @@ fun PurchaseEntryScreen(
                     totalWeight = uiState.totalWeight,
                     totalAmount = uiState.totalAmount,
                     isSaving = uiState.isSaving,
+                    isEditing = isEditing,
                     onConfirm = viewModel::confirmSave
                 )
             } else {
@@ -220,6 +218,7 @@ fun PurchaseEntryScreen(
                                 totalWeight = uiState.totalWeight,
                                 totalAmount = uiState.totalAmount,
                                 canFinalize = uiState.canFinalize,
+                                isEditing = isEditing,
                                 onNotesChange = viewModel::onNotesChange,
                                 onRemovePosition = viewModel::removePosition,
                                 onEditPosition = viewModel::startEditPosition,
@@ -253,7 +252,7 @@ fun PurchaseEntryScreen(
         if (uiState.showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = viewModel::dismissExitConfirmation,
-                title = { Text("Скасувати закупку?") },
+                title = { Text(if (isEditing) "Скасувати редагування?" else "Скасувати закупку?") },
                 text = { Text("Всі введені дані буде втрачено.") },
                 confirmButton = {
                     TextButton(onClick = viewModel::confirmExit) {
@@ -285,6 +284,12 @@ private fun WeightEntry(
     onAddPosition: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Auto-focus weight field
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     // Color coding for weight field:
     // - Scales connected + auto mode: green (tertiary)
     // - Scales connected + manual mode: yellow/warning (error container)
@@ -360,7 +365,7 @@ private fun WeightEntry(
                 supportingText = if (isScaleConnected && !isManualMode) {
                     { Text("Утримуйте для ручного вводу", style = MaterialTheme.typography.bodySmall) }
                 } else null,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
             )
         }
 
@@ -436,6 +441,7 @@ private fun PositionsList(
     totalWeight: BigDecimal,
     totalAmount: BigDecimal,
     canFinalize: Boolean,
+    isEditing: Boolean = false,
     onNotesChange: (String) -> Unit,
     onRemovePosition: (String) -> Unit,
     onEditPosition: (PurchasePosition) -> Unit,
@@ -485,11 +491,14 @@ private fun PositionsList(
                 .padding(16.dp)
         ) {
             // Add another product button - moved above totals
-            OutlinedButton(
+            Button(
                 onClick = onAddAnother,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Додати")
                 Spacer(modifier = Modifier.width(8.dp))
@@ -560,7 +569,7 @@ private fun PositionsList(
                     )
                 ) {
                     Text(
-                        text = "Розрахувати",
+                        text = if (isEditing) "РЕДАГУВАТИ" else "Розрахувати",
                         style = MaterialTheme.typography.labelLarge
                     )
                 }

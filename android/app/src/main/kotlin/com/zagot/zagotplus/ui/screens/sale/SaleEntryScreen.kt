@@ -59,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -90,12 +92,7 @@ fun SaleEntryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load batch for editing if provided
-    LaunchedEffect(editingBatchId) {
-        if (editingBatchId != null) {
-            viewModel.loadBatchForEditing(editingBatchId)
-        }
-    }
+    // Batch for editing is now loaded via SavedStateHandle in ViewModel - no LaunchedEffect needed
 
     LaunchedEffect(uiState.navigateBack) {
         if (uiState.navigateBack) {
@@ -182,6 +179,7 @@ fun SaleEntryScreen(
                     totalAmount = uiState.totalAmount,
                     notes = uiState.notes,
                     isSaving = uiState.isSaving,
+                    isEditing = isEditing,
                     onConfirm = viewModel::confirmSave
                 )
             } else {
@@ -256,6 +254,7 @@ fun SaleEntryScreen(
                                     totalAmount = uiState.totalAmount,
                                     notes = uiState.notes,
                                     canFinalize = uiState.canFinalize,
+                                    isEditing = isEditing,
                                     onNotesChange = viewModel::onNotesChange,
                                     onRemovePosition = viewModel::removePosition,
                                     onEditPosition = viewModel::startEditPosition,
@@ -289,7 +288,7 @@ fun SaleEntryScreen(
         if (uiState.showExitConfirmation) {
             AlertDialog(
                 onDismissRequest = viewModel::dismissExitConfirmation,
-                title = { Text("Скасувати продаж?") },
+                title = { Text(if (isEditing) "Скасувати редагування?" else "Скасувати продаж?") },
                 text = { Text("Всі введені дані буде втрачено.") },
                 confirmButton = {
                     TextButton(onClick = viewModel::confirmExit) {
@@ -376,6 +375,12 @@ private fun WeighingScreen(
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     
+    // Auto-focus weight field
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    
     Column(modifier = modifier.padding(16.dp)) {
         // Running total display
         Card(
@@ -415,7 +420,7 @@ private fun WeighingScreen(
             label = { Text("Вага (кг)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -656,6 +661,7 @@ private fun PositionsListScreen(
     totalAmount: BigDecimal,
     notes: String,
     canFinalize: Boolean,
+    isEditing: Boolean = false,
     onNotesChange: (String) -> Unit,
     onRemovePosition: (String) -> Unit,
     onEditPosition: (SalePosition) -> Unit,
@@ -683,9 +689,12 @@ private fun PositionsListScreen(
             
             item {
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
+                Button(
                     onClick = onAddAnother,
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = "Додати ще")
                     Spacer(modifier = Modifier.width(8.dp))
@@ -743,7 +752,7 @@ private fun PositionsListScreen(
                     enabled = canFinalize,
                     modifier = Modifier.weight(1f).height(56.dp)
                 ) {
-                    Text("ПРОДАТИ", style = MaterialTheme.typography.labelLarge)
+                    Text(if (isEditing) "РЕДАГУВАТИ" else "ПРОДАТИ", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -933,6 +942,7 @@ fun SaleSummaryOverlay(
     totalAmount: BigDecimal,
     notes: String,
     isSaving: Boolean,
+    isEditing: Boolean = false,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1030,7 +1040,7 @@ fun SaleSummaryOverlay(
                         )
                     ) {
                         Text(
-                            text = "ПІДТВЕРДИТИ ПРОДАЖ",
+                            text = if (isEditing) "ПІДТВЕРДИТИ ЗМІНИ" else "ПІДТВЕРДИТИ ПРОДАЖ",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

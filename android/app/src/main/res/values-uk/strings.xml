@@ -18,6 +18,7 @@
     <string name="cash_deposit_action">Внести</string>
     <string name="cash_withdraw_action">Вивести</string>
     <string name="cash_payment_action">Оплатити</string>
+    <string name="cash_transfer_action">Переказ</string>
     <string name="cash_history_title">Історія операцій</string>
     <string name="cash_no_operations">Немає операцій</string>
     <string name="cash_all_loaded">Усі операції завантажено</string>
@@ -42,6 +43,11 @@
     <string name="cash_edit_deposit_title">Редагування поповнення</string>
     <string name="cash_edit_withdraw_title">Редагування виведення</string>
     <string name="cash_edit_payment_title">Редагування оплати</string>
+    <string name="cash_transfer_dialog_title">Переказ на локацію</string>
+    <string name="cash_transfer_destination">Локація призначення</string>
+    <string name="cash_transfer_select_location">Оберіть локацію</string>
+    <string name="cash_history_transfer_out">Переказ</string>
+    <string name="cash_history_transfer_in">Надходження</string>
     <string name="cash_delete_title">Видалення операції</string>
     <string name="cash_delete_confirm">Ви впевнені, що хочете видалити це %1$s?</string>
     <string name="cash_operation">операцію</string>

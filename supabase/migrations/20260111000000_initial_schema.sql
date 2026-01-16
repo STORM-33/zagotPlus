@@ -94,7 +94,7 @@ create policy "Allow all for anon" on transactions for all using (true) with che
 -- Initial locations (fixed UUIDs for consistency across environments)
 insert into locations (id, name, type) values
   ('00000000-0000-0000-0000-000000000001', 'Кіоск', 'kiosk'),
-  ('00000000-0000-0000-0000-000000000002', 'Мобільний', 'mobile');
+  ('00000000-0000-0000-0000-000000000002', 'Склад', 'mobile');
 
 -- Initial products
 insert into products (id, name, default_buy_price, default_sell_price) values

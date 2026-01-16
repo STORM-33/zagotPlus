@@ -88,7 +88,7 @@ class InventoryViewModel @Inject constructor(
      */
     val displayItems: StateFlow<List<InventoryDisplayItem>> = _uiState
         .map { state ->
-            if (state.viewMode == InventoryViewMode.TOTAL) {
+            val items = if (state.viewMode == InventoryViewMode.TOTAL) {
                 // For total view, aggregate inventory across all locations
                 val aggregatedInventory = state.inventory
                     .groupBy { it.productId }
@@ -123,6 +123,10 @@ class InventoryViewModel @Inject constructor(
                     )
                 }
             }
+            // Sort: negative values first (most negative to least), then positive descending
+            items.sortedWith(compareBy<InventoryDisplayItem> { !it.isNegative }
+                .thenBy { if (it.isNegative) it.weightKg else null }
+                .thenByDescending { if (!it.isNegative) it.weightKg else null })
         }
         .stateIn(
             scope = viewModelScope,

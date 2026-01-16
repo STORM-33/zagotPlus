@@ -8,6 +8,7 @@ import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.local.entity.LocationEntity
 import com.zagot.zagotplus.data.local.entity.ProductEntity
+import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -36,6 +37,7 @@ class CashDaoTest {
     private lateinit var locationDao: LocationDao
     private lateinit var productDao: ProductDao
     private lateinit var transactionDao: TransactionDao
+    private lateinit var purchaseBatchDao: PurchaseBatchDao
 
     private val testInstant = Instant.parse("2024-01-15T10:00:00Z")
     private val testLocationId = UUID.randomUUID()
@@ -52,6 +54,7 @@ class CashDaoTest {
         locationDao = database.locationDao()
         productDao = database.productDao()
         transactionDao = database.transactionDao()
+        purchaseBatchDao = database.purchaseBatchDao()
 
         // Insert test location and product for FK
         runTest {
@@ -400,7 +403,24 @@ class CashDaoTest {
         val deposit = createCashOperation(type = "deposit", amount = BigDecimal("5000.00"))
         cashOperationDao.insert(deposit)
         
-        // Create a purchase transaction (this is now how purchases affect balance)
+        // Create a purchase batch first (required for balance calculation)
+        val batchId = UUID.randomUUID()
+        val purchaseBatch = PurchaseBatchEntity(
+            id = batchId,
+            localId = "batch-purchase-1",
+            locationId = testLocationId,
+            notes = null,
+            totalWeightKg = BigDecimal("40.00"),
+            totalAmount = BigDecimal("2000.00"),
+            itemCount = 1,
+            deviceId = "test-device",
+            createdAt = testInstant,
+            syncedAt = null,
+            isVoided = false
+        )
+        purchaseBatchDao.insert(purchaseBatch)
+        
+        // Create a purchase transaction linked to the batch
         val purchaseTransaction = TransactionEntity(
             id = UUID.randomUUID(),
             localId = "tx-purchase-1",
@@ -414,7 +434,8 @@ class CashDaoTest {
             notes = null,
             deviceId = "test-device",
             createdAt = testInstant,
-            syncedAt = null
+            syncedAt = null,
+            batchId = batchId
         )
         transactionDao.insert(purchaseTransaction)
 

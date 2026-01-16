@@ -21,6 +21,10 @@ class SyncStatusRepository @Inject constructor(
     
     val syncStatus: Flow<SyncStatus> = _syncStatus.asStateFlow()
     
+    /** Current sync state for synchronous access (e.g., rate limiting decisions) */
+    val currentState: SyncStatus.State
+        get() = _syncStatus.value.state
+    
     fun setSyncing() {
         _syncStatus.value = SyncStatus.syncing()
     }
@@ -28,6 +32,15 @@ class SyncStatusRepository @Inject constructor(
     fun setIdle() {
         val lastSync = syncPreferences.getLastSyncTimestamp()
         _syncStatus.value = SyncStatus.idle(lastSync.takeIf { it != Instant.EPOCH })
+    }
+    
+    /**
+     * Set success state - indicates sync just completed successfully.
+     * UI should show checkmark briefly before transitioning to idle cloud.
+     */
+    fun setSuccess() {
+        val lastSync = syncPreferences.getLastSyncTimestamp()
+        _syncStatus.value = SyncStatus.success(lastSync)
     }
     
     fun setWarning(message: String) {

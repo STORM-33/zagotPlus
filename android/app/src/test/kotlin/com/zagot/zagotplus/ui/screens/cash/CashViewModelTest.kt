@@ -72,6 +72,7 @@ class CashViewModelTest {
     private fun setupDefaultMocks() {
         every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("5000.00"))
         every { cashRepository.getDailyChangeGlobal(any()) } returns flowOf(BigDecimal("500.00"))
+        every { cashRepository.getDailyDepositsGlobal(any()) } returns flowOf(BigDecimal("200.00"))
         every { cashRepository.getActiveCategories() } returns flowOf(testCategories)
         coEvery { cashRepository.getTotalHistoryCount() } returns 1
         coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns testHistoryItems
@@ -990,5 +991,261 @@ class CashViewModelTest {
         assertNull(state.editingOperationType)
         assertEquals("", state.dialogAmount)
         assertEquals("", state.dialogNotes)
+    }
+
+    // ==================== Location/Tab Switching Tests ====================
+
+    private val testLocationId1 = UUID.randomUUID()
+    private val testLocationId2 = UUID.randomUUID()
+    private val testLocations = listOf(
+        Location(
+            id = testLocationId1,
+            name = "Location 1",
+            type = com.zagot.zagotplus.domain.model.LocationType.KIOSK,
+            createdAt = Instant.now()
+        ),
+        Location(
+            id = testLocationId2,
+            name = "Location 2",
+            type = com.zagot.zagotplus.domain.model.LocationType.MOBILE,
+            createdAt = Instant.now()
+        )
+    )
+
+    private fun setupLocationMocks() {
+        every { locationRepository.getAllLocations() } returns flowOf(testLocations)
+        every { cashRepository.getBalance(any()) } returns flowOf(BigDecimal("1000.00"))
+        every { cashRepository.getDailyChange(any(), any()) } returns flowOf(BigDecimal("100.00"))
+        every { cashRepository.getDailyDeposits(any(), any()) } returns flowOf(BigDecimal("50.00"))
+        coEvery { cashRepository.getTotalHistoryCountByLocation(any()) } returns 0
+        coEvery { cashRepository.getCashHistoryByLocationPaged(any(), any(), any()) } returns emptyList()
+    }
+
+    @Test
+    fun `selectLocation updates selectedLocationId`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId2)
+        advanceUntilIdle()
+
+        assertEquals(testLocationId2, viewModel.uiState.value.selectedLocationId)
+    }
+
+    @Test
+    fun `selectLocation sets isLoading to true initially`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId2)
+        // Before advanceUntilIdle, isLoading should be true
+        assertTrue(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `selectTotalView sets selectedLocationId to null`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        // First select a location
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        
+        // Then switch to total view
+        viewModel.selectTotalView()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.selectedLocationId)
+    }
+
+    @Test
+    fun `isTotalsView is true when selectedLocationId is null`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectTotalView()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isTotalsView)
+    }
+
+    @Test
+    fun `isTotalsView is false when location is selected`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isTotalsView)
+    }
+
+    @Test
+    fun `selectLocation loads location-specific balance`() = runTest {
+        setupLocationMocks()
+        every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("2500.00"))
+        
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+
+        assertEquals(BigDecimal("2500.00"), viewModel.uiState.value.balance)
+    }
+
+    @Test
+    fun `locations are loaded on initialization`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.locations.size)
+        assertEquals("Location 1", viewModel.uiState.value.locations[0].name)
+        assertEquals("Location 2", viewModel.uiState.value.locations[1].name)
+    }
+
+    @Test
+    fun `transferDestinations excludes currently selected location`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+
+        val destinations = viewModel.uiState.value.transferDestinations
+        assertEquals(1, destinations.size)
+        assertEquals(testLocationId2, destinations[0].id)
+    }
+
+    // ==================== Transfer Tests ====================
+
+    @Test
+    fun `showTransferDialog sets dialog type`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+
+        assertEquals(CashDialogType.TRANSFER, viewModel.uiState.value.dialogType)
+    }
+
+    @Test
+    fun `onTransferDestinationSelect updates destination`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onTransferDestinationSelect(testLocationId2)
+
+        assertEquals(testLocationId2, viewModel.uiState.value.dialogTransferDestinationId)
+    }
+
+    @Test
+    fun `canConfirmTransfer is true when amount and destination are valid`() = runTest {
+        setupLocationMocks()
+        every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("1000.00"))
+        
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onAmountChange("500")
+        viewModel.onTransferDestinationSelect(testLocationId2)
+
+        assertTrue(viewModel.uiState.value.canConfirmTransfer)
+    }
+
+    @Test
+    fun `canConfirmTransfer is false when amount exceeds balance`() = runTest {
+        setupLocationMocks()
+        every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("100.00"))
+        
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onAmountChange("500")
+        viewModel.onTransferDestinationSelect(testLocationId2)
+
+        assertFalse(viewModel.uiState.value.canConfirmTransfer)
+    }
+
+    @Test
+    fun `canConfirmTransfer is false when destination not selected`() = runTest {
+        setupLocationMocks()
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onAmountChange("100")
+
+        assertFalse(viewModel.uiState.value.canConfirmTransfer)
+    }
+
+    @Test
+    fun `confirmTransfer calls repository`() = runTest {
+        setupLocationMocks()
+        every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("1000.00"))
+        coEvery { cashRepository.transfer(any(), any(), any(), any()) } returns Unit
+        
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onAmountChange("250")
+        viewModel.onTransferDestinationSelect(testLocationId2)
+        viewModel.onNotesChange("Transfer notes")
+        viewModel.confirmTransfer()
+        advanceUntilIdle()
+
+        coVerify { 
+            cashRepository.transfer(
+                sourceLocationId = testLocationId1,
+                destinationLocationId = testLocationId2,
+                amount = BigDecimal("250"),
+                notes = "Transfer notes"
+            )
+        }
+    }
+
+    @Test
+    fun `confirmTransfer dismisses dialog on success`() = runTest {
+        setupLocationMocks()
+        every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("1000.00"))
+        coEvery { cashRepository.transfer(any(), any(), any(), any()) } returns Unit
+        
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectLocation(testLocationId1)
+        advanceUntilIdle()
+        viewModel.showTransferDialog()
+        viewModel.onAmountChange("100")
+        viewModel.onTransferDestinationSelect(testLocationId2)
+        viewModel.confirmTransfer()
+        advanceUntilIdle()
+
+        assertEquals(CashDialogType.NONE, viewModel.uiState.value.dialogType)
     }
 }

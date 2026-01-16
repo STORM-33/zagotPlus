@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
@@ -12,6 +13,7 @@ import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.ui.navigation.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,7 +86,7 @@ data class SaleEntryUiState(
     
     // Current weighing input
     val currentWeight: String = "",
-    val currentTareCount: String = "0",
+    val currentTareCount: String = "",
     
     // Batches for current product
     val currentBatches: List<SaleWeighingBatch> = emptyList(),
@@ -141,7 +143,7 @@ data class SaleEntryUiState(
     
     val canAddBatch: Boolean
         get() = currentWeight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
-                currentTareCount.toIntOrNull()?.let { it >= 0 } == true
+                (currentTareCount.isBlank() || currentTareCount.toIntOrNull()?.let { it >= 0 } == true)
     
     val canProceedToReview: Boolean
         get() = currentBatches.isNotEmpty()
@@ -171,10 +173,15 @@ class SaleEntryViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val saleBatchRepository: SaleBatchRepository,
     private val devicePreferences: DevicePreferences,
-    private val productOrderPreferences: ProductOrderPreferences
+    private val productOrderPreferences: ProductOrderPreferences,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SaleEntryUiState())
+    // Editing batch ID from navigation arguments
+    private val editingBatchIdArg: String? = savedStateHandle[Destination.SaleEntry.ARG_BATCH_ID]
+
+    // Start with loading=true to prevent flash when editing
+    private val _uiState = MutableStateFlow(SaleEntryUiState(isLoading = true))
     val uiState: StateFlow<SaleEntryUiState> = _uiState.asStateFlow()
 
     init {
@@ -183,7 +190,6 @@ class SaleEntryViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
             try {
                 val products = productRepository.getActiveProducts().first()
                 val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
@@ -198,8 +204,13 @@ class SaleEntryViewModel @Inject constructor(
                     it.copy(
                         products = orderedProducts,
                         inventory = inventory,
-                        isLoading = false
+                        isLoading = editingBatchIdArg != null // Keep loading if we need to load a batch
                     )
+                }
+                
+                // Load batch for editing if batchId was provided
+                if (editingBatchIdArg != null && _uiState.value.editingBatchId == null) {
+                    loadBatchForEditingInternal(editingBatchIdArg)
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -210,6 +221,14 @@ class SaleEntryViewModel @Inject constructor(
                 }
             }
         }
+    }
+    
+    /**
+     * Internal function to load batch for editing.
+     * Called from init when batchId is provided via SavedStateHandle.
+     */
+    private fun loadBatchForEditingInternal(batchIdString: String) {
+        loadBatchForEditing(batchIdString)
     }
 
     fun onProductOrderChanged(newOrder: List<UUID>) {
@@ -233,7 +252,7 @@ class SaleEntryViewModel @Inject constructor(
                 pricePerKg = product.defaultSellPrice?.toPlainString() ?: "",
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "0",
+                currentTareCount = "",
                 tareWeightPerUnit = "0.1",
                 screenState = SaleEntryScreenState.WEIGHING
             )
@@ -255,7 +274,7 @@ class SaleEntryViewModel @Inject constructor(
     fun addBatch() {
         val state = _uiState.value
         val weight = state.currentWeight.toBigDecimalOrNull() ?: return
-        val tareCount = state.currentTareCount.toIntOrNull() ?: return
+        val tareCount = if (state.currentTareCount.isBlank()) 0 else state.currentTareCount.toIntOrNull() ?: return
 
         if (weight <= BigDecimal.ZERO || tareCount < 0) return
 
@@ -268,7 +287,7 @@ class SaleEntryViewModel @Inject constructor(
             it.copy(
                 currentBatches = it.currentBatches + batch,
                 currentWeight = "",
-                currentTareCount = "0"
+                currentTareCount = ""
             )
         }
     }
@@ -324,7 +343,7 @@ class SaleEntryViewModel @Inject constructor(
                 selectedProduct = null,
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "0",
+                currentTareCount = "",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
                 screenState = SaleEntryScreenState.POSITIONS_LIST
@@ -388,7 +407,7 @@ class SaleEntryViewModel @Inject constructor(
                 selectedProduct = null,
                 currentBatches = emptyList(),
                 currentWeight = "",
-                currentTareCount = "0",
+                currentTareCount = "",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
                 screenState = if (it.positions.isNotEmpty())

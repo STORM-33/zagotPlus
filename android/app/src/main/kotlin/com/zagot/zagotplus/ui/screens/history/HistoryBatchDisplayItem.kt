@@ -65,7 +65,7 @@ sealed class HistoryBatchDisplayItem {
 
     /**
      * Virtual batch grouping transactions by time window.
-     * Used for transfers and old transactions without batch_id.
+     * Used for adjustments and old transactions without batch_id.
      */
     data class VirtualBatch(
         val transactionIds: List<UUID>,
@@ -79,6 +79,28 @@ sealed class HistoryBatchDisplayItem {
         override val isSynced: Boolean
     ) : HistoryBatchDisplayItem() {
         override val id: String = "virtual_${batchType.name}_${timeWindowStart.toEpochMilli()}_${locationName.hashCode()}"
+        override val isVoided: Boolean = false
+        override val isCorrection: Boolean = false
+        override val correctionReason: String? = null
+    }
+
+    /**
+     * Transfer operation shown as a single item with source and destination.
+     * Combines TRANSFER_OUT and TRANSFER_IN transactions into one display item.
+     */
+    data class TransferBatch(
+        val transactionIds: List<UUID>,
+        val fromLocationName: String,
+        val toLocationName: String,
+        override val createdAt: Instant,
+        override val totalWeightKg: BigDecimal,
+        override val itemCount: Int,
+        override val isSynced: Boolean
+    ) : HistoryBatchDisplayItem() {
+        override val id: String = "transfer_${createdAt.toEpochMilli()}_${fromLocationName.hashCode()}_${toLocationName.hashCode()}"
+        override val batchType: BatchType = BatchType.TRANSFER
+        override val totalAmount: BigDecimal? = null
+        override val locationName: String = "$fromLocationName → $toLocationName"
         override val isVoided: Boolean = false
         override val isCorrection: Boolean = false
         override val correctionReason: String? = null

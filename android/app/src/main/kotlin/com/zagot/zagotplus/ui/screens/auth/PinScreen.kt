@@ -1,7 +1,6 @@
 package com.zagot.zagotplus.ui.screens.auth
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.zagot.zagotplus.R
+import com.zagot.zagotplus.ui.components.bouncyClick
 
 @Composable
 fun PinScreen(
@@ -181,7 +181,7 @@ private fun KeypadButton(
                     MaterialTheme.colorScheme.surface
                 }
             )
-            .clickable(enabled = enabled && text.isNotEmpty()) { onClick() },
+            .bouncyClick(enabled = enabled && text.isNotEmpty(), onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         if (text.isNotEmpty()) {

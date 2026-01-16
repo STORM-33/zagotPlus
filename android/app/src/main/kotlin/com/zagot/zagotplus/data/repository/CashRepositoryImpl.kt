@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.data.repository
 
+import android.util.Log
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
@@ -29,6 +30,10 @@ class CashRepositoryImpl @Inject constructor(
     private val expenseCategoryDao: ExpenseCategoryDao,
     private val devicePreferences: DevicePreferences
 ) : CashRepository {
+
+    companion object {
+        private const val TAG = "CashRepositoryImpl"
+    }
 
     // ========== Expense Categories ==========
 
@@ -112,7 +117,13 @@ class CashRepositoryImpl @Inject constructor(
     // ========== Cash History (Unified) ==========
 
     override suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryItem> {
+        Log.d(TAG, "getCashHistoryPaged called: limit=$limit, offset=$offset")
         val projections = cashOperationDao.getCashHistoryPaged(limit, offset)
+        Log.d(TAG, "DAO returned ${projections.size} projections")
+        projections.forEachIndexed { index, p ->
+            Log.d(TAG, "  Projection[$index]: id=${p.id}, type=${p.type}, amount=${p.amount}, " +
+                "locationId=${p.locationId}, locationName=${p.locationName}, batchCount=${p.batchCount}")
+        }
         return projections.map { it.toDomain() }
     }
 
@@ -204,6 +215,61 @@ class CashRepositoryImpl @Inject constructor(
         )
         cashOperationDao.insert(entity)
     }
+    
+    override suspend fun transfer(sourceLocationId: UUID, destinationLocationId: UUID, amount: BigDecimal, notes: String?) {
+        val now = Instant.now()
+        val deviceId = devicePreferences.getDeviceId()
+        val transferNote = notes?.let { "Переказ: $it" } ?: "Переказ"
+        
+        // Withdrawal from source
+        val withdrawalEntity = CashOperationEntity(
+            id = UUID.randomUUID(),
+            localId = UUID.randomUUID().toString(),
+            locationId = sourceLocationId,
+            type = CashOperationType.WITHDRAWAL.toDbValue(),
+            amount = amount,
+            categoryId = null,
+            batchId = null,
+            notes = transferNote,
+            deviceId = deviceId,
+            createdAt = now,
+            syncedAt = null
+        )
+        
+        // Deposit to destination
+        val depositEntity = CashOperationEntity(
+            id = UUID.randomUUID(),
+            localId = UUID.randomUUID().toString(),
+            locationId = destinationLocationId,
+            type = CashOperationType.DEPOSIT.toDbValue(),
+            amount = amount,
+            categoryId = null,
+            batchId = null,
+            notes = transferNote,
+            deviceId = deviceId,
+            createdAt = now,
+            syncedAt = null
+        )
+        
+        cashOperationDao.insert(withdrawalEntity)
+        cashOperationDao.insert(depositEntity)
+    }
+    
+    override fun getDailyDeposits(locationId: UUID, date: LocalDate): Flow<BigDecimal> {
+        val zone = ZoneId.systemDefault()
+        val startOfDay = date.atStartOfDay(zone).toInstant()
+        val endOfDay = date.plusDays(1).atStartOfDay(zone).toInstant()
+        
+        return cashOperationDao.getDailyDeposits(locationId, startOfDay, endOfDay)
+    }
+    
+    override fun getDailyDepositsGlobal(date: LocalDate): Flow<BigDecimal> {
+        val zone = ZoneId.systemDefault()
+        val startOfDay = date.atStartOfDay(zone).toInstant()
+        val endOfDay = date.plusDays(1).atStartOfDay(zone).toInstant()
+        
+        return cashOperationDao.getDailyDepositsGlobal(startOfDay, endOfDay)
+    }
 
     // ========== Update ==========
 
@@ -260,24 +326,33 @@ class CashRepositoryImpl @Inject constructor(
         syncedAt = syncedAt
     )
 
-    private fun CashHistoryProjection.toDomain() = CashHistoryItem(
-        id = id,
-        type = when (type) {
-            "deposit" -> CashHistoryItemType.DEPOSIT
-            "withdrawal" -> CashHistoryItemType.WITHDRAWAL
-            "payment" -> CashHistoryItemType.PAYMENT
-            "purchase" -> CashHistoryItemType.PURCHASE
-            "sale" -> CashHistoryItemType.SALE
-            else -> throw IllegalArgumentException("Unknown cash history type: $type")
-        },
-        amount = amount,
-        notes = notes,
-        categoryName = categoryName,
-        itemCount = itemCount,
-        weightKg = weightKg,
-        createdAt = createdAt,
-        batchCount = batchCount,
-        locationId = locationId?.let { UUID.fromString(it) },
-        locationName = locationName
-    )
+    private fun CashHistoryProjection.toDomain(): CashHistoryItem {
+        val isTransferOperation = notes?.startsWith("Переказ") == true && (type == "deposit" || type == "withdrawal")
+        val isIncomingTransfer = isTransferOperation && type == "deposit"
+        
+        return CashHistoryItem(
+            id = id,
+            type = when {
+                // Detect transfers via notes pattern
+                isTransferOperation -> CashHistoryItemType.TRANSFER
+                type == "deposit" -> CashHistoryItemType.DEPOSIT
+                type == "withdrawal" -> CashHistoryItemType.WITHDRAWAL
+                type == "payment" -> CashHistoryItemType.PAYMENT
+                type == "purchase" -> CashHistoryItemType.PURCHASE
+                type == "sale" -> CashHistoryItemType.SALE
+                type == "transfer" -> CashHistoryItemType.TRANSFER
+                else -> throw IllegalArgumentException("Unknown cash history type: $type")
+            },
+            amount = amount,
+            notes = notes,
+            categoryName = categoryName,
+            itemCount = itemCount,
+            weightKg = weightKg,
+            createdAt = createdAt,
+            batchCount = batchCount,
+            locationId = locationId?.let { UUID.fromString(it) },
+            locationName = locationName,
+            isTransferIn = isIncomingTransfer
+        )
+    }
 }

@@ -1,9 +1,5 @@
 package com.zagot.zagotplus.ui.screens.reports
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.domain.model.Location
@@ -11,11 +7,13 @@ import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionFilter
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,55 +22,54 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
-import java.text.DecimalFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 import javax.inject.Inject
 
+/**
+ * UI state for the Reports screen.
+ * 
+ * Summary panels:
+ * - Витрати (Spendings): закупки + оплата + виведення
+ * - Прибуток (Earnings): sum of sale amounts
+ */
 data class ReportsUiState(
-    val selectedDate: LocalDate = LocalDate.now(),
+    val dateRange: DateRange? = null, // null = all time (default)
     val isLoading: Boolean = false,
-    val purchaseSummary: TransactionSummary = TransactionSummary(),
-    val saleSummary: TransactionSummary = TransactionSummary(),
-    val productBreakdown: List<ProductBreakdownItem> = emptyList(),
-    val locationBreakdown: List<LocationBreakdownItem> = emptyList(),
-    val transferSummary: List<TransferSummaryItem> = emptyList(),
+    
+    // Summary panels
+    val totalSpendings: BigDecimal = BigDecimal.ZERO,
+    val totalEarnings: BigDecimal = BigDecimal.ZERO,
+    
+    // Location selection
+    val locations: List<Location> = emptyList(),
+    val selectedLocationId: UUID? = null, // null = all locations ("всього")
+    
+    // Product list (sorted by spending descending)
+    val productItems: List<ProductReportItem> = emptyList(),
+    
     val hasData: Boolean = false,
-    val error: String? = null,
-    val copySuccess: Boolean = false
-)
+    val error: String? = null
+) {
+    val isTotalsView: Boolean
+        get() = selectedLocationId == null
+    
+    val selectedLocationName: String?
+        get() = selectedLocationId?.let { id -> locations.find { it.id == id }?.name }
+}
 
-data class TransactionSummary(
-    val totalWeightKg: BigDecimal = BigDecimal.ZERO,
-    val totalAmount: BigDecimal = BigDecimal.ZERO
-)
-
-data class ProductBreakdownItem(
+/**
+ * Product report item showing purchase stats for a product.
+ */
+data class ProductReportItem(
     val productId: UUID,
     val productName: String,
-    val purchaseWeightKg: BigDecimal = BigDecimal.ZERO,
-    val purchaseAmount: BigDecimal = BigDecimal.ZERO,
-    val saleWeightKg: BigDecimal = BigDecimal.ZERO,
-    val saleAmount: BigDecimal = BigDecimal.ZERO
-)
-
-data class LocationBreakdownItem(
-    val locationId: UUID,
-    val locationName: String,
-    val purchaseWeightKg: BigDecimal = BigDecimal.ZERO,
-    val purchaseAmount: BigDecimal = BigDecimal.ZERO,
-    val saleWeightKg: BigDecimal = BigDecimal.ZERO,
-    val saleAmount: BigDecimal = BigDecimal.ZERO
-)
-
-data class TransferSummaryItem(
-    val fromLocationName: String,
-    val toLocationName: String,
-    val productName: String,
-    val weightKg: BigDecimal
+    val imageUri: String?,
+    val totalSpent: BigDecimal,
+    val totalWeightKg: BigDecimal
 )
 
 @HiltViewModel
@@ -80,7 +77,7 @@ class ReportsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val productRepository: ProductRepository,
     private val locationRepository: LocationRepository,
-    @ApplicationContext private val context: Context
+    private val cashRepository: CashRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReportsUiState())
@@ -90,25 +87,18 @@ class ReportsViewModel @Inject constructor(
     private var locations: Map<UUID, Location> = emptyMap()
     private var lastKnownCount: Int = -1
 
-    private val decimalFormat = DecimalFormat("#,##0.00")
-    private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-
     init {
         loadReferencesAndData()
         observeTransactionChanges()
     }
 
-    /**
-     * Observe transaction count changes to auto-refresh when new transactions are added.
-     */
     private fun observeTransactionChanges() {
         viewModelScope.launch {
             transactionRepository.getTotalTransactionCount()
                 .distinctUntilChanged()
                 .collect { count ->
-                    // Only refresh if count changed after initial load
                     if (lastKnownCount >= 0 && count != lastKnownCount) {
-                        loadDayData(_uiState.value.selectedDate)
+                        loadReportData()
                     }
                     lastKnownCount = count
                 }
@@ -120,8 +110,10 @@ class ReportsViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 products = productRepository.getActiveProducts().first().associateBy { it.id }
-                locations = locationRepository.getAllLocations().first().associateBy { it.id }
-                loadDayData(_uiState.value.selectedDate)
+                val locationsList = locationRepository.getAllLocations().first()
+                locations = locationsList.associateBy { it.id }
+                _uiState.update { it.copy(locations = locationsList) }
+                loadReportData()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -133,23 +125,47 @@ class ReportsViewModel @Inject constructor(
         }
     }
 
-    fun selectDate(date: LocalDate) {
-        if (date == _uiState.value.selectedDate) return
-        _uiState.update { it.copy(selectedDate = date) }
-        loadDayData(date)
+    fun setDateRange(dateRange: DateRange?) {
+        if (dateRange == _uiState.value.dateRange) return
+        _uiState.update { it.copy(dateRange = dateRange) }
+        loadReportData()
     }
 
-    private fun loadDayData(date: LocalDate) {
+    fun selectLocation(locationId: UUID) {
+        _uiState.update { it.copy(selectedLocationId = locationId) }
+        loadReportData()
+    }
+
+    fun selectTotalView() {
+        _uiState.update { it.copy(selectedLocationId = null) }
+        loadReportData()
+    }
+
+    /**
+     * Converts DateRange to Instant pair for filtering.
+     * Returns (null, null) if dateRange is null (meaning ALL time).
+     */
+    private fun getDateRangeInstants(dateRange: DateRange?): Pair<Instant?, Instant?> {
+        if (dateRange == null) return null to null
+
+        val zone = ZoneId.systemDefault()
+        val start = dateRange.startDate.atStartOfDay(zone).toInstant()
+        val end = dateRange.endDate.atTime(LocalTime.MAX).atZone(zone).toInstant()
+        return start to end
+    }
+
+    private fun loadReportData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val zone = ZoneId.systemDefault()
-                val startOfDay = date.atStartOfDay(zone).toInstant()
-                val endOfDay = date.plusDays(1).atStartOfDay(zone).toInstant()
+                val state = _uiState.value
+                val (startInstant, endInstant) = getDateRangeInstants(state.dateRange)
 
+                // Build filter
                 val filter = TransactionFilter(
-                    startDate = startOfDay,
-                    endDate = endOfDay
+                    startDate = startInstant,
+                    endDate = endInstant,
+                    locationId = state.selectedLocationId
                 )
 
                 val transactions = transactionRepository.getFilteredTransactions(
@@ -158,7 +174,33 @@ class ReportsViewModel @Inject constructor(
                     offset = 0
                 )
 
-                computeSummaries(transactions)
+                // Calculate spendings (purchases only from transactions)
+                val purchases = transactions.filter { it.type == TransactionType.PURCHASE }
+                val purchaseTotal = purchases.sumOf { it.totalAmount ?: BigDecimal.ZERO }
+
+                // Get cash operations (payments + withdrawals) for the period
+                val cashSpendings = calculateCashSpendings(startInstant, endInstant, state.selectedLocationId)
+
+                val totalSpendings = purchaseTotal.add(cashSpendings)
+
+                // Calculate earnings (sales)
+                val sales = transactions.filter { it.type == TransactionType.SALE }
+                val totalEarnings = sales.sumOf { it.totalAmount ?: BigDecimal.ZERO }
+
+                // Build product list from purchases
+                val productItems = computeProductItems(purchases)
+
+                val hasData = transactions.isNotEmpty() || totalSpendings > BigDecimal.ZERO || totalEarnings > BigDecimal.ZERO
+
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        totalSpendings = totalSpendings,
+                        totalEarnings = totalEarnings,
+                        productItems = productItems,
+                        hasData = hasData
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -170,175 +212,56 @@ class ReportsViewModel @Inject constructor(
         }
     }
 
-    private fun computeSummaries(transactions: List<Transaction>) {
-        val purchases = transactions.filter { it.type == TransactionType.PURCHASE }
-        val sales = transactions.filter { it.type == TransactionType.SALE }
-        val transfersOut = transactions.filter { it.type == TransactionType.TRANSFER_OUT }
-
-        val purchaseSummary = TransactionSummary(
-            totalWeightKg = purchases.sumOf { it.weightKg },
-            totalAmount = purchases.sumOf { it.totalAmount ?: BigDecimal.ZERO }
-        )
-
-        val saleSummary = TransactionSummary(
-            totalWeightKg = sales.sumOf { it.weightKg },
-            totalAmount = sales.sumOf { it.totalAmount ?: BigDecimal.ZERO }
-        )
-
-        // Product breakdown
-        val productBreakdown = computeProductBreakdown(purchases, sales)
-
-        // Location breakdown
-        val locationBreakdown = computeLocationBreakdown(purchases, sales)
-
-        // Transfer summary
-        val transferSummary = transfersOut.mapNotNull { tx ->
-            val fromLocation = tx.locationId?.let { locations[it]?.name } ?: return@mapNotNull null
-            val toLocation = tx.transferLocationId?.let { locations[it]?.name } ?: return@mapNotNull null
-            val productName = tx.productId?.let { products[it]?.name } ?: "Невідомо"
-            TransferSummaryItem(
-                fromLocationName = fromLocation,
-                toLocationName = toLocation,
-                productName = productName,
-                weightKg = tx.weightKg
-            )
-        }
-
-        val hasData = transactions.isNotEmpty()
-
-        _uiState.update {
-            it.copy(
-                isLoading = false,
-                purchaseSummary = purchaseSummary,
-                saleSummary = saleSummary,
-                productBreakdown = productBreakdown,
-                locationBreakdown = locationBreakdown,
-                transferSummary = transferSummary,
-                hasData = hasData
-            )
+    /**
+     * Calculate cash spendings (payments + withdrawals) for the period.
+     * This matches the cash screen calculation logic.
+     * If dates are null, includes all time.
+     */
+    private suspend fun calculateCashSpendings(
+        startDate: Instant?,
+        endDate: Instant?,
+        locationId: UUID?
+    ): BigDecimal {
+        return try {
+            val operations = if (locationId != null) {
+                cashRepository.getCashHistoryByLocationPaged(locationId, 10000, 0)
+            } else {
+                cashRepository.getCashHistoryPaged(10000, 0)
+            }
+            
+            operations
+                .filter { 
+                    (startDate == null || it.createdAt >= startDate) && 
+                    (endDate == null || it.createdAt <= endDate) 
+                }
+                .filter { 
+                    it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.PAYMENT ||
+                    it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.WITHDRAWAL
+                }
+                .sumOf { it.amount }
+        } catch (e: Exception) {
+            BigDecimal.ZERO
         }
     }
 
-    private fun computeProductBreakdown(
-        purchases: List<Transaction>,
-        sales: List<Transaction>
-    ): List<ProductBreakdownItem> {
-        val productIds = (purchases.mapNotNull { it.productId } + sales.mapNotNull { it.productId }).toSet()
+    /**
+     * Compute product items from purchases, sorted by total spent descending.
+     */
+    private fun computeProductItems(purchases: List<Transaction>): List<ProductReportItem> {
+        val productIds = purchases.mapNotNull { it.productId }.toSet()
 
         return productIds.mapNotNull { productId ->
             val product = products[productId] ?: return@mapNotNull null
             val productPurchases = purchases.filter { it.productId == productId }
-            val productSales = sales.filter { it.productId == productId }
 
-            ProductBreakdownItem(
+            ProductReportItem(
                 productId = productId,
                 productName = product.name,
-                purchaseWeightKg = productPurchases.sumOf { it.weightKg },
-                purchaseAmount = productPurchases.sumOf { it.totalAmount ?: BigDecimal.ZERO },
-                saleWeightKg = productSales.sumOf { it.weightKg },
-                saleAmount = productSales.sumOf { it.totalAmount ?: BigDecimal.ZERO }
+                imageUri = product.imageUri,
+                totalSpent = productPurchases.sumOf { it.totalAmount ?: BigDecimal.ZERO },
+                totalWeightKg = productPurchases.sumOf { it.weightKg }
             )
-        }.sortedBy { it.productName }
-    }
-
-    private fun computeLocationBreakdown(
-        purchases: List<Transaction>,
-        sales: List<Transaction>
-    ): List<LocationBreakdownItem> {
-        val locationIds = (purchases.mapNotNull { it.locationId } + sales.mapNotNull { it.locationId }).toSet()
-
-        return locationIds.mapNotNull { locationId ->
-            val location = locations[locationId] ?: return@mapNotNull null
-            val locationPurchases = purchases.filter { it.locationId == locationId }
-            val locationSales = sales.filter { it.locationId == locationId }
-
-            LocationBreakdownItem(
-                locationId = locationId,
-                locationName = location.name,
-                purchaseWeightKg = locationPurchases.sumOf { it.weightKg },
-                purchaseAmount = locationPurchases.sumOf { it.totalAmount ?: BigDecimal.ZERO },
-                saleWeightKg = locationSales.sumOf { it.weightKg },
-                saleAmount = locationSales.sumOf { it.totalAmount ?: BigDecimal.ZERO }
-            )
-        }.sortedBy { it.locationName }
-    }
-
-    fun copyReportToClipboard() {
-        val report = generateReportText()
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Звіт", report)
-        clipboard.setPrimaryClip(clip)
-        _uiState.update { it.copy(copySuccess = true) }
-    }
-
-    fun createShareIntent(): Intent {
-        val report = generateReportText()
-        return Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, report)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-    }
-
-    private fun generateReportText(): String {
-        val state = _uiState.value
-        val dateStr = dateFormatter.format(state.selectedDate)
-
-        return buildString {
-            appendLine("Звіт за $dateStr")
-            appendLine()
-
-            if (!state.hasData) {
-                appendLine("Немає даних за цей день")
-                return@buildString
-            }
-
-            // Purchases section
-            appendLine("ЗАКУПКИ")
-            if (state.productBreakdown.any { it.purchaseWeightKg > BigDecimal.ZERO }) {
-                state.productBreakdown
-                    .filter { it.purchaseWeightKg > BigDecimal.ZERO }
-                    .forEach { item ->
-                        val pricePerKg = if (item.purchaseWeightKg > BigDecimal.ZERO) {
-                            item.purchaseAmount.divide(item.purchaseWeightKg, 2, java.math.RoundingMode.HALF_UP)
-                        } else BigDecimal.ZERO
-                        appendLine("- ${item.productName}: ${decimalFormat.format(item.purchaseWeightKg)} кг × ${decimalFormat.format(pricePerKg)} = ${decimalFormat.format(item.purchaseAmount)} грн")
-                    }
-                appendLine("Разом: ${decimalFormat.format(state.purchaseSummary.totalWeightKg)} кг, ${decimalFormat.format(state.purchaseSummary.totalAmount)} грн")
-            } else {
-                appendLine("(немає)")
-            }
-            appendLine()
-
-            // Sales section
-            appendLine("ПРОДАЖІ")
-            if (state.productBreakdown.any { it.saleWeightKg > BigDecimal.ZERO }) {
-                state.productBreakdown
-                    .filter { it.saleWeightKg > BigDecimal.ZERO }
-                    .forEach { item ->
-                        val pricePerKg = if (item.saleWeightKg > BigDecimal.ZERO) {
-                            item.saleAmount.divide(item.saleWeightKg, 2, java.math.RoundingMode.HALF_UP)
-                        } else BigDecimal.ZERO
-                        appendLine("- ${item.productName}: ${decimalFormat.format(item.saleWeightKg)} кг × ${decimalFormat.format(pricePerKg)} = ${decimalFormat.format(item.saleAmount)} грн")
-                    }
-                appendLine("Разом: ${decimalFormat.format(state.saleSummary.totalWeightKg)} кг, ${decimalFormat.format(state.saleSummary.totalAmount)} грн")
-            } else {
-                appendLine("(немає)")
-            }
-            appendLine()
-
-            // Transfers section
-            if (state.transferSummary.isNotEmpty()) {
-                appendLine("ПЕРЕМІЩЕННЯ")
-                state.transferSummary.forEach { transfer ->
-                    appendLine("- ${transfer.fromLocationName} → ${transfer.toLocationName}: ${transfer.productName} ${decimalFormat.format(transfer.weightKg)} кг")
-                }
-            }
-        }
-    }
-
-    fun dismissCopySuccess() {
-        _uiState.update { it.copy(copySuccess = false) }
+        }.sortedByDescending { it.totalSpent }
     }
 
     fun dismissError() {

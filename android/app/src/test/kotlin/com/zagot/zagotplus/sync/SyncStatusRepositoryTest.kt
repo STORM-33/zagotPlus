@@ -83,6 +83,19 @@ class SyncStatusRepositoryTest {
     }
 
     @Test
+    fun `setSuccess changes state to SUCCESS with last sync time`() = runTest {
+        every { syncPreferences.getLastSyncTimestamp() } returns testInstant
+
+        repository = SyncStatusRepository(syncPreferences)
+        repository.setSyncing()
+        repository.setSuccess()
+        val status = repository.syncStatus.first()
+
+        assertEquals(SyncStatus.State.SUCCESS, status.state)
+        assertEquals(testInstant, status.lastSyncTime)
+    }
+
+    @Test
     fun `setError changes state to ERROR with message`() = runTest {
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
 

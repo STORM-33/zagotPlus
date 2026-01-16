@@ -101,16 +101,11 @@ interface CashOperationDao {
                 ELSE 0
             END), 0) FROM cash_operations WHERE location_id = :locationId)
             +
-            (SELECT COALESCE(SUM(CASE 
-                WHEN t.type = 'sale' THEN t.total_amount
-                WHEN t.type = 'purchase' THEN -t.total_amount
-                ELSE 0
-            END), 0) FROM transactions t
+            (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
-            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
             WHERE t.location_id = :locationId
-              AND (t.batch_id IS NULL OR pb.is_voided = 0)
-              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
+              AND t.type = 'purchase'
+              AND pb.is_voided = 0)
         , 0)
     """)
     fun getBalanceByLocation(locationId: UUID): Flow<java.math.BigDecimal>
@@ -126,18 +121,13 @@ interface CashOperationDao {
               AND created_at >= :startOfDay
               AND created_at < :endOfDay)
             +
-            (SELECT COALESCE(SUM(CASE 
-                WHEN t.type = 'sale' THEN t.total_amount
-                WHEN t.type = 'purchase' THEN -t.total_amount
-                ELSE 0
-            END), 0) FROM transactions t
+            (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
-            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
             WHERE t.location_id = :locationId
               AND t.created_at >= :startOfDay
               AND t.created_at < :endOfDay
-              AND (t.batch_id IS NULL OR pb.is_voided = 0)
-              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
+              AND t.type = 'purchase'
+              AND pb.is_voided = 0)
         , 0)
     """)
     fun getDailyBalanceChange(
@@ -186,15 +176,10 @@ interface CashOperationDao {
                 ELSE 0
             END), 0) FROM cash_operations)
             +
-            (SELECT COALESCE(SUM(CASE 
-                WHEN t.type = 'sale' THEN t.total_amount
-                WHEN t.type = 'purchase' THEN -t.total_amount
-                ELSE 0
-            END), 0) FROM transactions t
+            (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
-            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
-            WHERE (t.batch_id IS NULL OR pb.is_voided = 0)
-              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
+            WHERE t.type = 'purchase'
+              AND pb.is_voided = 0)
         , 0)
     """)
     fun getTotalBalance(): Flow<java.math.BigDecimal>
@@ -208,16 +193,11 @@ interface CashOperationDao {
             END), 0) FROM cash_operations
             WHERE created_at >= :startOfDay AND created_at < :endOfDay)
             +
-            (SELECT COALESCE(SUM(CASE 
-                WHEN t.type = 'sale' THEN t.total_amount
-                WHEN t.type = 'purchase' THEN -t.total_amount
-                ELSE 0
-            END), 0) FROM transactions t
+            (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
-            LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id
             WHERE t.created_at >= :startOfDay AND t.created_at < :endOfDay
-              AND (t.batch_id IS NULL OR pb.is_voided = 0)
-              AND (t.sale_batch_id IS NULL OR sb.is_voided = 0))
+              AND t.type = 'purchase'
+              AND pb.is_voided = 0)
         , 0)
     """)
     fun getDailyBalanceChange(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
@@ -236,12 +216,18 @@ interface CashOperationDao {
 
     /**
      * Get unified cash history with pagination.
-     * Combines individual cash_operations with daily aggregates of purchase_batches and sale_batches.
-     * Purchases and sales are grouped by day to avoid hundreds of entries per day.
+     * Combines individual cash_operations with daily aggregates of purchase_batches.
+     * Sales are excluded from cash history as per user preference.
+     * Purchases are grouped by day only (across all locations) to avoid duplicate entries in totals view.
+     * Transfers are excluded in totals view (they don't affect global balance).
      * Includes location info for display in totals view.
+     *
+     * Note: cash_operations with type='purchase' are excluded to avoid double-counting
+     * since purchase data is already aggregated from purchase_batches.
+     * Note: Transfers are detected by notes starting with 'Переказ' pattern.
      */
     @Query("""
-        SELECT 
+        SELECT
             id,
             type,
             amount,
@@ -254,7 +240,7 @@ interface CashOperationDao {
             location_id,
             location_name
         FROM (
-            SELECT 
+            SELECT
                 CAST(co.id AS TEXT) as id,
                 co.type,
                 co.amount,
@@ -269,9 +255,10 @@ interface CashOperationDao {
             FROM cash_operations co
             LEFT JOIN expense_categories ec ON co.category_id = ec.id
             LEFT JOIN locations l ON co.location_id = l.id
+            WHERE co.type != 'purchase' AND (co.notes IS NULL OR co.notes NOT LIKE 'Переказ%')
             UNION ALL
             SELECT 
-                'purchase_' || pb.location_id || '_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
+                'purchase_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
                 'purchase' as type,
                 SUM(pb.total_amount) as amount,
                 NULL as notes,
@@ -280,29 +267,11 @@ interface CashOperationDao {
                 SUM(pb.total_weight_kg) as weight_kg,
                 MAX(pb.created_at) as created_at,
                 COUNT(*) as batch_count,
-                CAST(pb.location_id AS TEXT) as location_id,
-                l.name as location_name
+                NULL as location_id,
+                NULL as location_name
             FROM purchase_batches pb
-            LEFT JOIN locations l ON pb.location_id = l.id
             WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0
-            GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
-            UNION ALL
-            SELECT 
-                'sale_' || sb.location_id || '_' || date(sb.created_at / 1000, 'unixepoch', 'localtime') as id,
-                'sale' as type,
-                SUM(sb.total_amount) as amount,
-                NULL as notes,
-                NULL as category_name,
-                SUM(sb.item_count) as item_count,
-                SUM(sb.total_weight_kg) as weight_kg,
-                MAX(sb.created_at) as created_at,
-                COUNT(*) as batch_count,
-                CAST(sb.location_id AS TEXT) as location_id,
-                l.name as location_name
-            FROM sale_batches sb
-            LEFT JOIN locations l ON sb.location_id = l.id
-            WHERE sb.total_amount IS NOT NULL AND sb.is_voided = 0
-            GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
+            GROUP BY date(pb.created_at / 1000, 'unixepoch', 'localtime')
         )
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
@@ -311,9 +280,13 @@ interface CashOperationDao {
 
     /**
      * Get cash history filtered by location with pagination.
+     * Sales are excluded from cash history as per user preference.
+     *
+     * Note: cash_operations with type='purchase' are excluded to avoid double-counting
+     * since purchase data is already aggregated from purchase_batches.
      */
     @Query("""
-        SELECT 
+        SELECT
             id,
             type,
             amount,
@@ -326,7 +299,7 @@ interface CashOperationDao {
             location_id,
             location_name
         FROM (
-            SELECT 
+            SELECT
                 CAST(co.id AS TEXT) as id,
                 co.type,
                 co.amount,
@@ -341,7 +314,7 @@ interface CashOperationDao {
             FROM cash_operations co
             LEFT JOIN expense_categories ec ON co.category_id = ec.id
             LEFT JOIN locations l ON co.location_id = l.id
-            WHERE co.location_id = :locationId
+            WHERE co.location_id = :locationId AND co.type != 'purchase'
             UNION ALL
             SELECT 
                 'purchase_' || pb.location_id || '_' || date(pb.created_at / 1000, 'unixepoch', 'localtime') as id,
@@ -359,23 +332,6 @@ interface CashOperationDao {
             LEFT JOIN locations l ON pb.location_id = l.id
             WHERE pb.total_amount IS NOT NULL AND pb.is_voided = 0 AND pb.location_id = :locationId
             GROUP BY pb.location_id, date(pb.created_at / 1000, 'unixepoch', 'localtime')
-            UNION ALL
-            SELECT 
-                'sale_' || sb.location_id || '_' || date(sb.created_at / 1000, 'unixepoch', 'localtime') as id,
-                'sale' as type,
-                SUM(sb.total_amount) as amount,
-                NULL as notes,
-                NULL as category_name,
-                SUM(sb.item_count) as item_count,
-                SUM(sb.total_weight_kg) as weight_kg,
-                MAX(sb.created_at) as created_at,
-                COUNT(*) as batch_count,
-                CAST(sb.location_id AS TEXT) as location_id,
-                l.name as location_name
-            FROM sale_batches sb
-            LEFT JOIN locations l ON sb.location_id = l.id
-            WHERE sb.total_amount IS NOT NULL AND sb.is_voided = 0 AND sb.location_id = :locationId
-            GROUP BY sb.location_id, date(sb.created_at / 1000, 'unixepoch', 'localtime')
         )
         ORDER by created_at DESC
         LIMIT :limit OFFSET :offset
@@ -383,24 +339,53 @@ interface CashOperationDao {
     suspend fun getCashHistoryByLocationPaged(locationId: UUID, limit: Int, offset: Int): List<CashHistoryProjection>
 
     /**
-     * Get total count of all cash history items (operations + unique location-day combinations of batches).
+     * Get total count of all cash history items (operations + unique day combinations of purchase batches).
+     * Sales are excluded from cash history.
+     * Cash_operations with type='purchase' are excluded to avoid double-counting.
+     * Purchases are counted by unique days only (not per-location) to match getCashHistoryPaged.
+     * Transfers (detected by notes starting with 'Переказ') are excluded in totals view.
      */
     @Query("""
-        SELECT 
-            (SELECT COUNT(*) FROM cash_operations) +
-            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0) +
-            (SELECT COUNT(DISTINCT location_id || '_' || date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND is_voided = 0)
+        SELECT
+            (SELECT COUNT(*) FROM cash_operations WHERE type != 'purchase' AND (notes IS NULL OR notes NOT LIKE 'Переказ%')) +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0)
     """)
     suspend fun getTotalHistoryCount(): Int
 
     /**
      * Get count of cash history items for a specific location.
+     * Sales are excluded from cash history.
+     * Cash_operations with type='purchase' are excluded to avoid double-counting.
      */
     @Query("""
-        SELECT 
-            (SELECT COUNT(*) FROM cash_operations WHERE location_id = :locationId) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId) +
-            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM sale_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId)
+        SELECT
+            (SELECT COUNT(*) FROM cash_operations WHERE location_id = :locationId AND type != 'purchase') +
+            (SELECT COUNT(DISTINCT date(created_at / 1000, 'unixepoch', 'localtime')) FROM purchase_batches WHERE total_amount IS NOT NULL AND is_voided = 0 AND location_id = :locationId)
     """)
     suspend fun getTotalHistoryCountByLocation(locationId: UUID): Int
+    
+    /**
+     * Get today's deposits for a specific location.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(amount), 0) 
+        FROM cash_operations
+        WHERE location_id = :locationId
+          AND type = 'deposit'
+          AND created_at >= :startOfDay
+          AND created_at < :endOfDay
+    """)
+    fun getDailyDeposits(locationId: UUID, startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
+    
+    /**
+     * Get today's deposits globally (all locations).
+     */
+    @Query("""
+        SELECT COALESCE(SUM(amount), 0) 
+        FROM cash_operations
+        WHERE type = 'deposit'
+          AND created_at >= :startOfDay
+          AND created_at < :endOfDay
+    """)
+    fun getDailyDepositsGlobal(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
 }

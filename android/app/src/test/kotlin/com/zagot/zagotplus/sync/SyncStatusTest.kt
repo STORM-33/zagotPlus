@@ -39,6 +39,15 @@ class SyncStatusTest {
     }
 
     @Test
+    fun `success factory creates SUCCESS state with timestamp`() {
+        val status = SyncStatus.success(testInstant)
+
+        assertEquals(SyncStatus.State.SUCCESS, status.state)
+        assertEquals(testInstant, status.lastSyncTime)
+        assertNull(status.errorMessage)
+    }
+
+    @Test
     fun `error factory creates ERROR state with message`() {
         val status = SyncStatus.error("Network connection failed")
 
@@ -51,18 +60,21 @@ class SyncStatusTest {
     fun `State enum contains all expected values`() {
         val states = SyncStatus.State.values()
 
-        assertEquals(4, states.size)
+        assertEquals(5, states.size)
         assertTrue(states.contains(SyncStatus.State.IDLE))
         assertTrue(states.contains(SyncStatus.State.SYNCING))
+        assertTrue(states.contains(SyncStatus.State.SUCCESS))
         assertTrue(states.contains(SyncStatus.State.WARNING))
         assertTrue(states.contains(SyncStatus.State.ERROR))
     }
 
     @Test
     fun `when expression covers all states`() {
+        val testInstant2 = Instant.parse("2024-01-15T10:31:00Z")
         val states = listOf(
             SyncStatus.idle(),
             SyncStatus.syncing(),
+            SyncStatus.success(testInstant2),
             SyncStatus.warning("partial sync"),
             SyncStatus.error("test")
         )
@@ -71,6 +83,7 @@ class SyncStatusTest {
             val description = when (status.state) {
                 SyncStatus.State.IDLE -> "idle"
                 SyncStatus.State.SYNCING -> "syncing"
+                SyncStatus.State.SUCCESS -> "success"
                 SyncStatus.State.WARNING -> "warning"
                 SyncStatus.State.ERROR -> "error"
             }

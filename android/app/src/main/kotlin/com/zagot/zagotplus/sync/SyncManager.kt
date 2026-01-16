@@ -14,7 +14,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class SyncManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val syncStatusRepository: SyncStatusRepository
 ) {
     private val workManager = WorkManager.getInstance(context)
     
@@ -22,8 +23,8 @@ class SyncManager @Inject constructor(
     private val lastManualSyncTime = AtomicLong(0L)
 
     companion object {
-        /** Minimum interval between manual syncs in milliseconds (30 seconds) */
-        private const val MIN_SYNC_INTERVAL_MS = 30_000L
+        /** Minimum interval between manual syncs in milliseconds (5 seconds) */
+        private const val MIN_SYNC_INTERVAL_MS = 5_000L
     }
 
     /**
@@ -57,7 +58,8 @@ class SyncManager @Inject constructor(
     /**
      * Trigger immediate one-time sync (e.g., from "Sync Now" button).
      * Uses same constraints as periodic sync.
-     * Rate-limited to prevent spam (minimum 5 seconds between syncs).
+     * Rate-limited to prevent spam (minimum 30 seconds between syncs),
+     * unless last sync failed - then immediate retry is allowed.
      * 
      * @return true if sync was enqueued, false if rate-limited
      */
@@ -65,7 +67,12 @@ class SyncManager @Inject constructor(
         val now = System.currentTimeMillis()
         val lastSync = lastManualSyncTime.get()
         
-        if (now - lastSync < MIN_SYNC_INTERVAL_MS) {
+        // Allow immediate retry if last sync failed or had warning
+        val currentState = syncStatusRepository.currentState
+        val isErrorState = currentState == SyncStatus.State.ERROR || 
+                          currentState == SyncStatus.State.WARNING
+        
+        if (!isErrorState && now - lastSync < MIN_SYNC_INTERVAL_MS) {
             // Rate limited - too soon since last sync
             return false
         }

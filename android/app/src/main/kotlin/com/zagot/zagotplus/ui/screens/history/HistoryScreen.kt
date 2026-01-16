@@ -28,11 +28,14 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -61,8 +64,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import com.zagot.zagotplus.domain.model.DateRangePreset
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.DateRange
+import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
@@ -71,7 +75,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
     modifier: Modifier = Modifier,
@@ -83,6 +87,50 @@ fun HistoryScreen(
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // State for void confirmation dialog
+    var pendingVoidBatch by remember { mutableStateOf<Pair<UUID, BatchType>?>(null) }
+
+    // Show snackbar on success message
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.dismissSuccess()
+        }
+    }
+
+    // Show snackbar on error
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            viewModel.dismissError()
+        }
+    }
+
+    // Void confirmation dialog
+    pendingVoidBatch?.let { (batchId, batchType) ->
+        AlertDialog(
+            onDismissRequest = { pendingVoidBatch = null },
+            title = { Text("Підтвердіть анулювання") },
+            text = { Text("Анульовану партію неможливо відновити. Ви впевнені?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.voidBatch(batchId, batchType)
+                        pendingVoidBatch = null
+                    }
+                ) {
+                    Text("Анулювати", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingVoidBatch = null }) {
+                    Text("Скасувати")
+                }
+            }
+        )
+    }
 
     // Load more when reaching the end
     val shouldLoadMore by remember {
@@ -108,8 +156,8 @@ fun HistoryScreen(
             onSearchQueryChange = viewModel::setSearchQuery,
             selectedTypes = uiState.selectedTypes,
             onTypeToggle = viewModel::toggleTypeFilter,
-            dateRangePreset = uiState.dateRangePreset,
-            onDateRangePresetChange = viewModel::setDateRangePreset,
+            dateRange = uiState.dateRange,
+            onDateRangeChange = viewModel::setDateRange,
             selectedLocationId = uiState.selectedLocationId,
             locations = uiState.locations,
             onLocationChange = viewModel::setLocationFilter,
@@ -182,22 +230,25 @@ fun HistoryScreen(
                                             onNavigateToEditPurchase(batchId.toString())
                                         is HistoryBatchDisplayItem.RealSaleBatch -> 
                                             onNavigateToEditSale(batchId.toString())
-                                        is HistoryBatchDisplayItem.VirtualBatch -> 
-                                            { /* Virtual batches cannot be edited */ }
+                                        is HistoryBatchDisplayItem.VirtualBatch,
+                                        is HistoryBatchDisplayItem.TransferBatch -> 
+                                            { /* Virtual/transfer batches cannot be edited */ }
                                     }
                                 },
                                 onDeleteClick = { batchId ->
                                     when (batch) {
                                         is HistoryBatchDisplayItem.RealBatch -> 
-                                            viewModel.voidBatch(batchId, BatchType.PURCHASE)
+                                            pendingVoidBatch = batchId to BatchType.PURCHASE
                                         is HistoryBatchDisplayItem.RealSaleBatch -> 
-                                            viewModel.voidBatch(batchId, BatchType.SALE)
-                                        is HistoryBatchDisplayItem.VirtualBatch -> 
-                                            { /* Virtual batches cannot be deleted */ }
+                                            pendingVoidBatch = batchId to BatchType.SALE
+                                        is HistoryBatchDisplayItem.VirtualBatch,
+                                        is HistoryBatchDisplayItem.TransferBatch -> 
+                                            { /* Virtual/transfer batches cannot be deleted */ }
                                     }
                                 },
                                 decimalFormat = decimalFormat,
-                                dateFormatter = dateFormatter
+                                dateFormatter = dateFormatter,
+                                modifier = Modifier.animateItemPlacement()
                             )
                         }
 
@@ -227,8 +278,8 @@ private fun FilterSection(
     onSearchQueryChange: (String) -> Unit,
     selectedTypes: Set<BatchType>,
     onTypeToggle: (BatchType) -> Unit,
-    dateRangePreset: DateRangePreset,
-    onDateRangePresetChange: (DateRangePreset) -> Unit,
+    dateRange: DateRange?,
+    onDateRangeChange: (DateRange?) -> Unit,
     selectedLocationId: UUID?,
     locations: List<Location>,
     onLocationChange: (UUID?) -> Unit,
@@ -284,8 +335,8 @@ private fun FilterSection(
         ) {
             // Date range dropdown
             DateRangeDropdown(
-                selectedPreset = dateRangePreset,
-                onPresetChange = onDateRangePresetChange,
+                dateRange = dateRange,
+                onDateRangeChange = onDateRangeChange,
                 modifier = Modifier.weight(1f)
             )
 
@@ -321,18 +372,39 @@ private fun FilterSection(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DateRangeDropdown(
-    selectedPreset: DateRangePreset,
-    onPresetChange: (DateRangePreset) -> Unit,
+    dateRange: DateRange?,
+    onDateRangeChange: (DateRange?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var customStartDate by remember { mutableStateOf(java.time.LocalDate.now()) }
 
-    val presetLabels = mapOf(
-        DateRangePreset.ALL to "Весь час",
+    // Map of preset to label
+    val presetOptions = listOf(
+        null to "Весь час",
         DateRangePreset.TODAY to "Сьогодні",
-        DateRangePreset.THIS_WEEK to "Цей тиждень",
-        DateRangePreset.THIS_MONTH to "Цей місяць"
+        DateRangePreset.YESTERDAY to "Вчора",
+        DateRangePreset.LAST_7_DAYS to "7 днів",
+        DateRangePreset.LAST_30_DAYS to "30 днів",
+        DateRangePreset.THIS_MONTH to "Цей місяць",
+        DateRangePreset.LAST_MONTH to "Минулий місяць"
     )
+
+    // Get display text for current selection
+    val displayText = when {
+        dateRange == null -> "Весь час"
+        dateRange.preset == DateRangePreset.CUSTOM -> {
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM")
+            if (dateRange.startDate == dateRange.endDate) {
+                dateRange.startDate.format(formatter)
+            } else {
+                "${dateRange.startDate.format(formatter)} - ${dateRange.endDate.format(formatter)}"
+            }
+        }
+        else -> presetOptions.find { it.first == dateRange.preset }?.second ?: dateRange.preset.label
+    }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -340,7 +412,7 @@ private fun DateRangeDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = presetLabels[selectedPreset] ?: "Весь час",
+            value = displayText,
             onValueChange = {},
             readOnly = true,
             label = { Text("Період") },
@@ -354,15 +426,108 @@ private fun DateRangeDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            presetLabels.forEach { (preset, label) ->
+            presetOptions.forEach { (preset, label) ->
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = {
-                        onPresetChange(preset)
+                        if (preset == null) {
+                            onDateRangeChange(null)
+                        } else {
+                            onDateRangeChange(DateRange.fromPreset(preset))
+                        }
                         expanded = false
                     }
                 )
             }
+            // Custom date range option
+            DropdownMenuItem(
+                text = { Text("Вибрати період...") },
+                onClick = {
+                    expanded = false
+                    customStartDate = dateRange?.startDate ?: java.time.LocalDate.now()
+                    showStartDatePicker = true
+                }
+            )
+        }
+    }
+
+    // Start date picker dialog
+    if (showStartDatePicker) {
+        val datePickerState = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = customStartDate
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        customStartDate = java.time.Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        showStartDatePicker = false
+                        showEndDatePicker = true
+                    }
+                }) {
+                    Text("Далі")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) {
+                    Text("Скасувати")
+                }
+            }
+        ) {
+            androidx.compose.material3.DatePicker(
+                state = datePickerState,
+                title = { Text("Початкова дата", modifier = Modifier.padding(16.dp)) }
+            )
+        }
+    }
+
+    // End date picker dialog
+    if (showEndDatePicker) {
+        val datePickerState = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = (dateRange?.endDate ?: java.time.LocalDate.now())
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val endDate = java.time.Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        onDateRangeChange(
+                            DateRange(
+                                startDate = customStartDate,
+                                endDate = if (endDate.isBefore(customStartDate)) customStartDate else endDate,
+                                preset = DateRangePreset.CUSTOM
+                            )
+                        )
+                        showEndDatePicker = false
+                    }
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Скасувати")
+                }
+            }
+        ) {
+            androidx.compose.material3.DatePicker(
+                state = datePickerState,
+                title = { Text("Кінцева дата", modifier = Modifier.padding(16.dp)) }
+            )
         }
     }
 }
@@ -475,7 +640,9 @@ private fun ExpandableBatchCard(
     }
     val amountText = batch.totalAmount?.let { "₴${decimalFormat.format(it)}" }
     
-    val canEdit = !batch.isVoided && batch !is HistoryBatchDisplayItem.VirtualBatch
+    val canEdit = !batch.isVoided && 
+                  batch !is HistoryBatchDisplayItem.VirtualBatch && 
+                  batch !is HistoryBatchDisplayItem.TransferBatch
     
     Box {
         Card(
@@ -648,7 +815,8 @@ private fun ExpandableBatchCard(
                     val batchId = when (batch) {
                         is HistoryBatchDisplayItem.RealBatch -> batch.batchId
                         is HistoryBatchDisplayItem.RealSaleBatch -> batch.batchId
-                        is HistoryBatchDisplayItem.VirtualBatch -> null
+                        is HistoryBatchDisplayItem.VirtualBatch,
+                        is HistoryBatchDisplayItem.TransferBatch -> null
                     }
                     batchId?.let { onEditClick(it) }
                 },
@@ -663,7 +831,8 @@ private fun ExpandableBatchCard(
                     val batchId = when (batch) {
                         is HistoryBatchDisplayItem.RealBatch -> batch.batchId
                         is HistoryBatchDisplayItem.RealSaleBatch -> batch.batchId
-                        is HistoryBatchDisplayItem.VirtualBatch -> null
+                        is HistoryBatchDisplayItem.VirtualBatch,
+                        is HistoryBatchDisplayItem.TransferBatch -> null
                     }
                     batchId?.let { onDeleteClick(it) }
                 },
@@ -692,13 +861,35 @@ private fun TransactionRow(
         } else null
     }
     
+    val isTransfer = transaction.type == TransactionType.TRANSFER_IN || 
+                     transaction.type == TransactionType.TRANSFER_OUT
     val isAdjustment = transaction.type == TransactionType.ADJUSTMENT
-    val weightText = if (isAdjustment) {
-        val sign = if (transaction.weightKg >= java.math.BigDecimal.ZERO) "+" else ""
-        "$sign${decimalFormat.format(transaction.weightKg)} кг"
-    } else {
-        "${decimalFormat.format(transaction.weightKg.abs())} кг"
+    
+    // For transfers and adjustments, show signed weight
+    // For transfer items in the dropdown, we only show TRANSFER_IN (positive weight arriving)
+    val weightText = when {
+        isTransfer -> {
+            // Always show positive weight for transfers in dropdown (we only show TRANSFER_IN)
+            "${decimalFormat.format(transaction.weightKg.abs())} кг"
+        }
+        isAdjustment -> {
+            val sign = if (transaction.weightKg >= java.math.BigDecimal.ZERO) "+" else ""
+            "$sign${decimalFormat.format(transaction.weightKg)} кг"
+        }
+        else -> "${decimalFormat.format(transaction.weightKg.abs())} кг"
     }
+    
+    // For transfers, show "from → to" direction
+    // TRANSFER_IN: locationName = destination, transferLocationName = source
+    val locationText = when {
+        isTransfer && transaction.transferLocationName != null -> {
+            "${transaction.transferLocationName} → ${transaction.locationName}"
+        }
+        else -> null
+    }
+    
+    // No special color for transfer weight in dropdown (neutral display)
+    val weightColor = MaterialTheme.colorScheme.onSurface
 
     Row(
         modifier = modifier
@@ -712,19 +903,28 @@ private fun TransactionRow(
                 text = transaction.productName,
                 style = MaterialTheme.typography.bodyMedium
             )
-            pricePerKg?.let { price ->
+            if (locationText != null) {
                 Text(
-                    text = "₴${decimalFormat.format(price)}/кг",
+                    text = locationText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else {
+                pricePerKg?.let { price ->
+                    Text(
+                        text = "₴${decimalFormat.format(price)}/кг",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = weightText,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = weightColor
             )
             transaction.totalAmount?.let { amount ->
                 Text(

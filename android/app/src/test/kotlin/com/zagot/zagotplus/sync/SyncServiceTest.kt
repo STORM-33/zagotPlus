@@ -13,6 +13,8 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import com.zagot.zagotplus.data.remote.dto.CashOperationDto
 import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
+import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
+import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.mockk.Runs
 import io.mockk.coEvery
@@ -388,15 +390,17 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync skips transactions that already exist locally`() = runTest {
-        // Given
+    fun `sync upserts transactions that already exist locally`() = runTest {
+        // Given: Transaction already exists locally, but server has updated version
+        val existingLocalId = "existing-local-id"
+        
         coEvery { transactionDao.getUnsynced() } returns emptyList()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
 
         val remoteTransaction = TransactionDto(
             id = UUID.randomUUID().toString(),
-            localId = "existing-local-id",
+            localId = existingLocalId,
             locationId = UUID.randomUUID().toString(),
             type = "sale",
             transferLocationId = null,
@@ -407,21 +411,21 @@ class SyncServiceTest {
             notes = null,
             deviceId = "this-device",
             createdAt = Instant.now().toString(),
-            syncedAt = Instant.now().toString()
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString()
         )
         coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
-        // Override the default empty getAllLocalIds to include the existing local ID
-        coEvery { transactionDao.getAllLocalIds() } returns listOf("existing-local-id")
-        coEvery { transactionDao.getByLocalId("existing-local-id") } returns testTransaction
+        coEvery { transactionDao.insertAll(any()) } just Runs
 
         // When
         val result = syncService.sync()
 
-        // Then - should not insert duplicate
+        // Then - should upsert (insertAll with REPLACE strategy handles this)
         assertTrue(result is SyncResult.Success)
         val success = result as SyncResult.Success
-        assertEquals(0, success.pulled)
-        coVerify(exactly = 0) { transactionDao.insertAll(any()) }
+        assertEquals(1, success.pulled)
+        // Verify insertAll was called - Room's REPLACE strategy will handle upsert
+        coVerify { transactionDao.insertAll(any()) }
     }
 
     // ==================== Expense Category Tests ====================
@@ -478,8 +482,8 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync skips expense categories that already exist locally`() = runTest {
-        // Given
+    fun `sync upserts expense categories that already exist locally`() = runTest {
+        // Given: Expense category already exists locally, but server has updated version
         coEvery { transactionDao.getUnsynced() } returns emptyList()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
@@ -489,19 +493,20 @@ class SyncServiceTest {
             id = UUID.randomUUID().toString(),
             localId = "existing-cat-id",
             name = "Пальне",
-            isActive = true,
+            isActive = false,  // Updated value from server (deactivated)
             createdAt = Instant.now().toString(),
-            syncedAt = Instant.now().toString()
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString()
         )
         coEvery { syncDataSource.pullExpenseCategories(any()) } returns listOf(remoteCategory)
-        coEvery { expenseCategoryDao.getByLocalId("existing-cat-id") } returns testExpenseCategory
+        coEvery { expenseCategoryDao.insertAll(any()) } just Runs
 
         // When
         val result = syncService.sync()
 
-        // Then
+        // Then - should upsert the category (insertAll with REPLACE strategy)
         assertTrue(result is SyncResult.Success)
-        coVerify(exactly = 0) { expenseCategoryDao.insert(any()) }
+        coVerify { expenseCategoryDao.insertAll(any()) }
     }
 
     @Test
@@ -596,8 +601,8 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync skips cash operations that already exist locally`() = runTest {
-        // Given
+    fun `sync upserts cash operations that already exist locally`() = runTest {
+        // Given: Cash operation already exists locally, but server has updated version
         coEvery { transactionDao.getUnsynced() } returns emptyList()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
@@ -611,20 +616,21 @@ class SyncServiceTest {
             amount = 1000.0,
             categoryId = null,
             batchId = null,
-            notes = null,
+            notes = "Updated notes",  // Changed field from server
             deviceId = "this-device",
             createdAt = Instant.now().toString(),
-            syncedAt = Instant.now().toString()
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString()
         )
         coEvery { syncDataSource.pullCashOperations(any()) } returns listOf(remoteCashOp)
-        coEvery { cashOperationDao.getByLocalId("existing-cash-id") } returns testCashOperation
+        coEvery { cashOperationDao.insertAll(any()) } just Runs
 
         // When
         val result = syncService.sync()
 
-        // Then
+        // Then - should upsert the cash operation (insertAll with REPLACE strategy)
         assertTrue(result is SyncResult.Success)
-        coVerify(exactly = 0) { cashOperationDao.insert(any()) }
+        coVerify { cashOperationDao.insertAll(any()) }
     }
 
     @Test
@@ -718,37 +724,19 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `sync updates batch_id for existing transaction when server has it but local does not`() = runTest {
-        // Given: Transaction exists locally with NULL batch_id, server has the batch_id
-        val localId = "tx-existing-local-id"
+    fun `sync upserts transaction with batch_id from server`() = runTest {
+        // Given: Server has transaction with batch_id that needs to be synced locally
+        val localId = "tx-with-batch-id"
         val batchId = UUID.randomUUID()
         val saleBatchId = UUID.randomUUID()
-        
-        val existingLocalTransaction = TransactionEntity(
-            id = UUID.randomUUID(),
-            localId = localId,
-            locationId = UUID.randomUUID(),
-            type = "purchase",
-            transferLocationId = null,
-            productId = UUID.randomUUID(),
-            weightKg = BigDecimal("10.00"),
-            pricePerKg = BigDecimal("50.00"),
-            totalAmount = BigDecimal("500.00"),
-            notes = null,
-            deviceId = "test-device",
-            createdAt = Instant.now(),
-            syncedAt = Instant.now(),
-            batchId = null,  // Local has NULL batch_id (e.g., from migration)
-            saleBatchId = null
-        )
         
         val remoteTransaction = TransactionDto(
             id = UUID.randomUUID().toString(),
             localId = localId,
-            locationId = existingLocalTransaction.locationId.toString(),
+            locationId = UUID.randomUUID().toString(),
             type = "purchase",
             transferLocationId = null,
-            productId = existingLocalTransaction.productId.toString(),
+            productId = UUID.randomUUID().toString(),
             weightKg = 10.0,
             pricePerKg = 50.0,
             totalAmount = 500.0,
@@ -757,8 +745,8 @@ class SyncServiceTest {
             createdAt = Instant.now().toString(),
             syncedAt = Instant.now().toString(),
             serverUpdatedAt = Instant.now().toString(),
-            batchId = batchId.toString(),  // Server has batch_id
-            saleBatchId = saleBatchId.toString()  // Server has sale_batch_id
+            batchId = batchId.toString(),
+            saleBatchId = saleBatchId.toString()
         )
         
         coEvery { transactionDao.getUnsynced() } returns emptyList()
@@ -766,59 +754,35 @@ class SyncServiceTest {
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
-        // Mark the local ID as existing so it goes through the update path, not insert
-        coEvery { transactionDao.getAllLocalIds() } returns listOf(localId)
-        coEvery { transactionDao.getByLocalId(localId) } returns existingLocalTransaction
-        coEvery { transactionDao.updateBatchIds(any(), any(), any()) } just Runs
+        coEvery { transactionDao.insertAll(any()) } just Runs
         
         // When
         val result = syncService.sync()
         
-        // Then
+        // Then: Transaction should be upserted with batch IDs
         assertTrue(result is SyncResult.Success)
-        // Verify updateBatchIds was called with correct parameters
         coVerify { 
-            transactionDao.updateBatchIds(
-                localId = localId,
-                batchId = batchId,
-                saleBatchId = saleBatchId
-            )
+            transactionDao.insertAll(match { list ->
+                list.size == 1 && 
+                list[0].batchId == batchId &&
+                list[0].saleBatchId == saleBatchId
+            })
         }
-        // Insert should NOT be called since transaction already exists
-        coVerify(exactly = 0) { transactionDao.insertAll(any()) }
     }
 
     @Test
-    fun `sync does not update batch_id when local already has it`() = runTest {
-        // Given: Transaction exists locally WITH batch_id already
+    fun `sync does not call updateBatchIds - uses upsert instead`() = runTest {
+        // Given: With new upsert-based sync, we don't use updateBatchIds anymore
         val localId = "tx-with-batch-id"
         val existingBatchId = UUID.randomUUID()
-        
-        val existingLocalTransaction = TransactionEntity(
-            id = UUID.randomUUID(),
-            localId = localId,
-            locationId = UUID.randomUUID(),
-            type = "purchase",
-            transferLocationId = null,
-            productId = UUID.randomUUID(),
-            weightKg = BigDecimal("10.00"),
-            pricePerKg = BigDecimal("50.00"),
-            totalAmount = BigDecimal("500.00"),
-            notes = null,
-            deviceId = "test-device",
-            createdAt = Instant.now(),
-            syncedAt = Instant.now(),
-            batchId = existingBatchId,  // Local already has batch_id
-            saleBatchId = null
-        )
         
         val remoteTransaction = TransactionDto(
             id = UUID.randomUUID().toString(),
             localId = localId,
-            locationId = existingLocalTransaction.locationId.toString(),
+            locationId = UUID.randomUUID().toString(),
             type = "purchase",
             transferLocationId = null,
-            productId = existingLocalTransaction.productId.toString(),
+            productId = UUID.randomUUID().toString(),
             weightKg = 10.0,
             pricePerKg = 50.0,
             totalAmount = 500.0,
@@ -836,17 +800,148 @@ class SyncServiceTest {
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
         every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
         coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
-        // Mark the local ID as existing so it goes through the update path, not insert
-        coEvery { transactionDao.getAllLocalIds() } returns listOf(localId)
-        coEvery { transactionDao.getByLocalId(localId) } returns existingLocalTransaction
+        coEvery { transactionDao.insertAll(any()) } just Runs
         
         // When
         val result = syncService.sync()
         
-        // Then
+        // Then: Should use insertAll (upsert), not updateBatchIds
         assertTrue(result is SyncResult.Success)
-        // updateBatchIds should NOT be called since local already has batch_id
+        coVerify { transactionDao.insertAll(any()) }
+        // updateBatchIds should never be called - we use full upsert now
         coVerify(exactly = 0) { transactionDao.updateBatchIds(any(), any(), any()) }
-        coVerify(exactly = 0) { transactionDao.insertAll(any()) }
+    }
+
+    // ==================== Voided Batch Sync Tests ====================
+    // These tests verify the critical fix for syncing voided status across devices
+
+    @Test
+    fun `sync upserts voided purchase batch from server`() = runTest {
+        // Given: A batch was voided on another device and synced to server
+        // This device has the original non-voided version
+        val batchId = UUID.randomUUID()
+        val localId = "batch-to-be-voided"
+        
+        val voidedBatchFromServer = PurchaseBatchDto(
+            id = batchId.toString(),
+            localId = localId,
+            locationId = UUID.randomUUID().toString(),
+            notes = "Original batch",
+            totalWeightKg = 100.0,
+            totalAmount = 5000.0,
+            itemCount = 5,
+            deviceId = "other-device",
+            createdAt = Instant.now().toString(),
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString(),
+            isVoided = true,  // CRITICAL: This batch was voided on another device
+            correctsBatchId = null,
+            correctionReason = null
+        )
+        
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
+        coEvery { syncDataSource.pullBatches(any()) } returns listOf(voidedBatchFromServer)
+        coEvery { purchaseBatchDao.insertAll(any()) } just Runs
+        
+        // When
+        val result = syncService.sync()
+        
+        // Then: The voided batch should be upserted, updating local record
+        assertTrue(result is SyncResult.Success)
+        coVerify { 
+            purchaseBatchDao.insertAll(match { list ->
+                list.size == 1 && list[0].isVoided == true
+            })
+        }
+    }
+
+    @Test
+    fun `sync upserts voided sale batch from server`() = runTest {
+        // Given: A sale batch was voided on another device and synced to server
+        val batchId = UUID.randomUUID()
+        val localId = "sale-batch-to-be-voided"
+        
+        val voidedSaleBatchFromServer = SaleBatchDto(
+            id = batchId.toString(),
+            localId = localId,
+            locationId = UUID.randomUUID().toString(),
+            notes = "Original sale batch",
+            totalWeightKg = 50.0,
+            totalAmount = 3000.0,
+            itemCount = 3,
+            deviceId = "other-device",
+            createdAt = Instant.now().toString(),
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString(),
+            isVoided = true,  // CRITICAL: This batch was voided on another device
+            correctsBatchId = null,
+            correctionReason = null
+        )
+        
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
+        coEvery { syncDataSource.pullSaleBatches(any()) } returns listOf(voidedSaleBatchFromServer)
+        coEvery { saleBatchDao.insertAll(any()) } just Runs
+        
+        // When
+        val result = syncService.sync()
+        
+        // Then: The voided sale batch should be upserted, updating local record
+        assertTrue(result is SyncResult.Success)
+        coVerify { 
+            saleBatchDao.insertAll(match { list ->
+                list.size == 1 && list[0].isVoided == true
+            })
+        }
+    }
+
+    @Test
+    fun `sync upserts correction batch with correctsBatchId from server`() = runTest {
+        // Given: A correction batch was created on another device
+        val originalBatchId = UUID.randomUUID()
+        val correctionBatchId = UUID.randomUUID()
+        val localId = "correction-batch-id"
+        
+        val correctionBatchFromServer = PurchaseBatchDto(
+            id = correctionBatchId.toString(),
+            localId = localId,
+            locationId = UUID.randomUUID().toString(),
+            notes = "Corrected batch",
+            totalWeightKg = 95.0,  // Corrected weight
+            totalAmount = 4750.0,
+            itemCount = 5,
+            deviceId = "other-device",
+            createdAt = Instant.now().toString(),
+            syncedAt = Instant.now().toString(),
+            serverUpdatedAt = Instant.now().toString(),
+            isVoided = false,
+            correctsBatchId = originalBatchId.toString(),  // Links to original
+            correctionReason = "Помилка при зважуванні"
+        )
+        
+        coEvery { transactionDao.getUnsynced() } returns emptyList()
+        every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        every { syncPreferences.setLastSyncTimestamp(any()) } just Runs
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
+        coEvery { syncDataSource.pullBatches(any()) } returns listOf(correctionBatchFromServer)
+        coEvery { purchaseBatchDao.insertAll(any()) } just Runs
+        
+        // When
+        val result = syncService.sync()
+        
+        // Then: The correction batch should be upserted with all correction metadata
+        assertTrue(result is SyncResult.Success)
+        coVerify { 
+            purchaseBatchDao.insertAll(match { list ->
+                list.size == 1 && 
+                list[0].correctsBatchId == originalBatchId &&
+                list[0].correctionReason == "Помилка при зважуванні"
+            })
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.transfer
 
+import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Location
@@ -12,6 +13,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -62,7 +64,8 @@ class TransferViewModelTest {
             transactionRepository = transactionRepository,
             productRepository = productRepository,
             locationRepository = locationRepository,
-            devicePreferences = devicePreferences
+            devicePreferences = devicePreferences,
+            savedStateHandle = SavedStateHandle()
         )
     }
 
@@ -134,7 +137,7 @@ class TransferViewModelTest {
         viewModel.selectProduct(inventoryWithProduct)
 
         val state = viewModel.uiState.value
-        // Original: 100, minus 30 already added = 70 remaining
+        // Original: 100, minus 30 already added (net weight) = 70 remaining
         assertEquals(BigDecimal("70.00"), state.selectedAvailableStock)
     }
 
@@ -197,7 +200,8 @@ class TransferViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(1, state.positions.size)
-        assertEquals(BigDecimal("30"), state.positions[0].weightKg)
+        assertTrue(state.positions[0].grossWeightKg.compareTo(BigDecimal("30")) == 0)
+        assertTrue(state.positions[0].netWeightKg.compareTo(BigDecimal("30")) == 0)
         assertEquals(TransferScreenState.POSITIONS_LIST, state.screenState)
         assertNull(state.selectedProduct)
     }
@@ -235,7 +239,108 @@ class TransferViewModelTest {
         viewModel.onWeightChange("20")
         viewModel.addPosition()
 
-        assertEquals(BigDecimal("50"), viewModel.uiState.value.totalWeight)
+        assertTrue(viewModel.uiState.value.totalWeight.compareTo(BigDecimal("50")) == 0)
+    }
+
+    // ==================== Tare Weight Tests ====================
+
+    @Test
+    fun `onTareCountChange updates tare count`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onTareCountChange("5")
+
+        assertEquals("5", viewModel.uiState.value.currentTareCount)
+    }
+
+    @Test
+    fun `onTareWeightPerUnitChange updates tare weight per unit`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onTareWeightPerUnitChange("0.5")
+
+        assertEquals("0.5", viewModel.uiState.value.tareWeightPerUnit)
+    }
+
+    @Test
+    fun `net weight is calculated correctly with tare`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onWeightChange("50")        // Gross weight: 50 kg
+        viewModel.onTareCountChange("5")      // 5 sacks
+        viewModel.onTareWeightPerUnitChange("0.5") // 0.5 kg each
+
+        val state = viewModel.uiState.value
+        // Net = 50 - (5 * 0.5) = 50 - 2.5 = 47.5
+        assertEquals(BigDecimal("47.5"), state.currentNetWeight)
+        assertEquals(BigDecimal("2.5"), state.currentTotalTareWeight)
+    }
+
+    @Test
+    fun `addPosition with tare creates position with correct net weight`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onWeightChange("50")
+        viewModel.onTareCountChange("5")
+        viewModel.onTareWeightPerUnitChange("0.5")
+        viewModel.addPosition()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.positions.size)
+        val position = state.positions[0]
+        assertEquals(BigDecimal("50"), position.grossWeightKg)
+        assertEquals(5, position.tareCount)
+        assertEquals(BigDecimal("0.5"), position.tareWeightPerUnit)
+        assertEquals(BigDecimal("47.5"), position.netWeightKg)
+    }
+
+    @Test
+    fun `canAddPosition is false when net weight exceeds available stock`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        // Available stock is 100 kg
+        viewModel.onWeightChange("105")  // Gross exceeds stock
+        viewModel.onTareCountChange("10")
+        viewModel.onTareWeightPerUnitChange("0.5") // Tare = 5 kg, net = 100
+
+        // Net weight = 105 - 5 = 100, which equals available stock, should be allowed
+        assertTrue(viewModel.uiState.value.canAddPosition)
+
+        // Now set gross to 106, net = 101 which exceeds
+        viewModel.onWeightChange("106")
+        assertFalse(viewModel.uiState.value.canAddPosition)
+    }
+
+    @Test
+    fun `totalWeight uses net weight from all positions`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        // Add position with tare
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onWeightChange("50")
+        viewModel.onTareCountChange("5")
+        viewModel.onTareWeightPerUnitChange("0.5")  // Net: 50 - 2.5 = 47.5
+        viewModel.addPosition()
+
+        // Add another position without tare
+        viewModel.addAnotherProduct()
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onWeightChange("20")  // Net: 20 (no tare)
+        viewModel.addPosition()
+
+        // Total should be 47.5 + 20 = 67.5
+        assertEquals(BigDecimal("67.5"), viewModel.uiState.value.totalWeight)
     }
 
     // ==================== Destination & Confirmation Tests ====================
@@ -275,8 +380,9 @@ class TransferViewModelTest {
             TestData.createTransferTransaction(),
             TestData.createTransferTransaction()
         )
+        val capturedWeight = slot<BigDecimal>()
         coEvery { 
-            transactionRepository.createTransfer(any(), any(), any(), any()) 
+            transactionRepository.createTransfer(any(), any(), any(), capture(capturedWeight)) 
         } returns mockTransferPair
 
         viewModel = createViewModel()
@@ -295,9 +401,10 @@ class TransferViewModelTest {
                 fromLocationId = testSourceLocation.id,
                 toLocationId = testDestLocation.id,
                 productId = testProduct.id,
-                weightKg = BigDecimal("30")
+                weightKg = any()
             )
         }
+        assertTrue(capturedWeight.captured.compareTo(BigDecimal("30")) == 0)
         assertTrue(viewModel.uiState.value.navigateBack)
     }
 
@@ -322,6 +429,43 @@ class TransferViewModelTest {
         assertNotNull(state.error)
         assertFalse(state.isSaving)
         assertEquals(TransferScreenState.POSITIONS_LIST, state.screenState)
+    }
+
+    @Test
+    fun `confirmSave uses net weight after tare deduction`() = runTest {
+        val mockTransferPair = Pair(
+            TestData.createTransferTransaction(),
+            TestData.createTransferTransaction()
+        )
+        val capturedWeight = slot<BigDecimal>()
+        coEvery { 
+            transactionRepository.createTransfer(any(), any(), any(), capture(capturedWeight)) 
+        } returns mockTransferPair
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
+        viewModel.onWeightChange("50")        // Gross: 50 kg
+        viewModel.onTareCountChange("5")      // 5 sacks
+        viewModel.onTareWeightPerUnitChange("1") // 1 kg each, total tare = 5 kg
+        viewModel.addPosition()
+        viewModel.proceedToDestination()
+        viewModel.selectDestination(testDestLocation)
+        viewModel.confirmSave()
+        advanceUntilIdle()
+
+        // Should transfer net weight: 50 - 5 = 45 kg
+        coVerify { 
+            transactionRepository.createTransfer(
+                fromLocationId = testSourceLocation.id,
+                toLocationId = testDestLocation.id,
+                productId = testProduct.id,
+                weightKg = any()
+            )
+        }
+        assertTrue(capturedWeight.captured.compareTo(BigDecimal("45")) == 0)
+        assertTrue(viewModel.uiState.value.navigateBack)
     }
 
     // ==================== Navigation Tests ====================

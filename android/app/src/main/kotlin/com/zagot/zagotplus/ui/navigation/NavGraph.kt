@@ -2,6 +2,11 @@ package com.zagot.zagotplus.ui.navigation
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -52,6 +57,7 @@ private const val BACK_PRESS_INTERVAL = 2000L // 2 seconds
 @Composable
 fun NavGraph(
     syncStatusFlow: Flow<SyncStatus>,
+    isOnline: Boolean,
     onSyncClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -95,6 +101,7 @@ fun NavGraph(
                     actions = {
                         SyncStatusIcon(
                             syncStatusFlow = syncStatusFlow,
+                            isOnline = isOnline,
                             onSyncClick = onSyncClick
                         )
                         IconButton(onClick = { showMenu = true }) {
@@ -187,7 +194,12 @@ fun NavGraph(
         NavHost(
             navController = navController,
             startDestination = Destination.Purchase.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            // Default transitions for bottom nav (subtle fade)
+            enterTransition = { fadeIn(animationSpec = tween(200)) },
+            exitTransition = { fadeOut(animationSpec = tween(200)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(200)) },
+            popExitTransition = { fadeOut(animationSpec = tween(200)) }
         ) {
             composable(Destination.Purchase.route) {
                 PurchaseScreen(
@@ -196,6 +208,7 @@ fun NavGraph(
                     }
                 )
             }
+            // Detail screens get slide transitions
             composable(
                 route = Destination.PurchaseEntry.ROUTE_WITH_ARGS,
                 arguments = listOf(
@@ -204,7 +217,11 @@ fun NavGraph(
                         nullable = true
                         defaultValue = null
                     }
-                )
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_BATCH_ID)
                 PurchaseEntryScreen(
@@ -219,6 +236,7 @@ fun NavGraph(
                     }
                 )
             }
+            // Detail screens get slide transitions
             composable(
                 route = Destination.SaleEntry.ROUTE_WITH_ARGS,
                 arguments = listOf(
@@ -227,7 +245,11 @@ fun NavGraph(
                         nullable = true
                         defaultValue = null
                     }
-                )
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_BATCH_ID)
                 SaleEntryScreen(
@@ -237,9 +259,9 @@ fun NavGraph(
             }
             composable(Destination.Inventory.route) {
                 InventoryScreen(
-                    onNavigateToTransfer = { productId, destinationLocationId ->
+                    onNavigateToTransfer = { productId, sourceLocationId ->
                         navController.navigate(
-                            Destination.Transfer.createRoute(productId, destinationLocationId)
+                            Destination.Transfer.createRoute(productId, sourceLocationId, null)
                         )
                     }
                 )
@@ -254,17 +276,36 @@ fun NavGraph(
                     }
                 )
             }
-            composable(Destination.Products.route) {
+            // Menu screens get slide transitions
+            composable(
+                route = Destination.Products.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
                 ProductsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(Destination.Reports.route) {
+            composable(
+                route = Destination.Reports.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
                 ReportsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-            composable(Destination.Settings.route) {
+            composable(
+                route = Destination.Settings.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
                 SettingsScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToProducts = { navController.navigate(Destination.Products.route) }
@@ -278,22 +319,39 @@ fun NavGraph(
                         nullable = true
                         defaultValue = null
                     },
+                    navArgument(Destination.Transfer.ARG_SOURCE_LOCATION_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
                     navArgument(Destination.Transfer.ARG_DESTINATION_LOCATION_ID) {
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
                     }
-                )
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val productId = backStackEntry.arguments?.getString(Destination.Transfer.ARG_PRODUCT_ID)
+                val sourceLocationId = backStackEntry.arguments?.getString(Destination.Transfer.ARG_SOURCE_LOCATION_ID)
                 val destinationLocationId = backStackEntry.arguments?.getString(Destination.Transfer.ARG_DESTINATION_LOCATION_ID)
                 TransferScreen(
                     onNavigateBack = { navController.popBackStack() },
                     prefilledProductId = productId,
+                    prefilledSourceLocationId = sourceLocationId,
                     prefilledDestinationLocationId = destinationLocationId
                 )
             }
-            composable(Destination.Cash.route) {
+            composable(
+                route = Destination.Cash.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
                 CashScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )

@@ -35,11 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
 import sh.calvin.reorderable.ReorderableItem
@@ -144,7 +146,7 @@ private fun ProductTile(
     
     Card(
         modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isLowStock) 
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -152,71 +154,76 @@ private fun ProductTile(
                 MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(
+        // Full-tile image with text overlay
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .aspectRatio(1.5f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
         ) {
-            // Product image or placeholder
+            if (product.imageUri != null) {
+                AsyncImage(
+                    model = product.imageUri,
+                    contentDescription = product.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Image,
+                    contentDescription = "Фото товару",
+                    modifier = Modifier.size(36.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // Text overlay on image - includes name and price/stock
             Box(
                 modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
-                if (product.imageUri != null) {
-                    AsyncImage(
-                        model = product.imageUri,
-                        contentDescription = product.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Image,
-                        contentDescription = "Фото товару",
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Product name
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            
-            // Price or inventory based on context
-            when {
-                availableKg != null -> {
-                    Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "${decimalFormat.format(availableKg)} кг",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        text = product.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-                showPrice -> {
-                    val price = when (priceType) {
-                        PriceType.BUY -> product.defaultBuyPrice
-                        PriceType.SELL -> product.defaultSellPrice
-                    }
-                    price?.let {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "₴${it.toPlainString()}/кг",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    // Price or inventory in overlay
+                    when {
+                        availableKg != null -> {
+                            Text(
+                                text = "${decimalFormat.format(availableKg)} кг",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = if (isLowStock) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                        showPrice -> {
+                            val price = when (priceType) {
+                                PriceType.BUY -> product.defaultBuyPrice
+                                PriceType.SELL -> product.defaultSellPrice
+                            }
+                            price?.let {
+                                Text(
+                                    text = "₴${it.toPlainString()}/кг",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
                     }
                 }
             }

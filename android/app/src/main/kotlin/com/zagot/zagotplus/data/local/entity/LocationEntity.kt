@@ -11,7 +11,7 @@ import java.util.UUID
  * Mirrors Supabase 'locations' table.
  *
  * @property id Primary key (UUID stored as TEXT)
- * @property name Location name (e.g., "Кіоск", "Мобільний")
+ * @property name Location name (e.g., "Кіоск", "Склад")
  * @property type Location type: "kiosk" or "mobile"
  * @property createdAt Timestamp when location was created
  */

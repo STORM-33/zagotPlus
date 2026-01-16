@@ -58,13 +58,13 @@ class LocationDaoTest {
 
     @Test
     fun `insert location stores it in database`() = runTest {
-        val location = createLocation(name = "Мобільний пункт")
+        val location = createLocation(name = "Склад пункт")
         
         locationDao.insert(location)
         
         val retrieved = locationDao.getById(location.id)
         assertNotNull(retrieved)
-        assertEquals("Мобільний пункт", retrieved?.name)
+        assertEquals("Склад пункт", retrieved?.name)
     }
 
     @Test
@@ -138,7 +138,7 @@ class LocationDaoTest {
     fun `getByTypeFlow returns only locations of specified type`() = runTest {
         locationDao.insertAll(listOf(
             createLocation(name = "Кіоск 1", type = "kiosk"),
-            createLocation(name = "Мобільний 1", type = "mobile"),
+            createLocation(name = "Склад 1", type = "mobile"),
             createLocation(name = "Кіоск 2", type = "kiosk")
         ))
         

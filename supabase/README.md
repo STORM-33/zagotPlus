@@ -139,7 +139,7 @@ select * from inventory;
 ### Insert Test Data
 
 Test transactions already seeded in migration:
-- 2 locations (Кіоск, Мобільний)
+- 2 locations (Кіоск, Склад)
 - 4 products (white/black walnuts, white/black seeds)
 
 Create a test transaction:

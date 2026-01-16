@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.repository.ProductRepository
@@ -55,7 +56,8 @@ class PurchaseEntryViewModelTest {
             productRepository = productRepository,
             purchaseBatchRepository = purchaseBatchRepository,
             devicePreferences = devicePreferences,
-            productOrderPreferences = productOrderPreferences
+            productOrderPreferences = productOrderPreferences,
+            savedStateHandle = SavedStateHandle()
         )
     }
 

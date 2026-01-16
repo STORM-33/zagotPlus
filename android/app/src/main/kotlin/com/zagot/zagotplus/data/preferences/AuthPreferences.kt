@@ -2,6 +2,7 @@ package com.zagot.zagotplus.data.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.zagot.zagotplus.Config
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.SecureRandom
 import java.util.Base64
@@ -63,8 +64,8 @@ class AuthPreferencesImpl @Inject constructor(
     }
 
     override fun setPin(pin: String) {
-        require(pin.length in MIN_PIN_LENGTH..MAX_PIN_LENGTH) {
-            "PIN must be $MIN_PIN_LENGTH-$MAX_PIN_LENGTH digits"
+        require(pin.length in Config.MIN_PIN_LENGTH..Config.MAX_PIN_LENGTH) {
+            "PIN must be ${Config.MIN_PIN_LENGTH}-${Config.MAX_PIN_LENGTH} digits"
         }
         require(pin.all { it.isDigit() }) { "PIN must contain only digits" }
         
@@ -158,7 +159,7 @@ class AuthPreferencesImpl @Inject constructor(
      * Get the expected PIN length (for UI hints).
      */
     fun getExpectedPinLength(): Int {
-        return prefs.getInt(KEY_PIN_LENGTH, MIN_PIN_LENGTH)
+        return prefs.getInt(KEY_PIN_LENGTH, Config.MIN_PIN_LENGTH)
     }
 
     // === Private Helpers ===
@@ -174,7 +175,7 @@ class AuthPreferencesImpl @Inject constructor(
      * More secure than simple SHA-256 for password/PIN storage.
      */
     private fun hashPinWithPbkdf2(pin: String, salt: ByteArray): String {
-        val spec = PBEKeySpec(pin.toCharArray(), salt, PBKDF2_ITERATIONS, HASH_LENGTH_BITS)
+        val spec = PBEKeySpec(pin.toCharArray(), salt, Config.PBKDF2_ITERATIONS, HASH_LENGTH_BITS)
         val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
         val hash = factory.generateSecret(spec).encoded
         spec.clearPassword()
@@ -207,13 +208,13 @@ class AuthPreferencesImpl @Inject constructor(
 
     override fun isSessionValid(): Boolean {
         if (!sessionAuthenticated) return false
-        return System.currentTimeMillis() - sessionStartTime < SESSION_TIMEOUT_MS
+        return System.currentTimeMillis() - sessionStartTime < Config.SESSION_TIMEOUT_MS
     }
 
     override fun getSessionRemainingMinutes(): Int {
         if (!sessionAuthenticated || sessionStartTime == 0L) return 0
         val elapsed = System.currentTimeMillis() - sessionStartTime
-        val remaining = SESSION_TIMEOUT_MS - elapsed
+        val remaining = Config.SESSION_TIMEOUT_MS - elapsed
         return if (remaining > 0) (remaining / 60_000).toInt() else 0
     }
 
@@ -226,10 +227,11 @@ class AuthPreferencesImpl @Inject constructor(
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
         private const val KEY_PIN_LENGTH = "pin_length"
 
-        /** Minimum PIN length */
-        const val MIN_PIN_LENGTH = 4
-        /** Maximum PIN length */
-        const val MAX_PIN_LENGTH = 4
+        // PIN length constants - reference Config for values, expose for external use
+        /** Minimum PIN length - delegates to Config */
+        val MIN_PIN_LENGTH get() = Config.MIN_PIN_LENGTH
+        /** Maximum PIN length - delegates to Config */
+        val MAX_PIN_LENGTH get() = Config.MAX_PIN_LENGTH
         
         /** Maximum attempts before initial lockout */
         private const val MAX_ATTEMPTS = 5
@@ -238,12 +240,8 @@ class AuthPreferencesImpl @Inject constructor(
         /** Long lockout duration in milliseconds (5 minutes) */
         private const val LOCKOUT_DURATION_LONG_MS = 5 * 60_000L
         
-        /** Session timeout in milliseconds (4 hours) */
-        private const val SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000L
-        
         // PBKDF2 parameters
         private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
-        private const val PBKDF2_ITERATIONS = 10_000
         private const val HASH_LENGTH_BITS = 256
         private const val SALT_LENGTH = 16
         private const val CURRENT_HASH_VERSION = 2

@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,7 +24,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,43 +53,38 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.ReorderableProductGrid
 import java.math.BigDecimal
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransferScreen(
     onNavigateBack: () -> Unit,
     prefilledProductId: String? = null,
+    prefilledSourceLocationId: String? = null,
     prefilledDestinationLocationId: String? = null,
     viewModel: TransferViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Handle prefilled data
-    LaunchedEffect(prefilledProductId, prefilledDestinationLocationId) {
-        if (prefilledProductId != null || prefilledDestinationLocationId != null) {
-            viewModel.applyPrefilledData(prefilledProductId, prefilledDestinationLocationId)
-        }
-    }
+    // Prefilled data is now handled by ViewModel via SavedStateHandle - no LaunchedEffect needed
 
     // Handle navigation
     LaunchedEffect(uiState.navigateBack) {
@@ -187,19 +178,26 @@ fun TransferScreen(
                                     sourceLocation = uiState.sourceLocation,
                                     allLocations = uiState.allLocations,
                                     onSourceLocationChange = viewModel::selectSourceLocation,
-                                    onProductClick = viewModel::selectProduct,
+                                    onProductClick = viewModel::selectProductById,
+                                    onTransferAll = viewModel::transferAll,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
                             TransferScreenState.WEIGHT_ENTRY -> {
                                 TransferWeightEntry(
                                     product = uiState.selectedProduct,
-                                    weight = uiState.currentWeight,
+                                    grossWeight = uiState.currentWeight,
+                                    tareCount = uiState.currentTareCount,
+                                    tareWeightPerUnit = uiState.tareWeightPerUnit,
+                                    netWeight = uiState.currentNetWeight,
+                                    totalTareWeight = uiState.currentTotalTareWeight,
                                     availableStock = uiState.selectedAvailableStock,
                                     scaleWeight = uiState.scaleWeight,
                                     canAdd = uiState.canAddPosition,
                                     exceedsStock = uiState.exceedsAvailableStock,
-                                    onWeightChange = viewModel::onWeightChange,
+                                    onGrossWeightChange = viewModel::onWeightChange,
+                                    onTareCountChange = viewModel::onTareCountChange,
+                                    onTareWeightPerUnitChange = viewModel::onTareWeightPerUnitChange,
                                     onAddPosition = viewModel::addPosition,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -243,11 +241,20 @@ private fun InventoryGrid(
     sourceLocation: Location?,
     allLocations: List<Location>,
     onSourceLocationChange: (Location) -> Unit,
-    onProductClick: (InventoryWithProduct) -> Unit,
+    onProductClick: (UUID) -> Unit,
+    onTransferAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
+    // Extract products and inventory map for ReorderableProductGrid
+    val products = remember(inventoryItems) {
+        inventoryItems.map { it.product }
+    }
+    val inventoryMap = remember(inventoryItems) {
+        inventoryItems.associate { it.product.id to it.inventory.totalWeightKg }
+    }
+
     Column(modifier = modifier) {
         // Source location selector
         Card(
@@ -292,7 +299,7 @@ private fun InventoryGrid(
                     }
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 }
-                
+
                 ExposedDropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false }
@@ -330,93 +337,37 @@ private fun InventoryGrid(
                 )
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ReorderableProductGrid(
+                products = products,
+                onProductClick = { product -> onProductClick(product.id) },
+                onOrderChanged = { /* Reordering not persisted for transfer screen */ },
+                showPrice = false,
+                inventoryMap = inventoryMap,
                 modifier = Modifier.weight(1f)
-            ) {
-                items(inventoryItems, key = { it.product.id }) { item ->
-                    InventoryTile(
-                        inventoryWithProduct = item,
-                        onClick = { onProductClick(item) }
-                    )
-                }
-            }
-        }
-    }
-}
+            )
 
-@Composable
-private fun InventoryTile(
-    inventoryWithProduct: InventoryWithProduct,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val product = inventoryWithProduct.product
-    val stock = inventoryWithProduct.inventory.totalWeightKg
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Product image or placeholder
-            Box(
+            // Transfer All button
+            Button(
+                onClick = onTransferAll,
                 modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
             ) {
-                if (product.imageUri != null) {
-                    AsyncImage(
-                        model = product.imageUri,
-                        contentDescription = product.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Image,
-                        contentDescription = "Фото товару",
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.ArrowForward,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Перемістити все",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Product name
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            
-            // Available stock
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${stock.toPlainString()} кг",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
         }
     }
 }
@@ -424,15 +375,29 @@ private fun InventoryTile(
 @Composable
 private fun TransferWeightEntry(
     product: Product?,
-    weight: String,
+    grossWeight: String,
+    tareCount: String,
+    tareWeightPerUnit: String,
+    netWeight: BigDecimal,
+    totalTareWeight: BigDecimal,
     availableStock: BigDecimal,
     scaleWeight: BigDecimal?,
     canAdd: Boolean,
     exceedsStock: Boolean,
-    onWeightChange: (String) -> Unit,
+    onGrossWeightChange: (String) -> Unit,
+    onTareCountChange: (String) -> Unit,
+    onTareWeightPerUnitChange: (String) -> Unit,
     onAddPosition: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Auto-focus weight field
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    
+    val hasTare = tareCount.toIntOrNull()?.let { it > 0 } == true
+    
     Column(
         modifier = modifier.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -467,22 +432,105 @@ private fun TransferWeightEntry(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Manual weight input
+        // Gross weight input
         OutlinedTextField(
-            value = weight,
-            onValueChange = onWeightChange,
-            label = { Text("Вага (кг)") },
+            value = grossWeight,
+            onValueChange = onGrossWeightChange,
+            label = { Text("Брутто вага (кг)") },
             isError = exceedsStock,
             supportingText = if (exceedsStock) {
                 { Text("Перевищує доступний залишок", color = MaterialTheme.colorScheme.error) }
             } else null,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done
+                imeAction = ImeAction.Next
             ),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Tare section
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Tare count (number of sacks/boxes)
+            OutlinedTextField(
+                value = tareCount,
+                onValueChange = onTareCountChange,
+                label = { Text("Тара (шт)") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Tare weight per unit
+            OutlinedTextField(
+                value = tareWeightPerUnit,
+                onValueChange = onTareWeightPerUnitChange,
+                label = { Text("Вага тари (кг)") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Show tare calculation and net weight if tare is specified
+        if (hasTare && totalTareWeight > BigDecimal.ZERO) {
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Тара (${tareCount} шт):",
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = "-${totalTareWeight.toPlainString()} кг",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Нетто:",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = "${netWeight.toPlainString()} кг",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -646,6 +694,8 @@ private fun TransferPositionItem(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasTare = position.tareCount > 0 && position.totalTareWeight > BigDecimal.ZERO
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -665,10 +715,17 @@ private fun TransferPositionItem(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
+                if (hasTare) {
+                    Text(
+                        text = "Брутто: ${position.grossWeightKg.toPlainString()} кг, тара: ${position.tareCount} шт × ${position.tareWeightPerUnit.toPlainString()} кг",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             
             Text(
-                text = "${position.weightKg.toPlainString()} кг",
+                text = "${position.netWeightKg.toPlainString()} кг",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -934,20 +991,31 @@ private fun SummaryTransferItem(
     position: TransferPosition,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = position.product.name,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            text = "${position.weightKg.toPlainString()} кг",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.primary
-        )
+    val hasTare = position.tareCount > 0 && position.totalTareWeight > BigDecimal.ZERO
+    
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = position.product.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "${position.netWeightKg.toPlainString()} кг",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (hasTare) {
+            Text(
+                text = "(брутто: ${position.grossWeightKg.toPlainString()} кг − тара: ${position.totalTareWeight.toPlainString()} кг)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

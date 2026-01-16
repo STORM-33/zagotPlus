@@ -41,7 +41,7 @@ class SyncWorker @AssistedInject constructor(
             // Perform sync
             when (val result = syncService.sync()) {
                 is SyncResult.Success -> {
-                    syncStatusRepository.setIdle()
+                    syncStatusRepository.setSuccess()
                     Log.d(TAG, "Sync succeeded: pushed=${result.pushed}, pulled=${result.pulled}")
                     Result.success()
                 }

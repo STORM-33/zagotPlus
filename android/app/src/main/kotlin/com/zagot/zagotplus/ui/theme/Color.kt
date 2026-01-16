@@ -77,3 +77,4 @@ val CashPositive = Color(0xFF4CAF50)  // Deposits, income
 val CashNegative = Color(0xFFF44336)  // Withdrawals, expenses
 val CashWarning = Color(0xFFFF9800)   // Payments
 val CashInfo = Color(0xFF2196F3)      // Purchases, sales
+val CashTransfer = Color(0xFFC5A900)  // Transfer between locations (yellow)

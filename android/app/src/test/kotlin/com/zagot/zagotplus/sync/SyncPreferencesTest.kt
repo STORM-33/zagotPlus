@@ -46,13 +46,14 @@ class SyncPreferencesTest {
     }
 
     @Test
-    fun `getLastSyncTimestamp returns correct timestamp when synced`() {
+    fun `getLastSyncTimestamp returns correct timestamp with 1ms buffer when synced`() {
         val testMillis = 1705320600000L // 2024-01-15T10:30:00Z
         every { sharedPreferences.getLong("last_sync_timestamp", 0L) } returns testMillis
 
         val result = syncPreferences.getLastSyncTimestamp()
 
-        assertEquals(Instant.ofEpochMilli(testMillis), result)
+        // Should return stored timestamp minus 1ms buffer for precision safety
+        assertEquals(Instant.ofEpochMilli(testMillis - 1), result)
     }
 
     @Test
@@ -77,14 +78,15 @@ class SyncPreferencesTest {
     }
 
     @Test
-    fun `getLastSyncTimestamp handles edge case timestamps`() {
+    fun `getLastSyncTimestamp handles edge case timestamps with buffer`() {
         // Very old timestamp
         val oldMillis = 1000L
         every { sharedPreferences.getLong("last_sync_timestamp", 0L) } returns oldMillis
 
         val result = syncPreferences.getLastSyncTimestamp()
 
-        assertEquals(Instant.ofEpochMilli(oldMillis), result)
+        // Should return stored timestamp minus 1ms buffer
+        assertEquals(Instant.ofEpochMilli(oldMillis - 1), result)
     }
 
     @Test

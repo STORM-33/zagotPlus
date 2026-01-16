@@ -46,7 +46,7 @@ class LocationRepositoryImplTest {
     fun `getAllLocations returns mapped locations`() = runTest {
         val entities = listOf(
             createLocationEntity(locationId1, "Кіоск 1", "kiosk"),
-            createLocationEntity(locationId2, "Мобільний", "mobile")
+            createLocationEntity(locationId2, "Склад", "mobile")
         )
         every { locationDao.getAllFlow() } returns flowOf(entities)
 
@@ -85,7 +85,7 @@ class LocationRepositoryImplTest {
     @Test
     fun `getLocationsByType returns only mobile locations`() = runTest {
         val mobileEntities = listOf(
-            createLocationEntity(locationId2, "Мобільний", "mobile")
+            createLocationEntity(locationId2, "Склад", "mobile")
         )
         every { locationDao.getByTypeFlow("mobile") } returns flowOf(mobileEntities)
 

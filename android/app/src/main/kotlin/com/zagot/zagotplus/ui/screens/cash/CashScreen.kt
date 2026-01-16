@@ -1,7 +1,12 @@
 package com.zagot.zagotplus.ui.screens.cash
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +33,11 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,6 +49,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +67,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +75,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -76,17 +89,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.R
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
+import com.zagot.zagotplus.domain.model.DayCashGroup
 import com.zagot.zagotplus.domain.model.ExpenseCategory
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.theme.CashInfo
 import com.zagot.zagotplus.ui.theme.CashNegative
 import com.zagot.zagotplus.ui.theme.CashPositive
+import com.zagot.zagotplus.ui.theme.CashTransfer
 import com.zagot.zagotplus.ui.theme.CashWarning
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CashScreen(
     onNavigateBack: () -> Unit,
@@ -99,6 +116,13 @@ fun CashScreen(
         uiState.error?.let { error ->
             snackbarHostState.showSnackbar(error)
             viewModel.dismissError()
+        }
+    }
+
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.dismissSuccess()
         }
     }
 
@@ -120,7 +144,11 @@ fun CashScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        if (uiState.isLoading) {
+        // Only show full-screen loading on initial load (no locations yet)
+        // When switching tabs, keep showing content to avoid flash
+        val showFullScreenLoading = uiState.isLoading && uiState.locations.isEmpty()
+        
+        if (showFullScreenLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -141,9 +169,9 @@ fun CashScreen(
                         uiState.locations.size // Total tab is last
                     } else {
                         uiState.locations.indexOfFirst { 
-                            it.id == uiState.selectedLocationId 
-                        }.coerceAtLeast(0)
-                    }
+                                it.id == uiState.selectedLocationId 
+                            }.coerceAtLeast(0)
+                        }
                     
                     TabRow(selectedTabIndex = selectedIndex) {
                         uiState.locations.forEachIndexed { index, location ->
@@ -166,17 +194,23 @@ fun CashScreen(
                 BalanceCard(
                     balance = uiState.balance,
                     dailyChange = uiState.dailyChange,
+                    dailyAddition = uiState.dailyAddition,
+                    selectedLocationId = uiState.selectedLocationId,
                     modifier = Modifier.padding(16.dp)
                 )
 
-                // Action Buttons (disabled in totals view - user must select a location)
-                ActionButtons(
-                    onDeposit = { viewModel.showDepositDialog() },
-                    onWithdraw = { viewModel.showWithdrawDialog() },
-                    onPayment = { viewModel.showPaymentDialog() },
-                    enabled = !uiState.isTotalsView,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                // Show action buttons only in location view (not in totals view)
+                if (!uiState.isTotalsView) {
+                    ActionButtons(
+                        onDeposit = { viewModel.showDepositDialog() },
+                        onWithdraw = { viewModel.showWithdrawDialog() },
+                        onPayment = { viewModel.showPaymentDialog() },
+                        onTransfer = { viewModel.showTransferDialog() },
+                        enabled = true,
+                        hasMultipleLocations = uiState.locations.size > 1,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -192,9 +226,9 @@ fun CashScreen(
                         text = stringResource(R.string.cash_history_title),
                         style = MaterialTheme.typography.titleMedium
                     )
-                    if (uiState.totalItemsCount > 0) {
+                    if (uiState.dayGroups.isNotEmpty()) {
                         Text(
-                            text = "${uiState.historyItems.size} з ${uiState.totalItemsCount}",
+                            text = "${uiState.dayGroups.size} днів",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -229,14 +263,17 @@ fun CashScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
-                        items = uiState.historyItems,
-                        key = { it.id.toString() }
-                    ) { item ->
-                        HistoryItem(
-                            item = item,
+                        items = uiState.dayGroups,
+                        key = { it.date.toString() }
+                    ) { dayGroup ->
+                        ExpandableDayCard(
+                            dayGroup = dayGroup,
+                            isExpanded = dayGroup.date in uiState.expandedDays,
                             showLocationName = uiState.isTotalsView,
-                            canModify = viewModel.canModifyItem(item),
-                            onEdit = { viewModel.showEditDialog(item) }
+                            onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
+                            onEditItem = { item -> viewModel.showEditDialog(item) },
+                            canModifyItem = { item -> viewModel.canModifyItem(item) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
 
@@ -257,7 +294,7 @@ fun CashScreen(
                         }
                     }
 
-                    if (uiState.historyItems.isEmpty() && !uiState.isLoading) {
+                    if (uiState.dayGroups.isEmpty() && !uiState.isLoading) {
                         item {
                             Text(
                                 text = stringResource(R.string.cash_no_operations),
@@ -269,7 +306,7 @@ fun CashScreen(
                     }
 
                     // End of list indicator
-                    if (!uiState.hasMoreItems && uiState.historyItems.isNotEmpty()) {
+                    if (!uiState.hasMoreItems && uiState.dayGroups.isNotEmpty()) {
                         item {
                             Text(
                                 text = stringResource(R.string.cash_all_loaded),
@@ -324,6 +361,20 @@ fun CashScreen(
             canConfirm = uiState.canConfirmPayment,
             isSaving = uiState.isSaving
         )
+        CashDialogType.TRANSFER -> TransferDialog(
+            amount = uiState.dialogAmount,
+            notes = uiState.dialogNotes,
+            destinations = uiState.transferDestinations,
+            selectedDestinationId = uiState.dialogTransferDestinationId,
+            balance = uiState.balance,
+            onAmountChange = viewModel::onAmountChange,
+            onNotesChange = viewModel::onNotesChange,
+            onDestinationSelect = viewModel::onTransferDestinationSelect,
+            onConfirm = viewModel::confirmTransfer,
+            onDismiss = viewModel::dismissDialog,
+            canConfirm = uiState.canConfirmTransfer,
+            isSaving = uiState.isSaving
+        )
         CashDialogType.CATEGORIES -> CategoriesDialog(
             categories = uiState.categories,
             newCategoryName = uiState.newCategoryName,
@@ -373,8 +424,22 @@ fun CashScreen(
 private fun BalanceCard(
     balance: BigDecimal,
     dailyChange: BigDecimal,
+    dailyAddition: BigDecimal = BigDecimal.ZERO,
+    selectedLocationId: UUID? = null,
     modifier: Modifier = Modifier
 ) {
+    // Use Animatable to control animation manually on tab switch
+    val animatedBalance = remember { Animatable(0f) }
+    
+    // Animate to new balance when it changes OR when location changes
+    LaunchedEffect(balance, selectedLocationId) {
+        // Animate from current value to new balance
+        animatedBalance.animateTo(
+            targetValue = balance.toFloat(),
+            animationSpec = spring(stiffness = 300f)
+        )
+    }
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -394,7 +459,7 @@ private fun BalanceCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "${balance.setScale(2)} ₴",
+                text = "${BigDecimal(animatedBalance.value.toDouble()).setScale(2, java.math.RoundingMode.HALF_UP)} ₴",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -403,8 +468,12 @@ private fun BalanceCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Don't show red if there were deposits (additions) today -
+                // negative change due to transfers shouldn't look alarming
                 val changeColor = when {
                     dailyChange > BigDecimal.ZERO -> CashPositive
+                    dailyChange < BigDecimal.ZERO && dailyAddition > BigDecimal.ZERO -> 
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     dailyChange < BigDecimal.ZERO -> CashNegative
                     else -> MaterialTheme.colorScheme.onPrimaryContainer
                 }
@@ -424,7 +493,9 @@ private fun ActionButtons(
     onDeposit: () -> Unit,
     onWithdraw: () -> Unit,
     onPayment: () -> Unit,
+    onTransfer: () -> Unit,
     enabled: Boolean = true,
+    hasMultipleLocations: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -457,14 +528,31 @@ private fun ActionButtons(
                 Text(stringResource(R.string.cash_withdraw_action))
             }
         }
-        Button(
-            onClick = onPayment,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = enabled
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Filled.Payment, contentDescription = "Витрати", modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(stringResource(R.string.cash_payment_action))
+            Button(
+                onClick = onPayment,
+                modifier = Modifier.weight(1f),
+                enabled = enabled
+            ) {
+                Icon(Icons.Filled.Payment, contentDescription = "Витрати", modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(stringResource(R.string.cash_payment_action))
+            }
+            Button(
+                onClick = onTransfer,
+                modifier = Modifier.weight(1f),
+                enabled = enabled && hasMultipleLocations,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CashTransfer
+                )
+            ) {
+                Icon(Icons.Filled.SwapHoriz, contentDescription = "Переказ", modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(stringResource(R.string.cash_transfer_action))
+            }
         }
     }
 }
@@ -485,6 +573,7 @@ private fun HistoryItem(
     val paymentLabel = stringResource(R.string.cash_history_payment)
     val purchaseLabel = stringResource(R.string.cash_history_purchase)
     val saleLabel = stringResource(R.string.cash_history_sale)
+    val transferLabel = "Переказ"
     val editLabel = stringResource(R.string.edit)
     
     val (icon, color, label) = when (item.type) {
@@ -504,14 +593,19 @@ private fun HistoryItem(
             item.categoryName ?: paymentLabel
         )
         CashHistoryItemType.PURCHASE -> Triple(
-            Icons.Filled.Remove,
+            Icons.Filled.ShoppingCart,
             CashInfo,
             purchaseLabel
         )
         CashHistoryItemType.SALE -> Triple(
             Icons.Filled.Add,
-            CashInfo,
+            CashPositive,
             saleLabel
+        )
+        CashHistoryItemType.TRANSFER -> Triple(
+            Icons.Filled.SwapHoriz,
+            CashTransfer,
+            transferLabel
         )
     }
 
@@ -640,6 +734,287 @@ private fun HistoryItem(
                 }
             )
         }
+    }
+}
+
+/**
+ * Expandable day card showing operations grouped by day.
+ */
+@Composable
+private fun ExpandableDayCard(
+    dayGroup: DayCashGroup,
+    isExpanded: Boolean,
+    showLocationName: Boolean,
+    onToggle: () -> Unit,
+    onEditItem: (CashHistoryItem) -> Unit,
+    canModifyItem: (CashHistoryItem) -> Boolean,
+    modifier: Modifier = Modifier
+) {
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy (EEEE)") }
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        label = "expand_rotation"
+    )
+    
+    val dayTotalColor = when {
+        dayGroup.dayTotal > BigDecimal.ZERO -> CashPositive
+        dayGroup.dayTotal < BigDecimal.ZERO -> CashNegative
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header - always visible
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = dayGroup.date.format(dateFormatter),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${dayGroup.items.size} операцій",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val prefix = if (dayGroup.dayTotal >= BigDecimal.ZERO) "+" else ""
+                    Text(
+                        text = "$prefix${dayGroup.dayTotal.setScale(2)} ₴",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = dayTotalColor
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Згорнути" else "Розгорнути",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .rotate(rotationAngle),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            // Expanded content - operation sections
+            if (isExpanded) {
+                HorizontalDivider()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    dayGroup.activeTypes.forEach { type ->
+                        val items = dayGroup.itemsByType[type] ?: return@forEach
+                        OperationTypeSection(
+                            type = type,
+                            items = items,
+                            showLocationName = showLocationName,
+                            onEditItem = onEditItem,
+                            canModifyItem = canModifyItem
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Section for a specific operation type within a day.
+ */
+@Composable
+private fun OperationTypeSection(
+    type: CashHistoryItemType,
+    items: List<CashHistoryItem>,
+    showLocationName: Boolean,
+    onEditItem: (CashHistoryItem) -> Unit,
+    canModifyItem: (CashHistoryItem) -> Boolean,
+    modifier: Modifier = Modifier
+) {
+    val (icon, color) = getTypeIconAndColor(type)
+    val sectionTotal = items.sumOf { it.signedAmount }
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = color.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Section header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = type.displayName(),
+                        tint = color,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = type.displayName(),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = color
+                    )
+                }
+                val prefix = if (sectionTotal >= BigDecimal.ZERO) "+" else ""
+                Text(
+                    text = "$prefix${sectionTotal.setScale(2)} ₴",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+            }
+            
+            // Individual items
+            items.forEach { item ->
+                CompactHistoryItem(
+                    item = item,
+                    showLocationName = showLocationName,
+                    canModify = canModifyItem(item),
+                    onEdit = { onEditItem(item) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Compact version of history item for display inside expanded day card.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CompactHistoryItem(
+    item: CashHistoryItem,
+    showLocationName: Boolean,
+    canModify: Boolean,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showContextMenu by remember { mutableStateOf(false) }
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { },
+                    onLongClick = { if (canModify) showContextMenu = true }
+                )
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                val detailText = when {
+                    item.categoryName != null -> item.categoryName
+                    item.batchCount != null && item.batchCount > 1 -> {
+                        val clientWord = pluralizeUkrainian(item.batchCount, "клієнт", "клієнти", "клієнтів")
+                        "${item.batchCount} $clientWord"
+                    }
+                    !item.notes.isNullOrBlank() -> item.notes
+                    else -> null
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = timeFormatter.format(item.createdAt.atZone(java.time.ZoneId.systemDefault())),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (showLocationName && item.locationName != null) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = item.locationName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                if (detailText != null) {
+                    Text(
+                        text = detailText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            val amountText = if (item.type.isInflow) "+${item.amount.setScale(2)}" else "-${item.amount.setScale(2)}"
+            Text(
+                text = "$amountText ₴",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        
+        DropdownMenu(
+            expanded = showContextMenu,
+            onDismissRequest = { showContextMenu = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.edit)) },
+                onClick = {
+                    showContextMenu = false
+                    onEdit()
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.Edit, contentDescription = null)
+                }
+            )
+        }
+    }
+}
+
+/** Get icon and color for an operation type */
+private fun getTypeIconAndColor(type: CashHistoryItemType): Pair<ImageVector, Color> {
+    return when (type) {
+        CashHistoryItemType.DEPOSIT -> Icons.Filled.ArrowDownward to CashPositive
+        CashHistoryItemType.WITHDRAWAL -> Icons.Filled.ArrowUpward to CashNegative
+        CashHistoryItemType.PAYMENT -> Icons.Filled.Payment to CashWarning
+        CashHistoryItemType.PURCHASE -> Icons.Filled.ShoppingCart to CashInfo
+        CashHistoryItemType.SALE -> Icons.Filled.Add to CashPositive
+        CashHistoryItemType.TRANSFER -> Icons.Filled.SwapHoriz to CashTransfer
     }
 }
 
@@ -887,6 +1262,117 @@ private fun PaymentDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransferDialog(
+    amount: String,
+    notes: String,
+    destinations: List<Location>,
+    selectedDestinationId: UUID?,
+    balance: BigDecimal,
+    onAmountChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onDestinationSelect: (UUID?) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    canConfirm: Boolean,
+    isSaving: Boolean
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedDestination = destinations.find { it.id == selectedDestinationId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cash_transfer_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = onAmountChange,
+                    label = { Text(stringResource(R.string.cash_amount_label)) },
+                    suffix = { Text("₴") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val selectLocationLabel = stringResource(R.string.cash_transfer_select_location)
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedDestination?.name ?: selectLocationLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.cash_transfer_destination)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        destinations.forEach { location ->
+                            DropdownMenuItem(
+                                text = { Text(location.name) },
+                                onClick = {
+                                    onDestinationSelect(location.id)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    label = { Text(stringResource(R.string.cash_notes_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = canConfirm && !isSaving,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CashTransfer
+                )
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.cash_transfer_action))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
 @Composable
 private fun CategoriesDialog(
     categories: List<ExpenseCategory>,
@@ -896,6 +1382,34 @@ private fun CategoriesDialog(
     onDeactivateCategory: (UUID) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var pendingDeactivateCategoryId by remember { mutableStateOf<UUID?>(null) }
+    var pendingDeactivateCategoryName by remember { mutableStateOf<String?>(null) }
+
+    // Deactivate confirmation dialog
+    if (pendingDeactivateCategoryId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeactivateCategoryId = null; pendingDeactivateCategoryName = null },
+            title = { Text("Видалити категорію?") },
+            text = { Text("Категорію \"${pendingDeactivateCategoryName}\" буде видалено. Ви впевнені?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeactivateCategoryId?.let { onDeactivateCategory(it) }
+                        pendingDeactivateCategoryId = null
+                        pendingDeactivateCategoryName = null
+                    }
+                ) {
+                    Text("Видалити", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeactivateCategoryId = null; pendingDeactivateCategoryName = null }) {
+                    Text("Скасувати")
+                }
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.cash_categories_title)) },
@@ -943,7 +1457,10 @@ private fun CategoriesDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(
-                                onClick = { onDeactivateCategory(category.id) }
+                                onClick = { 
+                                    pendingDeactivateCategoryId = category.id
+                                    pendingDeactivateCategoryName = category.name
+                                }
                             ) {
                                 Icon(
                                     Icons.Filled.Delete,
