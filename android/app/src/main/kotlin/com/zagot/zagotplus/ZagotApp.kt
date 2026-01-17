@@ -11,6 +11,9 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.zagot.zagotplus.debug.MainThreadDebugger
+import com.zagot.zagotplus.debug.PerformanceTracer
+import com.zagot.zagotplus.data.preferences.PreferencesWarmer
 import com.zagot.zagotplus.sync.SyncManager
 import dagger.hilt.android.HiltAndroidApp
 import java.util.Locale
@@ -25,12 +28,31 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
     @Inject
     lateinit var syncManager: SyncManager
 
+    @Inject
+    lateinit var mainThreadDebugger: MainThreadDebugger
+    
+    @Inject
+    lateinit var performanceTracer: PerformanceTracer
+    
+    @Inject
+    lateinit var preferencesWarmer: PreferencesWarmer
+
     override fun onCreate() {
         super.onCreate()
+        
+        // Pre-warm preferences on background thread FIRST to avoid main thread disk I/O
+        preferencesWarmer.warmUp()
+        
         // Force Ukrainian locale
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
         // Initialize periodic background sync
         syncManager.initializePeriodicSync()
+        
+        // Initialize performance debugging in debug builds
+        if (BuildConfig.DEBUG) {
+            mainThreadDebugger.initialize()
+            performanceTracer.startPeriodicReport(30_000L) // Report every 30 seconds
+        }
     }
 
     override fun attachBaseContext(base: Context) {

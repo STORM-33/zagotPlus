@@ -459,7 +459,7 @@ private fun BalanceCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "${BigDecimal(animatedBalance.value.toDouble()).setScale(2, java.math.RoundingMode.HALF_UP)} ₴",
+                text = "${BigDecimal(animatedBalance.value.toDouble()).setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -479,7 +479,7 @@ private fun BalanceCard(
                 }
                 val changePrefix = if (dailyChange > BigDecimal.ZERO) "+" else ""
                 Text(
-                    text = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(2)} ₴"),
+                    text = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = changeColor
                 )
@@ -681,9 +681,9 @@ private fun HistoryItem(
 
                 Column(horizontalAlignment = Alignment.End) {
                     val amountText = if (item.type.isInflow) {
-                        "+${item.amount.setScale(2)}"
+                        "+${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
                     } else {
-                        "-${item.amount.setScale(2)}"
+                        "-${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
                     }
                     Text(
                         text = "$amountText ₴",
@@ -799,7 +799,7 @@ private fun ExpandableDayCard(
                 ) {
                     val prefix = if (dayGroup.dayTotal >= BigDecimal.ZERO) "+" else ""
                     Text(
-                        text = "$prefix${dayGroup.dayTotal.setScale(2)} ₴",
+                        text = "$prefix${dayGroup.dayTotal.setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = dayTotalColor
@@ -892,7 +892,7 @@ private fun OperationTypeSection(
                 }
                 val prefix = if (sectionTotal >= BigDecimal.ZERO) "+" else ""
                 Text(
-                    text = "$prefix${sectionTotal.setScale(2)} ₴",
+                    text = "$prefix${sectionTotal.setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = color
@@ -980,7 +980,7 @@ private fun CompactHistoryItem(
                 }
             }
             
-            val amountText = if (item.type.isInflow) "+${item.amount.setScale(2)}" else "-${item.amount.setScale(2)}"
+            val amountText = if (item.type.isInflow) "+${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}" else "-${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
             Text(
                 text = "$amountText ₴",
                 style = MaterialTheme.typography.bodyMedium,
@@ -1097,7 +1097,7 @@ private fun WithdrawDialog(
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
+                    text = stringResource(R.string.cash_available, "${balance.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1172,7 +1172,7 @@ private fun PaymentDialog(
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
+                    text = stringResource(R.string.cash_available, "${balance.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1287,7 +1287,7 @@ private fun TransferDialog(
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.cash_available, "${balance.setScale(2)} ₴"),
+                    text = stringResource(R.string.cash_available, "${balance.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

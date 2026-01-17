@@ -48,19 +48,24 @@ class TransactionQueryBuilder {
 
     /**
      * Build query to get filtered transactions.
+     * Excludes transactions from voided batches.
      */
     fun build(): SupportSQLiteQuery {
         val sql = StringBuilder()
         val args = mutableListOf<Any>()
 
+        sql.append("SELECT t.* FROM transactions t ")
+        sql.append("LEFT JOIN purchase_batches pb ON t.batch_id = pb.id ")
+        sql.append("LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id ")
         if (productNameSearch != null) {
-            sql.append("SELECT t.* FROM transactions t ")
             sql.append("INNER JOIN products p ON t.product_id = p.id ")
-        } else {
-            sql.append("SELECT * FROM transactions t ")
         }
 
         val conditions = mutableListOf<String>()
+
+        // Exclude voided batches
+        conditions.add("(t.batch_id IS NULL OR pb.is_voided = 0)")
+        conditions.add("(t.sale_batch_id IS NULL OR sb.is_voided = 0)")
 
         // Type filter
         if (types.isNotEmpty()) {
@@ -91,10 +96,8 @@ class TransactionQueryBuilder {
             args.add("%$search%")
         }
 
-        if (conditions.isNotEmpty()) {
-            sql.append("WHERE ")
-            sql.append(conditions.joinToString(" AND "))
-        }
+        sql.append("WHERE ")
+        sql.append(conditions.joinToString(" AND "))
 
         sql.append(" ORDER BY t.created_at DESC")
 
@@ -113,19 +116,24 @@ class TransactionQueryBuilder {
 
     /**
      * Build query to get count of filtered transactions.
+     * Excludes transactions from voided batches.
      */
     fun buildCount(): SupportSQLiteQuery {
         val sql = StringBuilder()
         val args = mutableListOf<Any>()
 
+        sql.append("SELECT COUNT(*) FROM transactions t ")
+        sql.append("LEFT JOIN purchase_batches pb ON t.batch_id = pb.id ")
+        sql.append("LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id ")
         if (productNameSearch != null) {
-            sql.append("SELECT COUNT(*) FROM transactions t ")
             sql.append("INNER JOIN products p ON t.product_id = p.id ")
-        } else {
-            sql.append("SELECT COUNT(*) FROM transactions t ")
         }
 
         val conditions = mutableListOf<String>()
+
+        // Exclude voided batches
+        conditions.add("(t.batch_id IS NULL OR pb.is_voided = 0)")
+        conditions.add("(t.sale_batch_id IS NULL OR sb.is_voided = 0)")
 
         // Type filter
         if (types.isNotEmpty()) {
@@ -156,10 +164,8 @@ class TransactionQueryBuilder {
             args.add("%$search%")
         }
 
-        if (conditions.isNotEmpty()) {
-            sql.append("WHERE ")
-            sql.append(conditions.joinToString(" AND "))
-        }
+        sql.append("WHERE ")
+        sql.append(conditions.joinToString(" AND "))
 
         return SimpleSQLiteQuery(sql.toString(), args.toTypedArray())
     }

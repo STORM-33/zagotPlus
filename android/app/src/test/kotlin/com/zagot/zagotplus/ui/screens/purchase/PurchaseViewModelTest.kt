@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.purchase
 import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.repository.CashRepository
+import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -25,6 +26,7 @@ class PurchaseViewModelTest {
 
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
     private lateinit var cashRepository: CashRepository
+    private lateinit var productRepository: ProductRepository
     private lateinit var viewModel: PurchaseViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -53,10 +55,12 @@ class PurchaseViewModelTest {
         Dispatchers.setMain(testDispatcher)
         purchaseBatchRepository = mockk()
         cashRepository = mockk()
+        productRepository = mockk()
+        every { productRepository.getActiveProducts() } returns flowOf(emptyList())
     }
 
     private fun createViewModel(): PurchaseViewModel {
-        return PurchaseViewModel(purchaseBatchRepository, cashRepository)
+        return PurchaseViewModel(purchaseBatchRepository, cashRepository, productRepository)
     }
 
     @Test

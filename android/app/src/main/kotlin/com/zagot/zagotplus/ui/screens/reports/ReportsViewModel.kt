@@ -33,7 +33,7 @@ import javax.inject.Inject
  * UI state for the Reports screen.
  * 
  * Summary panels:
- * - Витрати (Spendings): закупки + оплата + виведення
+ * - Витрати (Spendings): закупки + оплата (excluding виведення)
  * - Прибуток (Earnings): sum of sale amounts
  */
 data class ReportsUiState(
@@ -43,6 +43,7 @@ data class ReportsUiState(
     // Summary panels
     val totalSpendings: BigDecimal = BigDecimal.ZERO,
     val totalEarnings: BigDecimal = BigDecimal.ZERO,
+    val totalWeightKg: BigDecimal = BigDecimal.ZERO,
     
     // Location selection
     val locations: List<Location> = emptyList(),
@@ -189,6 +190,9 @@ class ReportsViewModel @Inject constructor(
 
                 // Build product list from purchases
                 val productItems = computeProductItems(purchases)
+                
+                // Calculate total weight
+                val totalWeightKg = productItems.sumOf { it.totalWeightKg }
 
                 val hasData = transactions.isNotEmpty() || totalSpendings > BigDecimal.ZERO || totalEarnings > BigDecimal.ZERO
 
@@ -197,6 +201,7 @@ class ReportsViewModel @Inject constructor(
                         isLoading = false,
                         totalSpendings = totalSpendings,
                         totalEarnings = totalEarnings,
+                        totalWeightKg = totalWeightKg,
                         productItems = productItems,
                         hasData = hasData
                     )
@@ -213,8 +218,8 @@ class ReportsViewModel @Inject constructor(
     }
 
     /**
-     * Calculate cash spendings (payments + withdrawals) for the period.
-     * This matches the cash screen calculation logic.
+     * Calculate cash spendings (payments only) for the period.
+     * Note: Withdrawals (виведення коштів) are excluded from spendings.
      * If dates are null, includes all time.
      */
     private suspend fun calculateCashSpendings(
@@ -235,8 +240,7 @@ class ReportsViewModel @Inject constructor(
                     (endDate == null || it.createdAt <= endDate) 
                 }
                 .filter { 
-                    it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.PAYMENT ||
-                    it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.WITHDRAWAL
+                    it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.PAYMENT
                 }
                 .sumOf { it.amount }
         } catch (e: Exception) {

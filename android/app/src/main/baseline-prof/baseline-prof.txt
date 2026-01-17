@@ -1,0 +1,142 @@
+# Baseline Profile for ZagotPlus
+# Pre-compiles critical paths to eliminate JIT lag on cold start
+
+# ==========================================
+# Application Entry Points
+# ==========================================
+HSPLcom/zagot/zagotplus/ZagotApp;->onCreate()V
+HSPLcom/zagot/zagotplus/MainActivity;->onCreate(Landroid/os/Bundle;)V
+
+# ==========================================
+# Navigation & Compose Core
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/navigation/NavGraphKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/navigation/Destinations;->**(**)**
+
+# ==========================================
+# ReorderableProductGrid - Critical for lag fix
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/components/ReorderableProductGridKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/components/ReorderableProductGridKt;->ReorderableProductGrid(**)**
+HSPLcom/zagot/zagotplus/ui/components/ReorderableProductGridKt;->ProductTile(**)**
+HSPLcom/zagot/zagotplus/ui/components/ReorderableProductGridKt$ReorderableProductGrid$**;->**(**)**
+
+# Reorderable library
+HSPLsh/calvin/reorderable/**;->**(**)**
+
+# ==========================================
+# Purchase & Sale Screens (use ReorderableProductGrid)
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/screens/purchase/PurchaseScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/purchase/PurchaseEntryScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/purchase/PurchaseViewModel;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/purchase/PurchaseEntryViewModel;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/sale/SaleScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/sale/SaleEntryScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/sale/SaleViewModel;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/sale/SaleEntryViewModel;->**(**)**
+
+# ==========================================
+# Common UI Components
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/components/EmptyStateKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/components/LoadingSkeletonKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/components/SyncStatusIconKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/components/ConnectivityBannerKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/components/LocationSelectionDialogKt;->**(**)**
+
+# ==========================================
+# Theme
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/theme/ThemeKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/theme/ColorKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/theme/TypeKt;->**(**)**
+
+# ==========================================
+# Auth Screen (first screen on cold start)
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/screens/auth/PinScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/auth/PinViewModel;->**(**)**
+
+# ==========================================
+# History Screen (complex composables)
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/screens/history/HistoryScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/history/HistoryScreenKt$ExpandableBatchCard**;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/history/HistoryViewModel;->**(**)**
+
+# ==========================================
+# Cash Screen
+# ==========================================
+HSPLcom/zagot/zagotplus/ui/screens/cash/CashScreenKt;->**(**)**
+HSPLcom/zagot/zagotplus/ui/screens/cash/CashViewModel;->**(**)**
+
+# ==========================================
+# Data Layer - Repositories
+# ==========================================
+HSPLcom/zagot/zagotplus/data/repository/ProductRepositoryImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/repository/CashRepositoryImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/repository/LocationRepositoryImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/repository/TransactionRepositoryImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/repository/PurchaseBatchRepositoryImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/repository/SaleBatchRepositoryImpl;->**(**)**
+
+# ==========================================
+# Data Layer - DAOs
+# ==========================================
+HSPLcom/zagot/zagotplus/data/local/dao/**;->**(**)**
+
+# ==========================================
+# Data Layer - Preferences
+# ==========================================
+HSPLcom/zagot/zagotplus/data/preferences/DevicePreferences;->**(**)**
+HSPLcom/zagot/zagotplus/data/preferences/AuthPreferencesImpl;->**(**)**
+HSPLcom/zagot/zagotplus/data/preferences/ProductOrderPreferences;->**(**)**
+HSPLcom/zagot/zagotplus/data/preferences/PreferencesWarmer;->**(**)**
+
+# ==========================================
+# Sync
+# ==========================================
+HSPLcom/zagot/zagotplus/sync/SyncManager;->**(**)**
+HSPLcom/zagot/zagotplus/sync/SyncStatusRepository;->**(**)**
+
+# ==========================================
+# Domain Models
+# ==========================================
+HSPLcom/zagot/zagotplus/domain/model/Product;->**(**)**
+HSPLcom/zagot/zagotplus/domain/model/Location;->**(**)**
+HSPLcom/zagot/zagotplus/domain/model/Transaction;->**(**)**
+HSPLcom/zagot/zagotplus/domain/model/CashModels;->**(**)**
+
+# ==========================================
+# Image Loading (Coil)
+# ==========================================
+HSPLcoil/compose/**;->**(**)**
+HSPLcoil/**;->**(**)**
+
+# ==========================================
+# Room Database
+# ==========================================
+HSPLandroidx/room/**;->**(**)**
+HSPLcom/zagot/zagotplus/data/local/ZagotDatabase**;->**(**)**
+
+# ==========================================
+# Hilt Dependency Injection
+# ==========================================
+HSPLdagger/hilt/**;->**(**)**
+HSPLcom/zagot/zagotplus/DaggerZagotApp_HiltComponents_SingletonC**;->**(**)**
+
+# ==========================================
+# Compose Foundation & Material3
+# ==========================================
+HSPLandroidx/compose/foundation/lazy/grid/**;->**(**)**
+HSPLandroidx/compose/foundation/lazy/**;->**(**)**
+HSPLandroidx/compose/material3/**;->**(**)**
+HSPLandroidx/compose/animation/**;->**(**)**
+HSPLandroidx/compose/ui/**;->**(**)**
+HSPLandroidx/compose/runtime/**;->**(**)**
+
+# ==========================================
+# Navigation Compose
+# ==========================================
+HSPLandroidx/navigation/compose/**;->**(**)**

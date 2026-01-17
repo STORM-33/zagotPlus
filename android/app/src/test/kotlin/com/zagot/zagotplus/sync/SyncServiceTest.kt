@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.sync
 
+import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
@@ -16,12 +17,16 @@ import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
+import androidx.room.withTransaction
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.invoke
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -37,6 +42,7 @@ import java.util.UUID
  */
 class SyncServiceTest {
 
+    private lateinit var database: ZagotDatabase
     private lateinit var syncDataSource: SyncDataSource
     private lateinit var transactionDao: TransactionDao
     private lateinit var purchaseBatchDao: PurchaseBatchDao
@@ -99,6 +105,7 @@ class SyncServiceTest {
         expenseCategoryDao = mockk()
         cashOperationDao = mockk()
         syncPreferences = mockk()
+        database = mockk()
 
         // Default empty responses
         coEvery { productDao.getUnsynced() } returns emptyList()
@@ -112,6 +119,7 @@ class SyncServiceTest {
         coEvery { syncDataSource.pullSaleBatches(any()) } returns emptyList()
         coEvery { syncDataSource.pullExpenseCategories(any()) } returns emptyList()
         coEvery { syncDataSource.pullCashOperations(any()) } returns emptyList()
+        coEvery { syncDataSource.pullTransactions(any()) } returns emptyList()
         
         // Default getAllLocalIds for batch deduplication
         coEvery { transactionDao.getAllLocalIds() } returns emptyList()
@@ -119,8 +127,24 @@ class SyncServiceTest {
         coEvery { saleBatchDao.getAllLocalIds() } returns emptyList()
         coEvery { expenseCategoryDao.getAllLocalIds() } returns emptyList()
         coEvery { cashOperationDao.getAllLocalIds() } returns emptyList()
+        
+        // Mock DAO insertAll methods for transaction-based pulls
+        coEvery { expenseCategoryDao.insertAll(any()) } just Runs
+        coEvery { purchaseBatchDao.insertAll(any()) } just Runs
+        coEvery { saleBatchDao.insertAll(any()) } just Runs
+        coEvery { transactionDao.insertAll(any()) } just Runs
+        coEvery { cashOperationDao.insertAll(any()) } just Runs
+        
+        // Mock Room's withTransaction extension function
+        // The function executes the block directly without actual transaction
+        mockkStatic("androidx.room.RoomDatabaseKt")
+        val blockSlot = slot<suspend () -> Unit>()
+        coEvery { database.withTransaction(capture(blockSlot)) } answers {
+            kotlinx.coroutines.runBlocking { blockSlot.captured.invoke() }
+        }
 
         syncService = SyncService(
+            database = database,
             syncDataSource = syncDataSource,
             transactionDao = transactionDao,
             purchaseBatchDao = purchaseBatchDao,
@@ -369,7 +393,9 @@ class SyncServiceTest {
             notes = null,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
-            syncedAt = Instant.now().toString()
+            syncedAt = Instant.now().toString(),
+            batchId = null,
+            saleBatchId = null
         )
         coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)
         coEvery { transactionDao.insertAll(any()) } just Runs
@@ -408,6 +434,8 @@ class SyncServiceTest {
             deviceId = "this-device",
             createdAt = Instant.now().toString(),
             syncedAt = Instant.now().toString(),
+            batchId = null,
+            saleBatchId = null,
             serverUpdatedAt = Instant.now().toString()
         )
         coEvery { syncDataSource.pullTransactions(any()) } returns listOf(remoteTransaction)

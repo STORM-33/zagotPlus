@@ -7,9 +7,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.res.painterResource
+import com.zagot.zagotplus.R
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,8 +32,12 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -96,21 +106,35 @@ fun NavGraph(
         modifier = modifier,
         topBar = {
             if (isBottomNavRoute) {
-                TopAppBar(
-                    title = { Text(text = currentTitle) },
+                CenterAlignedTopAppBar(
+                    title = {
+                        Image(
+                            painter = painterResource(id = R.drawable.brand_thing),
+                            contentDescription = "Brand",
+                            modifier = Modifier.height(26.dp)
+                        )
+                    },
+                    navigationIcon = {
+                        Text(
+                            text = currentTitle,
+                            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    },
                     actions = {
                         SyncStatusIcon(
                             syncStatusFlow = syncStatusFlow,
                             isOnline = isOnline,
                             onSyncClick = onSyncClick
                         )
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
                             DropdownMenuItem(
                                 text = { Text("Товари") },
                                 onClick = {
@@ -161,6 +185,7 @@ fun NavGraph(
                                     Icon(Destination.Settings.icon, contentDescription = "Налаштування")
                                 }
                             )
+                        }
                         }
                     }
                 )

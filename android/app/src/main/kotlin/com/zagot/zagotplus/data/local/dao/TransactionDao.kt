@@ -34,6 +34,26 @@ data class ProductDailyTotalResult(
 )
 
 /**
+ * Raw result from daily product purchase totals query with average price.
+ * Used internally by DAO; converted to ProductDailyTotal in repository.
+ */
+data class ProductDailyTotalWithAvgResult(
+    val productId: String,
+    val totalWeightKg: String,
+    val totalAmount: String,
+    val avgPricePerKg: String?
+)
+
+/**
+ * Raw result from product average purchase price query.
+ * Used internally by DAO; provides average price at which product was purchased.
+ */
+data class ProductAvgPurchasePriceResult(
+    val productId: String,
+    val avgPricePerKg: String?
+)
+
+/**
  * Data Access Object for transactions table.
  * Provides CRUD operations, sync queries, and reactive queries via Flow.
  */
@@ -257,4 +277,46 @@ interface TransactionDao {
         GROUP BY t.product_id
     """)
     fun observeTodaysPurchaseTotals(startMillis: Long, endMillis: Long): Flow<List<ProductDailyTotalResult>>
+
+    /**
+     * Get today's purchase totals grouped by product with average price per kg.
+     * Excludes transactions from voided batches.
+     */
+    @Query("""
+        SELECT t.product_id AS productId, 
+               SUM(t.weight_kg) AS totalWeightKg,
+               SUM(t.total_amount) AS totalAmount,
+               CASE 
+                   WHEN SUM(t.weight_kg) > 0 THEN SUM(t.total_amount) / SUM(t.weight_kg)
+                   ELSE NULL 
+               END AS avgPricePerKg
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        WHERE t.type = 'purchase'
+          AND t.product_id IS NOT NULL
+          AND t.created_at >= :startMillis AND t.created_at < :endMillis
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+        GROUP BY t.product_id
+    """)
+    fun observeTodaysPurchaseTotalsWithAvg(startMillis: Long, endMillis: Long): Flow<List<ProductDailyTotalWithAvgResult>>
+
+    /**
+     * Get average purchase price per kg for each product across all purchases.
+     * Used for profit calculation in inventory screen.
+     * Excludes transactions from voided batches.
+     */
+    @Query("""
+        SELECT t.product_id AS productId,
+               CASE 
+                   WHEN SUM(t.weight_kg) > 0 THEN SUM(t.total_amount) / SUM(t.weight_kg)
+                   ELSE NULL 
+               END AS avgPricePerKg
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        WHERE t.type = 'purchase'
+          AND t.product_id IS NOT NULL
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+        GROUP BY t.product_id
+    """)
+    fun observeProductAvgPurchasePrices(): Flow<List<ProductAvgPurchasePriceResult>>
 }

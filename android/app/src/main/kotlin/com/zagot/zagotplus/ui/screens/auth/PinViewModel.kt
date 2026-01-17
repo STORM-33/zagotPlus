@@ -163,6 +163,24 @@ class PinViewModel @Inject constructor(
             )
         }
     }
+    
+    /**
+     * Called when biometric authentication succeeds.
+     */
+    fun onBiometricSuccess() {
+        authPreferences.clearLockout()
+        _uiState.value = _uiState.value.copy(
+            isAuthenticated = true,
+            failedAttempts = 0
+        )
+    }
+    
+    /**
+     * Mark that biometric prompt was shown (to avoid showing twice).
+     */
+    fun onBiometricPromptShown() {
+        _uiState.value = _uiState.value.copy(biometricPromptShown = true)
+    }
 }
 
 data class PinUiState(
@@ -174,7 +192,8 @@ data class PinUiState(
     val isLockedOut: Boolean = false,
     val isAuthenticated: Boolean = false,
     val minPinLength: Int = 4,
-    val maxPinLength: Int = 4
+    val maxPinLength: Int = 4,
+    val biometricPromptShown: Boolean = false
 ) {
     val canSubmit: Boolean
         get() = currentPin.length >= minPinLength && !isLockedOut

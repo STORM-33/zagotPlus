@@ -596,19 +596,74 @@ CircularProgressIndicator(modifier = Modifier.size(48.dp))  // Different
 - InventoryScreen, PurchaseEntryScreen, SaleEntryScreen, ProductsScreen: Added "Утримуйте для..." hints for long-press actions
 - All icon usages: Added meaningful Ukrainian contentDescription values for accessibility
 
-### Sprint 2 (Short-term)
-1. Add step indicators to entry flows
-2. Add pull-to-refresh to all data screens
-3. Implement skeleton loading states
-4. Collapse history filters into sheet
-5. Add biometric authentication option
+### Sprint 2 (Short-term) ✅ COMPLETED 2026-01-16
 
-### Sprint 3 (Medium-term)
-1. Standardize spacing/sizing in theme
-2. Add screen transitions/animations
-3. Improve landscape support
-4. Add offline indicator to all screens
-5. Standardize currency/number formatting
+| Item | Status | Implementation |
+|------|--------|----------------|
+| 1. Step indicators in entry flows | ✅ Done | Added StepIndicator component to PurchaseEntryScreen, SaleEntryScreen |
+| 2. Pull-to-refresh on all screens | ✅ Done | Added SwipeRefresh to PurchaseScreen, SaleScreen, InventoryScreen |
+| 3. Skeleton loading states | ✅ Done | Created LoadingSkeleton.kt with BatchCardSkeleton, InventoryItemSkeleton |
+| 4. Collapse history filters | ✅ Done | Moved filters to ModalBottomSheet with FilterChip trigger |
+| 5. Biometric authentication | ✅ Done | Added BiometricHelper, fingerprint button in PinScreen |
+
+**Files Created:**
+- `ui/components/StepIndicator.kt` - Step progress indicator with labels
+- `ui/components/LoadingSkeleton.kt` - Shimmer skeleton loaders (Box, Circle, BatchCard, InventoryItem)
+- `ui/components/BiometricHelper.kt` - Biometric authentication wrapper
+- `ui/theme/Dimensions.kt` - Centralized Spacing, Corners, Elevation, TouchTargets
+
+**Files Modified:**
+- PurchaseScreen, SaleScreen, InventoryScreen: Added SwipeRefresh + skeleton loading
+- HistoryScreen: Filters collapsed into ModalBottomSheet
+- PurchaseEntryScreen, SaleEntryScreen: Added StepIndicator + AnimatedContent + haptic feedback
+- PinScreen, PinViewModel: Added biometric authentication option
+- CurrencyFormat.kt: Standardized ₴ prefix format with formatCurrency(), formatPricePerKg()
+
+#### Haptic Feedback Status ✅ ALL DONE
+| Screen | Haptic Implemented? |
+|--------|---------------------|
+| PurchaseEntryScreen | ✅ Yes |
+| PurchaseSummaryScreen | ✅ Yes |
+| SaleEntryScreen | ✅ Yes |
+| TransferScreen | ✅ Yes |
+
+#### State Transitions ✅ IMPLEMENTED
+- PurchaseEntryScreen: AnimatedContent with slide+fade
+- SaleEntryScreen: AnimatedContent with slide+fade
+
+### Sprint 3 (Medium-term) ✅ PARTIALLY COMPLETED 2026-01-16
+
+| Item | Status | Notes |
+|------|--------|-------|
+| 1. Standardize spacing/sizing | ✅ Done | Created Dimensions.kt with Spacing, Corners, Elevation objects |
+| 2. AnimatedContent for states | ✅ Done | Added to PurchaseEntryScreen, SaleEntryScreen |
+| 3. Improve landscape support | ❌ Not done | Future work |
+| 4. Offline indicator | ✅ Already done | SyncStatusIcon + ConnectivityBanner |
+| 5. Currency formatting | ✅ Done | CurrencyFormat.kt with ₴ prefix standard |
+
+### Theme Consistency Improvements
+
+#### Spacing ✅ FIXED
+Created `ui/theme/Dimensions.kt`:
+```kotlin
+object Spacing { xs = 4.dp, sm = 8.dp, md = 16.dp, lg = 24.dp, xl = 32.dp }
+object Corners { small = 8.dp, medium = 12.dp, large = 16.dp + shapes }
+object Elevation { none = 0.dp, low = 2.dp, medium = 4.dp, high = 8.dp }
+object TouchTargets { minimum = 48.dp, comfortable = 56.dp, large = 64.dp }
+```
+
+#### Currency Format ✅ FIXED
+Updated `CurrencyFormat.kt` with:
+- `CURRENCY_SYMBOL = "₴"` constant
+- `formatCurrency(amount)` → "₴1,234"
+- `formatCurrencyWithSign(amount)` → "+₴100" or "-₴50"
+- `formatPricePerKg(price)` → "₴12.50/кг"
+- `formatWeight(weight)` → "123.5 кг"
+
+#### Remaining (Backlog)
+- Button text case standardization
+- Corner radii migration to use Corners object
+- Elevation migration to use Elevation object
 
 ### Backlog (Polish)
 1. Theme extension with semantic spacing
@@ -625,21 +680,68 @@ CircularProgressIndicator(modifier = Modifier.size(48.dp))  // Different
 |-----------|----------|--------------|
 | EmptyState | `ui/components/EmptyState.kt` | ✅ Well used |
 | SyncStatusIcon | `ui/components/SyncStatusIcon.kt` | ✅ Used in nav |
-| ConnectivityBanner | `ui/components/ConnectivityBanner.kt` | ⚠️ Underused |
+| ConnectivityBanner | `ui/components/ConnectivityBanner.kt` | ✅ Used in MainActivity |
 | LocationSelectionDialog | `ui/components/LocationSelectionDialog.kt` | ✅ Used |
 | ReorderableProductGrid | `ui/components/ReorderableProductGrid.kt` | ✅ Good abstraction |
+| **StepIndicator** | `ui/components/StepIndicator.kt` | ✅ NEW - Used in entry flows |
+| **LoadingSkeleton** | `ui/components/LoadingSkeleton.kt` | ✅ NEW - Used in list screens |
+| **BiometricHelper** | `ui/components/BiometricHelper.kt` | ✅ NEW - Used in PinScreen |
+| **CurrencyFormat** | `ui/components/CurrencyFormat.kt` | ✅ UPDATED - Standardized ₴ format |
 
 ### Missing Components Suggested
-| Component | Purpose |
-|-----------|---------|
-| ConfirmDialog | Standardized confirmation dialogs |
-| LoadingSkeleton | Skeleton placeholders for lists |
-| StepIndicator | Progress indicator for flows |
-| LabeledTextField | Text field with consistent styling |
-| PriceText | Formatted currency display |
-| WeightText | Formatted weight display |
-| AnimatedCounter | Animated number changes |
+| Component | Purpose | Priority |
+|-----------|---------|----------|
+| ConfirmDialog | Standardized confirmation dialogs | Medium |
+| ~~LoadingSkeleton~~ | ~~Skeleton placeholders for lists~~ | ~~✅ Done~~ |
+| ~~StepIndicator~~ | ~~Progress indicator for flows~~ | ~~✅ Done~~ |
+| LabeledTextField | Text field with consistent styling | Low |
+| PriceText | Formatted currency display with consistent ₴ | Low (use CurrencyFormat) |
+| WeightText | Formatted weight display | Low |
+| AnimatedCounter | Animated number changes | Low |
+| ~~BiometricPromptHelper~~ | ~~Fingerprint auth wrapper~~ | ~~✅ Done~~ |
+| ~~Dimensions.kt~~ | ~~Centralized spacing constants~~ | ~~✅ Done~~ |
 
 ---
 
-*This UI/UX audit focuses on usability improvements for agricultural field use. The foundation is solid - Material 3 is well implemented and the color theme is appropriate. Priority should be given to discoverability, feedback, and accessibility.*
+## Audit Log
+
+| Date | Auditor | Focus | Key Changes |
+|------|---------|-------|-------------|
+| 2025-01 | Initial | Full UI/UX review | Created audit document |
+| 2026-01-14 | Sprint 1 | Critical fixes | Haptic, confirm buttons, dividers, hints |
+| 2026-01-16 | Sprint 2+3 | Full implementation | StepIndicator, LoadingSkeleton, BiometricHelper, SwipeRefresh, AnimatedContent, Dimensions.kt, CurrencyFormat |
+
+---
+
+## Quick Reference: What's Done vs Remaining
+
+### ✅ Completed (Sprint 1 + 2 + 3)
+- Haptic feedback on all entry screens
+- Explicit confirm buttons (no tap-anywhere)
+- HorizontalDivider migration
+- Long-press hints ("Утримуйте для...")
+- ContentDescription for accessibility
+- Offline indicator (SyncStatusIcon + ConnectivityBanner)
+- Navigation animations (fade + slide)
+- **Step indicators in entry flows** (Sprint 2)
+- **Pull-to-refresh on all data screens** (Sprint 2)
+- **Skeleton loading states** (Sprint 2)
+- **Collapsible history filters** (Sprint 2)
+- **Biometric authentication** (Sprint 2)
+- **Haptic on all entry screens** (Sprint 2)
+- **AnimatedContent state transitions** (Sprint 3)
+- **Dimensions.kt with Spacing/Corners/Elevation** (Sprint 3)
+- **CurrencyFormat with ₴ prefix standard** (Sprint 3)
+
+### ⏳ Remaining Work (Backlog)
+- Button text case standardization (migrate to sentence case)
+- Corner radii migration (use Corners object)
+- Elevation migration (use Elevation object)
+- Landscape support optimization
+- Custom date picker with forced Ukrainian locale
+- RTL support preparation
+- Full accessibility audit with TalkBack
+
+---
+
+*This UI/UX audit focuses on usability improvements for agricultural field use. The foundation is solid - Material 3 is well implemented and the color theme is appropriate. Sprint 2 and most of Sprint 3 completed 2026-01-16.*

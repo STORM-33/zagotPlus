@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.data.remote.dto
 
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.math.BigDecimal
@@ -52,14 +53,16 @@ data class TransactionDto(
     @SerialName("synced_at")
     val syncedAt: String?,
 
-    @SerialName("server_updated_at")
-    val serverUpdatedAt: String? = null,
-
     @SerialName("batch_id")
-    val batchId: String? = null,
+    val batchId: String?,
 
     @SerialName("sale_batch_id")
-    val saleBatchId: String? = null
+    val saleBatchId: String?,
+    
+    // server_updated_at is set by server trigger - never sent in push, only received in pull
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("server_updated_at")
+    val serverUpdatedAt: String? = null
 ) {
     /**
      * Convert DTO to Room entity.

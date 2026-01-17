@@ -104,6 +104,12 @@ interface TransactionRepository {
     fun getInventoryByLocation(locationId: UUID): Flow<List<InventoryItem>>
 
     /**
+     * Get average purchase price per product (for profit calculation).
+     * Returns a map of productId to average purchase price per kg.
+     */
+    fun getProductAvgPurchasePrices(): Flow<Map<UUID, BigDecimal>>
+
+    /**
      * Get filtered and paginated transactions.
      * @param filter Filter criteria
      * @param limit Number of transactions per page
@@ -144,6 +150,7 @@ interface TransactionRepository {
      * @param locationId Location where adjustment is made
      * @param productId Product being adjusted
      * @param adjustmentKg Weight difference (positive = add to inventory, negative = remove from inventory)
+     * @param pricePerKg Current default price per kg (for profit calculation)
      * @param reason Optional reason for adjustment
      * @param notes Optional additional notes
      * @return Created adjustment transaction
@@ -152,6 +159,7 @@ interface TransactionRepository {
         locationId: UUID,
         productId: UUID,
         adjustmentKg: BigDecimal,
+        pricePerKg: BigDecimal? = null,
         reason: String? = null,
         notes: String? = null
     ): Transaction

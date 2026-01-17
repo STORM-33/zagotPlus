@@ -340,7 +340,7 @@ class SaleEntryViewModelTest {
     // ==================== Finalization Tests ====================
 
     @Test
-    fun `finalize navigates to summary when positions exist`() = runTest {
+    fun `finalize saves and navigates to summary when positions exist`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
         viewModel.selectProduct(testProduct)
@@ -351,6 +351,7 @@ class SaleEntryViewModelTest {
         viewModel.addPositionAndContinue()
 
         viewModel.finalize()
+        advanceUntilIdle()
 
         assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
@@ -361,12 +362,13 @@ class SaleEntryViewModelTest {
         advanceUntilIdle()
 
         viewModel.finalize()
+        advanceUntilIdle()
 
         assertEquals(SaleEntryScreenState.PRODUCT_GRID, viewModel.uiState.value.screenState)
     }
 
     @Test
-    fun `confirmSave creates sales and navigates back`() = runTest {
+    fun `finalize saves batch immediately and shows summary`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
         viewModel.selectProduct(testProduct)
@@ -376,16 +378,32 @@ class SaleEntryViewModelTest {
         viewModel.onPriceChange("55.00")
         viewModel.addPositionAndContinue()
         viewModel.finalize()
-
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         coVerify { saleBatchRepository.createBatchWithTransactions(any(), any()) }
+        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+    }
+
+    @Test
+    fun `exitFromSummary navigates back`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("30")
+        viewModel.addBatch()
+        viewModel.proceedToReview()
+        viewModel.onPriceChange("55.00")
+        viewModel.addPositionAndContinue()
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        viewModel.exitFromSummary()
+
         assertTrue(viewModel.uiState.value.navigateBack)
     }
 
     @Test
-    fun `confirmSave handles error`() = runTest {
+    fun `finalize handles error and stays in positions list`() = runTest {
         coEvery { saleBatchRepository.createBatchWithTransactions(any(), any()) } throws RuntimeException("Save failed")
 
         viewModel = createViewModel()
@@ -397,13 +415,12 @@ class SaleEntryViewModelTest {
         viewModel.onPriceChange("55.00")
         viewModel.addPositionAndContinue()
         viewModel.finalize()
-
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertNotNull(state.error)
         assertFalse(state.isSaving)
+        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 
     // ==================== Navigation Tests ====================

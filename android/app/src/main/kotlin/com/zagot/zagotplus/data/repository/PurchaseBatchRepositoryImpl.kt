@@ -51,7 +51,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     override fun observeTodaysProductTotals(): Flow<List<ProductDailyTotal>> {
         val (startMillis, endMillis) = getTodayRange()
         return combine(
-            transactionDao.observeTodaysPurchaseTotals(startMillis, endMillis),
+            transactionDao.observeTodaysPurchaseTotalsWithAvg(startMillis, endMillis),
             productDao.getAllFlow()
         ) { totals, products ->
             val productMap = products.associate { it.id to it.name }
@@ -62,7 +62,8 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
                     productId = productId,
                     productName = name,
                     totalWeightKg = BigDecimal(result.totalWeightKg),
-                    totalAmount = BigDecimal(result.totalAmount ?: "0")
+                    totalAmount = BigDecimal(result.totalAmount ?: "0"),
+                    avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
                 )
             }.sortedBy { it.productName }
         }

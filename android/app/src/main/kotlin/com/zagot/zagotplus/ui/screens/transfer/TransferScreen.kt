@@ -103,10 +103,10 @@ fun TransferScreen(
     }
 
     val topBarTitle = when (uiState.screenState) {
+        TransferScreenState.LOCATIONS -> "Переміщення"
         TransferScreenState.PRODUCT_GRID -> "Оберіть товар"
         TransferScreenState.WEIGHT_ENTRY -> uiState.selectedProduct?.name ?: "Введіть вагу"
         TransferScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
-        TransferScreenState.DESTINATION -> "Оберіть призначення"
         TransferScreenState.SUMMARY -> "Підсумок"
     }
 
@@ -122,11 +122,11 @@ fun TransferScreen(
                         IconButton(
                             onClick = {
                                 when (uiState.screenState) {
-                                    TransferScreenState.PRODUCT_GRID -> viewModel.cancel()
+                                    TransferScreenState.LOCATIONS -> viewModel.cancel()
+                                    TransferScreenState.PRODUCT_GRID -> viewModel.backToLocations()
                                     TransferScreenState.WEIGHT_ENTRY -> viewModel.backToGrid()
-                                    TransferScreenState.POSITIONS_LIST -> viewModel.cancel()
-                                    TransferScreenState.DESTINATION -> viewModel.backToPositions()
-                                    TransferScreenState.SUMMARY -> viewModel.dismissSummary()
+                                    TransferScreenState.POSITIONS_LIST -> viewModel.backToGrid()
+                                    TransferScreenState.SUMMARY -> viewModel.backToPositions()
                                 }
                             }
                         ) {
@@ -172,12 +172,24 @@ fun TransferScreen(
                     }
                     else -> {
                         when (uiState.screenState) {
+                            TransferScreenState.LOCATIONS -> {
+                                LocationsSelector(
+                                    sourceLocation = uiState.sourceLocation,
+                                    destinationLocation = uiState.destinationLocation,
+                                    allLocations = uiState.allLocations,
+                                    availableDestinations = uiState.availableDestinations,
+                                    canProceed = uiState.canProceedToProducts,
+                                    onSourceLocationChange = viewModel::selectSourceLocation,
+                                    onDestinationLocationChange = viewModel::selectDestinationLocation,
+                                    onProceed = viewModel::proceedToProducts,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                             TransferScreenState.PRODUCT_GRID -> {
                                 InventoryGrid(
                                     inventoryItems = uiState.inventoryItems,
                                     sourceLocation = uiState.sourceLocation,
-                                    allLocations = uiState.allLocations,
-                                    onSourceLocationChange = viewModel::selectSourceLocation,
+                                    destinationLocation = uiState.destinationLocation,
                                     onProductClick = viewModel::selectProductById,
                                     onTransferAll = viewModel::transferAll,
                                     modifier = Modifier.fillMaxSize()
@@ -211,15 +223,8 @@ fun TransferScreen(
                                     onNotesChange = viewModel::onNotesChange,
                                     onRemovePosition = viewModel::removePosition,
                                     onAddAnother = viewModel::addAnotherProduct,
-                                    onProceed = viewModel::proceedToDestination,
+                                    onProceed = viewModel::proceedToSummary,
                                     onCancel = viewModel::cancel,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                            TransferScreenState.DESTINATION -> {
-                                DestinationSelector(
-                                    destinations = uiState.availableDestinations,
-                                    onSelectDestination = viewModel::selectDestination,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -234,19 +239,15 @@ fun TransferScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InventoryGrid(
     inventoryItems: List<InventoryWithProduct>,
     sourceLocation: Location?,
-    allLocations: List<Location>,
-    onSourceLocationChange: (Location) -> Unit,
+    destinationLocation: Location?,
     onProductClick: (UUID) -> Unit,
     onTransferAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     // Extract products and inventory map for ReorderableProductGrid
     val products = remember(inventoryItems) {
         inventoryItems.map { it.product }
@@ -256,7 +257,7 @@ private fun InventoryGrid(
     }
 
     Column(modifier = modifier) {
-        // Source location selector
+        // Transfer direction header (source → destination)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -265,60 +266,44 @@ private fun InventoryGrid(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         ) {
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Place,
-                        contentDescription = "Локація",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Звідки",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Звідки:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            text = sourceLocation?.name ?: "Оберіть точку",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                    Text(
+                        text = sourceLocation?.name ?: "-",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
-
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    allLocations.forEach { location ->
-                        DropdownMenuItem(
-                            text = { Text(location.name) },
-                            onClick = {
-                                onSourceLocationChange(location)
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Place,
-                                    contentDescription = "Локація"
-                                )
-                            }
-                        )
-                    }
+                Icon(
+                    imageVector = Icons.Filled.ArrowForward,
+                    contentDescription = "Напрямок",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Куди",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = destinationLocation?.name ?: "-",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
             }
         }
@@ -742,46 +727,214 @@ private fun TransferPositionItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DestinationSelector(
-    destinations: List<Location>,
-    onSelectDestination: (Location) -> Unit,
+private fun LocationsSelector(
+    sourceLocation: Location?,
+    destinationLocation: Location?,
+    allLocations: List<Location>,
+    availableDestinations: List<Location>,
+    canProceed: Boolean,
+    onSourceLocationChange: (Location) -> Unit,
+    onDestinationLocationChange: (Location) -> Unit,
+    onProceed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var sourceExpanded by remember { mutableStateOf(false) }
+    var destinationExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier.padding(16.dp)
     ) {
         Text(
-            text = "Куди переміщуємо?",
-            style = MaterialTheme.typography.titleLarge,
+            text = "Оберіть точки",
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        if (destinations.isEmpty()) {
-            Box(
+        // Source location selector
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = sourceExpanded,
+                onExpandedChange = { sourceExpanded = it },
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                EmptyState(
-                    icon = EmptyStateIcons.Location,
-                    title = "Немає інших точок",
-                    description = "Додайте більше точок в налаштуваннях"
-                )
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(destinations, key = { it.id }) { location ->
-                    LocationCard(
-                        location = location,
-                        onClick = { onSelectDestination(location) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = "Локація",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Звідки:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = sourceLocation?.name ?: "Оберіть точку",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = sourceExpanded)
+                }
+
+                ExposedDropdownMenu(
+                    expanded = sourceExpanded,
+                    onDismissRequest = { sourceExpanded = false }
+                ) {
+                    allLocations.forEach { location ->
+                        DropdownMenuItem(
+                            text = { Text(location.name) },
+                            onClick = {
+                                onSourceLocationChange(location)
+                                sourceExpanded = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Place,
+                                    contentDescription = "Локація"
+                                )
+                            }
+                        )
+                    }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Arrow indicator
+        Icon(
+            imageVector = Icons.Filled.ArrowForward,
+            contentDescription = "Напрямок",
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .size(32.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Destination location selector
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (destinationLocation != null) 
+                    MaterialTheme.colorScheme.secondaryContainer 
+                else 
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = destinationExpanded,
+                onExpandedChange = { 
+                    if (availableDestinations.isNotEmpty()) {
+                        destinationExpanded = it 
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = "Локація",
+                        tint = if (destinationLocation != null) 
+                            MaterialTheme.colorScheme.onSecondaryContainer 
+                        else 
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Куди:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (destinationLocation != null)
+                                MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = destinationLocation?.name ?: if (sourceLocation == null) "Спочатку оберіть звідки" else "Оберіть точку",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (destinationLocation != null) 
+                                MaterialTheme.colorScheme.onSecondaryContainer 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (availableDestinations.isNotEmpty()) {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = destinationExpanded)
+                    }
+                }
+
+                ExposedDropdownMenu(
+                    expanded = destinationExpanded,
+                    onDismissRequest = { destinationExpanded = false }
+                ) {
+                    availableDestinations.forEach { location ->
+                        DropdownMenuItem(
+                            text = { Text(location.name) },
+                            onClick = {
+                                onDestinationLocationChange(location)
+                                destinationExpanded = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Place,
+                                    contentDescription = "Локація"
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Proceed button
+        Button(
+            onClick = onProceed,
+            enabled = canProceed,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text(
+                text = "Далі",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.Filled.ArrowForward, contentDescription = "Далі")
         }
     }
 }
@@ -789,6 +942,7 @@ private fun DestinationSelector(
 @Composable
 private fun LocationCard(
     location: Location,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -802,7 +956,10 @@ private fun LocationCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isSelected) 
+                MaterialTheme.colorScheme.primaryContainer 
+            else 
+                MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -815,26 +972,38 @@ private fun LocationCard(
                 imageVector = Icons.Filled.Place,
                 contentDescription = "Локація",
                 modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = if (isSelected) 
+                    MaterialTheme.colorScheme.onPrimaryContainer 
+                else 
+                    MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = location.name,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = typeLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Icon(
-                imageVector = Icons.Filled.ArrowForward,
-                contentDescription = "Оберіть",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.Place,
+                    contentDescription = "Обрано",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
@@ -975,7 +1144,7 @@ private fun TransferSummaryOverlay(
                         )
                     ) {
                         Text(
-                            text = "ПІДТВЕРДИТИ ПЕРЕМІЩЕННЯ",
+                            text = "ПЕРЕМІСТИТИ",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

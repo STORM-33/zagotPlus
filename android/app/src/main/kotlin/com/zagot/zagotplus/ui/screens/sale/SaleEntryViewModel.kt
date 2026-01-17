@@ -306,6 +306,25 @@ class SaleEntryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Update an existing batch's weight and tare count.
+     * Used for editing weighings in the review step.
+     */
+    fun updateBatch(batchId: String, newWeight: BigDecimal, newTareCount: Int) {
+        _uiState.update { state ->
+            state.copy(
+                currentBatches = state.currentBatches.map { batch ->
+                    if (batch.id == batchId) {
+                        batch.copy(
+                            grossWeightKg = newWeight,
+                            tareCount = newTareCount
+                        )
+                    } else batch
+                }
+            )
+        }
+    }
+
     fun proceedToReview() {
         if (_uiState.value.currentBatches.isNotEmpty()) {
             _uiState.update { it.copy(screenState = SaleEntryScreenState.POSITION_REVIEW) }
@@ -322,6 +341,14 @@ class SaleEntryViewModel @Inject constructor(
         if (price.isEmpty() || DECIMAL_PATTERN.matches(price)) {
             _uiState.update { it.copy(pricePerKg = price) }
         }
+    }
+
+    /**
+     * Called when price field receives focus for the first time.
+     * Clears the default price so user can type without deleting it manually.
+     */
+    fun onPriceFocused() {
+        _uiState.update { it.copy(pricePerKg = "") }
     }
 
     fun onNotesChange(notes: String) {
@@ -395,6 +422,50 @@ class SaleEntryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Update a batch within a saved position.
+     */
+    fun updatePositionBatch(positionId: String, batchId: String, newWeight: BigDecimal, newTareCount: Int) {
+        _uiState.update { state ->
+            val newPositions = state.positions.map { pos ->
+                if (pos.id == positionId) {
+                    pos.copy(
+                        batches = pos.batches.map { batch ->
+                            if (batch.id == batchId) {
+                                batch.copy(grossWeightKg = newWeight, tareCount = newTareCount)
+                            } else batch
+                        }
+                    )
+                } else pos
+            }
+            // Update editingPosition to reflect changes
+            val updatedEditingPosition = newPositions.find { it.id == positionId }
+            state.copy(
+                positions = newPositions,
+                editingPosition = updatedEditingPosition
+            )
+        }
+    }
+
+    /**
+     * Delete a batch from a saved position.
+     */
+    fun deletePositionBatch(positionId: String, batchId: String) {
+        _uiState.update { state ->
+            val newPositions = state.positions.map { pos ->
+                if (pos.id == positionId) {
+                    pos.copy(batches = pos.batches.filter { it.id != batchId })
+                } else pos
+            }
+            // Update editingPosition to reflect changes
+            val updatedEditingPosition = newPositions.find { it.id == positionId }
+            state.copy(
+                positions = newPositions,
+                editingPosition = updatedEditingPosition
+            )
+        }
+    }
+
     fun addAnotherProduct() {
         _uiState.update {
             it.copy(screenState = SaleEntryScreenState.PRODUCT_GRID)
@@ -425,19 +496,10 @@ class SaleEntryViewModel @Inject constructor(
     }
 
     fun finalize() {
-        if (_uiState.value.canFinalize) {
-            _uiState.update { it.copy(screenState = SaleEntryScreenState.SUMMARY) }
-        }
-    }
-
-    fun onCorrectionReasonChange(reason: String) {
-        _uiState.update { it.copy(correctionReason = reason) }
-    }
-
-    fun confirmSave() {
         val state = _uiState.value
-        if (state.positions.isEmpty()) return
+        if (!state.canFinalize) return
 
+        // Save immediately and show summary
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
@@ -489,7 +551,6 @@ class SaleEntryViewModel @Inject constructor(
                 // Check if we're in correction mode
                 val editingBatchId = state.editingBatchId
                 if (editingBatchId != null) {
-                    // Correction flow: void original and create new
                     val reason = state.correctionReason.ifBlank { "Виправлення помилки" }
                     saleBatchRepository.correctBatch(
                         originalBatchId = editingBatchId,
@@ -498,26 +559,35 @@ class SaleEntryViewModel @Inject constructor(
                         reason = reason
                     )
                 } else {
-                    // Normal creation flow
                     saleBatchRepository.createBatchWithTransactions(batch, transactions)
                 }
 
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        navigateBack = true
+                        screenState = SaleEntryScreenState.SUMMARY
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        screenState = SaleEntryScreenState.POSITIONS_LIST,
                         error = e.message ?: "Помилка збереження"
                     )
                 }
             }
         }
+    }
+
+    fun onCorrectionReasonChange(reason: String) {
+        _uiState.update { it.copy(correctionReason = reason) }
+    }
+
+    /**
+     * Exit from summary screen - navigates back to the list.
+     */
+    fun exitFromSummary() {
+        _uiState.update { it.copy(navigateBack = true) }
     }
 
     /**

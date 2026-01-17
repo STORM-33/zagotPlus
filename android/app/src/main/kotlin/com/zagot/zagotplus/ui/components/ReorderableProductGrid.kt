@@ -66,7 +66,8 @@ fun ReorderableProductGrid(
     inventoryMap: Map<UUID, BigDecimal>? = null
 ) {
     // Mutable copy of product order (IDs only)
-    var orderedProductIds by remember(products.map { it.id }) { 
+    // Use products list identity to preserve incoming order from ViewModel
+    var orderedProductIds by remember(products) { 
         mutableStateOf(products.map { it.id }) 
     }
     

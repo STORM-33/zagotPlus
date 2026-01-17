@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,11 +14,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.zagot.zagotplus.R
+import com.zagot.zagotplus.ui.components.BiometricHelper
 import com.zagot.zagotplus.ui.components.bouncyClick
 
 @Composable
@@ -26,10 +30,30 @@ fun PinScreen(
     viewModel: PinViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    
+    // Check biometric availability
+    val isBiometricAvailable = BiometricHelper.isBiometricAvailable(context)
+    val showBiometric = isBiometricAvailable && 
+                        uiState.mode == PinMode.VERIFY_PIN && 
+                        !uiState.isLockedOut
 
     LaunchedEffect(uiState.isAuthenticated) {
         if (uiState.isAuthenticated) {
             onAuthenticated()
+        }
+    }
+    
+    // Auto-show biometric on first launch when available
+    LaunchedEffect(showBiometric) {
+        if (showBiometric && activity != null && !uiState.biometricPromptShown) {
+            viewModel.onBiometricPromptShown()
+            BiometricHelper.showBiometricPrompt(
+                activity = activity,
+                onSuccess = { viewModel.onBiometricSuccess() },
+                onError = { /* User will use PIN */ }
+            )
         }
     }
 
@@ -72,6 +96,15 @@ fun PinScreen(
             PinKeypad(
                 onDigitClick = viewModel::onDigitPressed,
                 onBackspaceClick = viewModel::onBackspacePressed,
+                onBiometricClick = if (showBiometric && activity != null) {
+                    {
+                        BiometricHelper.showBiometricPrompt(
+                            activity = activity,
+                            onSuccess = { viewModel.onBiometricSuccess() },
+                            onError = { /* User can try again or use PIN */ }
+                        )
+                    }
+                } else null,
                 enabled = !uiState.isLockedOut
             )
         }
@@ -108,6 +141,7 @@ private fun PinDots(
 private fun PinKeypad(
     onDigitClick: (Int) -> Unit,
     onBackspaceClick: () -> Unit,
+    onBiometricClick: (() -> Unit)?,
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -131,16 +165,32 @@ private fun PinKeypad(
             }
         }
 
-        // Row 4: empty, 0, backspace
+        // Row 4: biometric/empty, 0, backspace
         Row(
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            KeypadButton(
-                text = "",
-                onClick = { },
-                enabled = false,
-                modifier = Modifier.size(88.dp)
-            )
+            // Biometric button or empty space
+            if (onBiometricClick != null) {
+                IconButton(
+                    onClick = onBiometricClick,
+                    enabled = enabled,
+                    modifier = Modifier.size(88.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Fingerprint,
+                        contentDescription = "Вхід за відбитком пальця",
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                KeypadButton(
+                    text = "",
+                    onClick = { },
+                    enabled = false,
+                    modifier = Modifier.size(88.dp)
+                )
+            }
             
             KeypadButton(
                 text = "0",

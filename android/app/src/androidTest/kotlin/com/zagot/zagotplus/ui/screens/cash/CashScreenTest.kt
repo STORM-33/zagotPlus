@@ -17,6 +17,7 @@ import com.zagot.zagotplus.domain.repository.LocationRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Rule
@@ -113,7 +114,7 @@ class CashScreenTest {
     }
 
     private fun createViewModel(): CashViewModel {
-        return CashViewModel(cashRepository, locationRepository)
+        return CashViewModel(cashRepository, locationRepository, Dispatchers.Main)
     }
 
     // ==================== Tab Display Tests ====================

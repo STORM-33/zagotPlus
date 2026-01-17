@@ -346,32 +346,32 @@ class TransferViewModelTest {
     // ==================== Destination & Confirmation Tests ====================
 
     @Test
-    fun `proceedToDestination navigates to destination selection`() = runTest {
+    fun `proceedToSummary navigates to summary screen`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
+        // Step 1: Select destination (source is already set from device preferences)
+        viewModel.selectDestinationLocation(testDestLocation)
+        viewModel.proceedToProducts()
+        
         viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
         viewModel.onWeightChange("30")
         viewModel.addPosition()
-        viewModel.proceedToDestination()
+        viewModel.proceedToSummary()
 
-        assertEquals(TransferScreenState.DESTINATION, viewModel.uiState.value.screenState)
+        assertEquals(TransferScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
-    fun `selectDestination navigates to summary`() = runTest {
+    fun `selectDestinationLocation sets destination and stays on locations`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
-        viewModel.onWeightChange("30")
-        viewModel.addPosition()
-        viewModel.proceedToDestination()
-        viewModel.selectDestination(testDestLocation)
+        viewModel.selectDestinationLocation(testDestLocation)
 
         val state = viewModel.uiState.value
         assertEquals(testDestLocation, state.destinationLocation)
-        assertEquals(TransferScreenState.SUMMARY, state.screenState)
+        assertEquals(TransferScreenState.LOCATIONS, state.screenState)
     }
 
     @Test
@@ -388,11 +388,14 @@ class TransferViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
+        // Step 1: Select destination and proceed to products
+        viewModel.selectDestinationLocation(testDestLocation)
+        viewModel.proceedToProducts()
+        
         viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
         viewModel.onWeightChange("30")
         viewModel.addPosition()
-        viewModel.proceedToDestination()
-        viewModel.selectDestination(testDestLocation)
+        viewModel.proceedToSummary()
         viewModel.confirmSave()
         advanceUntilIdle()
 
@@ -417,11 +420,14 @@ class TransferViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
+        // Step 1: Select destination and proceed to products
+        viewModel.selectDestinationLocation(testDestLocation)
+        viewModel.proceedToProducts()
+        
         viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
         viewModel.onWeightChange("30")
         viewModel.addPosition()
-        viewModel.proceedToDestination()
-        viewModel.selectDestination(testDestLocation)
+        viewModel.proceedToSummary()
         viewModel.confirmSave()
         advanceUntilIdle()
 
@@ -445,13 +451,16 @@ class TransferViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
+        // Step 1: Select destination and proceed to products
+        viewModel.selectDestinationLocation(testDestLocation)
+        viewModel.proceedToProducts()
+        
         viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
         viewModel.onWeightChange("50")        // Gross: 50 kg
         viewModel.onTareCountChange("5")      // 5 sacks
         viewModel.onTareWeightPerUnitChange("1") // 1 kg each, total tare = 5 kg
         viewModel.addPosition()
-        viewModel.proceedToDestination()
-        viewModel.selectDestination(testDestLocation)
+        viewModel.proceedToSummary()
         viewModel.confirmSave()
         advanceUntilIdle()
 
@@ -475,6 +484,10 @@ class TransferViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
+        // First navigate to product grid
+        viewModel.selectDestinationLocation(testDestLocation)
+        viewModel.proceedToProducts()
+        
         viewModel.selectProduct(viewModel.uiState.value.inventoryItems[0])
         viewModel.backToGrid()
 

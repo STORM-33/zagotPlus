@@ -110,13 +110,7 @@ class CashRepositoryImpl @Inject constructor(
     // ========== Cash History (Unified) ==========
 
     override suspend fun getCashHistoryPaged(limit: Int, offset: Int): List<CashHistoryItem> {
-        Log.d(TAG, "getCashHistoryPaged called: limit=$limit, offset=$offset")
         val projections = cashOperationDao.getCashHistoryPaged(limit, offset)
-        Log.d(TAG, "DAO returned ${projections.size} projections")
-        projections.forEachIndexed { index, p ->
-            Log.d(TAG, "  Projection[$index]: id=${p.id}, type=${p.type}, amount=${p.amount}, " +
-                "locationId=${p.locationId}, locationName=${p.locationName}, batchCount=${p.batchCount}")
-        }
         return projections.map { it.toDomain() }
     }
 

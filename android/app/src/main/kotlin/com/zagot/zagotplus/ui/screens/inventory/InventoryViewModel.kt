@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -46,6 +47,8 @@ data class InventoryUiState(
     val viewMode: InventoryViewMode = InventoryViewMode.BY_LOCATION,
     val products: List<Product> = emptyList(),
     val inventory: List<InventoryItem> = emptyList(),
+    /** Average purchase price per product (for profit calculation) */
+    val avgPurchasePrices: Map<UUID, BigDecimal> = emptyMap(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val lastSyncTime: Instant? = null,
@@ -55,9 +58,26 @@ data class InventoryUiState(
 data class InventoryDisplayItem(
     val productId: UUID,
     val productName: String,
+    val productImageUri: String? = null,
     val weightKg: BigDecimal,
     val isNegative: Boolean,
-    val locationId: UUID? = null  // null for total view
+    val locationId: UUID? = null,  // null for total view
+    /** Projected profit = (sellPrice - avgPurchasePrice) × weight */
+    val projectedProfit: BigDecimal? = null,
+    /** Sale price per kg */
+    val salePrice: BigDecimal? = null,
+    /** Average purchase price per kg */
+    val avgPurchasePrice: BigDecimal? = null
+)
+
+/**
+ * Summary of inventory totals for display in summary panel.
+ */
+data class InventorySummary(
+    val totalWeight: BigDecimal = BigDecimal.ZERO,
+    val totalExpectedProfit: BigDecimal = BigDecimal.ZERO,
+    /** Total money invested = sum of (weight × avgPurchasePrice) per product */
+    val totalInvested: BigDecimal = BigDecimal.ZERO
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -85,9 +105,11 @@ class InventoryViewModel @Inject constructor(
     /**
      * Derived StateFlow that computes display items only when state changes.
      * Avoids creating new lists on every recomposition.
+     * Includes projected profit calculation.
      */
     val displayItems: StateFlow<List<InventoryDisplayItem>> = _uiState
         .map { state ->
+            val avgPrices = state.avgPurchasePrices
             val items = if (state.viewMode == InventoryViewMode.TOTAL) {
                 // For total view, aggregate inventory across all locations
                 val aggregatedInventory = state.inventory
@@ -98,12 +120,21 @@ class InventoryViewModel @Inject constructor(
                     val weight = aggregatedInventory[product.id] ?: BigDecimal.ZERO
                     // Only include products with non-zero weight
                     if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
+                    
+                    val salePrice = product.defaultSellPrice
+                    val avgPurchasePrice = avgPrices[product.id]
+                    val projectedProfit = calculateProjectedProfit(salePrice, avgPurchasePrice, weight)
+                    
                     InventoryDisplayItem(
                         productId = product.id,
                         productName = product.name,
+                        productImageUri = product.imageUri,
                         weightKg = weight,
                         isNegative = weight < BigDecimal.ZERO,
-                        locationId = null
+                        locationId = null,
+                        projectedProfit = projectedProfit,
+                        salePrice = salePrice,
+                        avgPurchasePrice = avgPurchasePrice
                     )
                 }
             } else {
@@ -114,12 +145,21 @@ class InventoryViewModel @Inject constructor(
                     val weight = inventoryItem?.totalWeightKg ?: BigDecimal.ZERO
                     // Only include products with non-zero weight
                     if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
+                    
+                    val salePrice = product.defaultSellPrice
+                    val avgPurchasePrice = avgPrices[product.id]
+                    val projectedProfit = calculateProjectedProfit(salePrice, avgPurchasePrice, weight)
+                    
                     InventoryDisplayItem(
                         productId = product.id,
                         productName = product.name,
+                        productImageUri = product.imageUri,
                         weightKg = weight,
                         isNegative = weight < BigDecimal.ZERO,
-                        locationId = state.selectedLocation?.id
+                        locationId = state.selectedLocation?.id,
+                        projectedProfit = projectedProfit,
+                        salePrice = salePrice,
+                        avgPurchasePrice = avgPurchasePrice
                     )
                 }
             }
@@ -133,6 +173,44 @@ class InventoryViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    /**
+     * Derived StateFlow for inventory summary totals.
+     */
+    val inventorySummary: StateFlow<InventorySummary> = displayItems
+        .map { items ->
+            val totalWeight = items.sumOf { it.weightKg }
+            val totalProfit = items.mapNotNull { it.projectedProfit }.sumOf { it }
+            val totalInvested = items.sumOf { item ->
+                val price = item.salePrice ?: BigDecimal.ZERO
+                item.weightKg.multiply(price)
+            }.setScale(2, java.math.RoundingMode.HALF_UP)
+            
+            InventorySummary(
+                totalWeight = totalWeight,
+                totalExpectedProfit = totalProfit,
+                totalInvested = totalInvested
+            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = InventorySummary()
+        )
+    
+    /**
+     * Calculate projected profit: (sellPrice - avgPurchasePrice) × weight
+     */
+    private fun calculateProjectedProfit(
+        salePrice: BigDecimal?,
+        avgPurchasePrice: BigDecimal?,
+        weight: BigDecimal
+    ): BigDecimal? {
+        if (salePrice == null || avgPurchasePrice == null) return null
+        if (weight <= BigDecimal.ZERO) return null
+        return (salePrice - avgPurchasePrice).multiply(weight)
+            .setScale(2, java.math.RoundingMode.HALF_UP)
+    }
 
     private var locationsMap: Map<UUID, Location> = emptyMap()
 
@@ -172,7 +250,9 @@ class InventoryViewModel @Inject constructor(
                             flowOf(Triple(viewMode, null, emptyList<InventoryItem>()))
                         }
                     }
-                }.collect { (viewMode, locationId, inventory) ->
+                }
+                .distinctUntilChanged()
+                .collect { (viewMode, locationId, inventory) ->
                     val selectedLocation = locationId?.let { locationsMap[it] }
                     _uiState.update {
                         it.copy(
@@ -190,6 +270,13 @@ class InventoryViewModel @Inject constructor(
                         isLoading = false
                     )
                 }
+            }
+        }
+        
+        // Observe average purchase prices for profit calculation
+        viewModelScope.launch {
+            transactionRepository.getProductAvgPurchasePrices().collect { avgPrices ->
+                _uiState.update { it.copy(avgPurchasePrices = avgPrices) }
             }
         }
     }
@@ -235,6 +322,7 @@ class InventoryViewModel @Inject constructor(
 
     /**
      * Create an inventory adjustment transaction.
+     * Uses the product's current default buy price for profit calculation.
      * 
      * @param locationId Location where adjustment is made
      * @param productId Product being adjusted
@@ -252,10 +340,15 @@ class InventoryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val adjustmentKg = actualWeightKg - currentWeightKg
+                // Get the product's current default buy price for profit calculation
+                val product = productRepository.getProductById(productId)
+                val pricePerKg = product?.defaultBuyPrice
+                
                 transactionRepository.createAdjustment(
                     locationId = locationId,
                     productId = productId,
                     adjustmentKg = adjustmentKg,
+                    pricePerKg = pricePerKg,
                     reason = reason
                 )
                 // Inventory will auto-update via Flow observation

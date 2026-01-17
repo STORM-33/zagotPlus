@@ -86,6 +86,7 @@ class SyncFlowIntegrationTest {
 
         // Create real SyncService with fake data source
         syncService = SyncService(
+            database = database,
             syncDataSource = fakeSyncDataSource,
             transactionDao = database.transactionDao(),
             purchaseBatchDao = database.purchaseBatchDao(),
@@ -352,7 +353,9 @@ class SyncFlowIntegrationTest {
             notes = "From another device",
             deviceId = "other-device",
             createdAt = testInstant.plusSeconds(300).toString(),
-            syncedAt = testInstant.plusSeconds(300).toString()
+            syncedAt = testInstant.plusSeconds(300).toString(),
+            batchId = null,
+            saleBatchId = null
         )
         fakeSyncDataSource.seedTransactions(listOf(remoteTransaction))
 
@@ -620,7 +623,9 @@ class SyncFlowIntegrationTest {
             notes = null,
             deviceId = "device-B",
             createdAt = testInstant.plusSeconds(60).toString(),
-            syncedAt = testInstant.plusSeconds(60).toString()
+            syncedAt = testInstant.plusSeconds(60).toString(),
+            batchId = null,
+            saleBatchId = null
         )
         fakeSyncDataSource.seedTransactions(listOf(remoteTx))
 

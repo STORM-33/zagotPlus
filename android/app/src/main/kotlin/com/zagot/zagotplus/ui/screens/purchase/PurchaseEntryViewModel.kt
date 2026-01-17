@@ -204,6 +204,14 @@ class PurchaseEntryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called when price field receives focus for the first time.
+     * Clears the default price so user can type without deleting it manually.
+     */
+    fun onPriceFocused() {
+        _uiState.update { it.copy(currentPrice = "") }
+    }
+
     fun onNotesChange(notes: String) {
         _uiState.update { it.copy(notes = notes) }
     }
@@ -299,20 +307,7 @@ class PurchaseEntryViewModel @Inject constructor(
         val state = _uiState.value
         if (state.positions.isEmpty()) return
 
-        // Show summary overlay instead of saving immediately
-        _uiState.update {
-            it.copy(screenState = PurchaseEntryScreenState.SUMMARY)
-        }
-    }
-
-    fun onCorrectionReasonChange(reason: String) {
-        _uiState.update { it.copy(correctionReason = reason) }
-    }
-
-    fun confirmSave() {
-        val state = _uiState.value
-        if (state.positions.isEmpty()) return
-
+        // Save immediately and show summary
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
@@ -357,7 +352,6 @@ class PurchaseEntryViewModel @Inject constructor(
                 // Check if we're in correction mode
                 val editingBatchId = state.editingBatchId
                 if (editingBatchId != null) {
-                    // Correction flow: void original and create new
                     val reason = state.correctionReason.ifBlank { "Виправлення помилки" }
                     purchaseBatchRepository.correctBatch(
                         originalBatchId = editingBatchId,
@@ -366,12 +360,8 @@ class PurchaseEntryViewModel @Inject constructor(
                         reason = reason
                     )
                 } else {
-                    // Normal creation flow
                     purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
                 }
-
-                // Note: Cash balance is automatically updated via transactions table
-                // (purchases reduce cash balance in the balance calculation query)
 
                 // TODO: Print receipt here (Phase 6 - hardware integration)
                 // printReceipt(batch, positions)
@@ -379,19 +369,29 @@ class PurchaseEntryViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        navigateBack = true
+                        screenState = PurchaseEntryScreenState.SUMMARY
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        screenState = PurchaseEntryScreenState.POSITIONS_LIST,
                         error = e.message ?: "Помилка збереження"
                     )
                 }
             }
         }
+    }
+
+    fun onCorrectionReasonChange(reason: String) {
+        _uiState.update { it.copy(correctionReason = reason) }
+    }
+
+    /**
+     * Exit from summary screen - navigates back to the list.
+     */
+    fun exitFromSummary() {
+        _uiState.update { it.copy(navigateBack = true) }
     }
 
     /**

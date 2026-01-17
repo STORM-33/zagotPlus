@@ -1,6 +1,8 @@
 package com.zagot.zagotplus.sync
 
 import android.util.Log
+import androidx.room.withTransaction
+import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.dao.LocationDao
@@ -28,6 +30,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SyncService @Inject constructor(
+    private val database: ZagotDatabase,
     private val syncDataSource: SyncDataSource,
     private val transactionDao: TransactionDao,
     private val purchaseBatchDao: PurchaseBatchDao,
@@ -138,37 +141,11 @@ class SyncService @Inject constructor(
         }
         Log.d(TAG, "Pushed ${cashPushResult.successCount} cash operations (${cashPushResult.failedCount} failed)")
 
-        // Step 7: Pull new expense categories
-        val categoryPullResult = try {
-            pullNewExpenseCategories(syncStartTimestamp, maxServerUpdatedAt)
-        } catch (e: Exception) {
-            Log.e(TAG, "Expense category pull failed after successful push", e)
-            0
-        }
-        Log.d(TAG, "Pulled $categoryPullResult expense categories")
-
-        // Step 8: Pull new batches
-        val batchPullResult = try {
-            pullNewBatches(syncStartTimestamp, maxServerUpdatedAt)
-        } catch (e: Exception) {
-            Log.e(TAG, "Batch pull failed after successful push", e)
-            // Continue to transaction pull
-            0
-        }
-        Log.d(TAG, "Pulled $batchPullResult batches")
-
-        // Step 8b: Pull new sale batches
-        val saleBatchPullResult = try {
-            pullNewSaleBatches(syncStartTimestamp, maxServerUpdatedAt)
-        } catch (e: Exception) {
-            Log.e(TAG, "Sale batch pull failed after successful push", e)
-            0
-        }
-        Log.d(TAG, "Pulled $saleBatchPullResult sale batches")
-
-        // Step 9: Pull new transactions
-        val pullResult = try {
-            pullNewTransactions(syncStartTimestamp, maxServerUpdatedAt)
+        // Steps 7-10: Pull all new records in a single database transaction.
+        // This prevents UI flicker by ensuring Room Flow observers only get 
+        // notified once when all records are inserted together.
+        val pullCounts = try {
+            pullAllInTransaction(syncStartTimestamp, maxServerUpdatedAt)
         } catch (e: Exception) {
             Log.e(TAG, "Pull failed after successful push", e)
             // Push succeeded but pull failed - return Partial
@@ -178,16 +155,7 @@ class SyncService @Inject constructor(
                 warnings = warnings
             )
         }
-        Log.d(TAG, "Pulled $pullResult transactions")
-
-        // Step 10: Pull new cash operations
-        val cashPullResult = try {
-            pullNewCashOperations(syncStartTimestamp, maxServerUpdatedAt)
-        } catch (e: Exception) {
-            Log.e(TAG, "Cash operations pull failed after successful push", e)
-            0
-        }
-        Log.d(TAG, "Pulled $cashPullResult cash operations")
+        Log.d(TAG, "Pulled ${pullCounts.total} records in transaction")
 
         // Update last sync timestamp using the maximum server_updated_at from pulled records.
         // We store the exact max timestamp (no subtraction needed) because:
@@ -209,8 +177,120 @@ class SyncService @Inject constructor(
 
         return SyncResult.Success(
             pushed = pushResult.successCount + batchPushResult.successCount + saleBatchPushResult.successCount + productPushResult.successCount + categoryPushResult.successCount + cashPushResult.successCount,
-            pulled = pullResult + batchPullResult + saleBatchPullResult + categoryPullResult + cashPullResult,
+            pulled = pullCounts.total,
             warnings = warnings
+        )
+    }
+
+    /**
+     * Result of pull operation tracking counts per entity type.
+     */
+    private data class PullCounts(
+        val categories: Int = 0,
+        val batches: Int = 0,
+        val saleBatches: Int = 0,
+        val transactions: Int = 0,
+        val cashOperations: Int = 0
+    ) {
+        val total: Int get() = categories + batches + saleBatches + transactions + cashOperations
+    }
+
+    /**
+     * Pull all new records from remote and insert in a single database transaction.
+     * This prevents UI flicker by ensuring Room Flow observers only emit once
+     * when the transaction commits, rather than multiple times as each entity
+     * type is inserted separately.
+     *
+     * @param since Timestamp to filter records updated after
+     * @param timestampTracker Tracker to record max server_updated_at for next sync
+     * @return Counts of pulled records by entity type
+     * @throws Exception if any network error occurs
+     */
+    private suspend fun pullAllInTransaction(
+        since: Instant, 
+        timestampTracker: MaxTimestampTracker
+    ): PullCounts {
+        Log.d(TAG, "Fetching all remote records updated after $since")
+        
+        // Step 1: Fetch all remote data (network calls outside transaction)
+        val remoteCategories = try {
+            syncDataSource.pullExpenseCategories(since)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch expense categories", e)
+            emptyList()
+        }
+        
+        val remoteBatches = try {
+            syncDataSource.pullBatches(since)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch batches", e)
+            emptyList()
+        }
+        
+        val remoteSaleBatches = try {
+            syncDataSource.pullSaleBatches(since)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch sale batches", e)
+            emptyList()
+        }
+        
+        // Transactions are critical - if this fails, we throw
+        val remoteTransactions = syncDataSource.pullTransactions(since)
+        
+        val remoteCashOps = try {
+            syncDataSource.pullCashOperations(since)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch cash operations", e)
+            emptyList()
+        }
+        
+        // Track timestamps from all fetched records
+        remoteCategories.forEach { timestampTracker.update(it.serverUpdatedAt) }
+        remoteBatches.forEach { timestampTracker.update(it.serverUpdatedAt) }
+        remoteSaleBatches.forEach { timestampTracker.update(it.serverUpdatedAt) }
+        remoteTransactions.forEach { timestampTracker.update(it.serverUpdatedAt) }
+        remoteCashOps.forEach { timestampTracker.update(it.serverUpdatedAt) }
+        
+        // Step 2: Insert all records in a single database transaction
+        // Room will only notify Flow observers once when transaction commits
+        database.withTransaction {
+            if (remoteCategories.isNotEmpty()) {
+                val entities = remoteCategories.map { it.toEntity() }
+                expenseCategoryDao.insertAll(entities)
+                Log.d(TAG, "Inserted ${entities.size} expense categories")
+            }
+            
+            if (remoteBatches.isNotEmpty()) {
+                val entities = remoteBatches.map { it.toEntity() }
+                purchaseBatchDao.insertAll(entities)
+                Log.d(TAG, "Inserted ${entities.size} batches")
+            }
+            
+            if (remoteSaleBatches.isNotEmpty()) {
+                val entities = remoteSaleBatches.map { it.toEntity() }
+                saleBatchDao.insertAll(entities)
+                Log.d(TAG, "Inserted ${entities.size} sale batches")
+            }
+            
+            if (remoteTransactions.isNotEmpty()) {
+                val entities = remoteTransactions.map { it.toEntity() }
+                transactionDao.insertAll(entities)
+                Log.d(TAG, "Inserted ${entities.size} transactions")
+            }
+            
+            if (remoteCashOps.isNotEmpty()) {
+                val entities = remoteCashOps.map { it.toEntity() }
+                cashOperationDao.insertAll(entities)
+                Log.d(TAG, "Inserted ${entities.size} cash operations")
+            }
+        }
+        
+        return PullCounts(
+            categories = remoteCategories.size,
+            batches = remoteBatches.size,
+            saleBatches = remoteSaleBatches.size,
+            transactions = remoteTransactions.size,
+            cashOperations = remoteCashOps.size
         )
     }
     

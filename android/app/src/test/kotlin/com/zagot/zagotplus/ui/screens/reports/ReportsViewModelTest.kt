@@ -278,13 +278,13 @@ class ReportsViewModelTest {
     }
 
     @Test
-    fun `spendings include purchases payments and withdrawals`() = runTest {
+    fun `spendings include purchases and payments but exclude withdrawals`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        // Purchases: 450 + Payments: 100 + Withdrawals: 50 = 600
-        assertEquals(BigDecimal("600.00"), state.totalSpendings)
+        // Purchases: 450 + Payments: 100 = 550 (withdrawals excluded)
+        assertEquals(BigDecimal("550.00"), state.totalSpendings)
     }
 
     @Test

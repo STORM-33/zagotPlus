@@ -78,7 +78,8 @@ fun ReportsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+    val weightFormat = remember { DecimalFormat("#,##0.0") }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -125,7 +126,7 @@ fun ReportsScreen(
                 SummaryPanel(
                     title = "Витрати",
                     amount = uiState.totalSpendings,
-                    decimalFormat = decimalFormat,
+                    currencyFormat = currencyFormat,
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.weight(1f)
@@ -133,7 +134,7 @@ fun ReportsScreen(
                 SummaryPanel(
                     title = "Прибуток",
                     amount = uiState.totalEarnings,
-                    decimalFormat = decimalFormat,
+                    currencyFormat = currencyFormat,
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f)
@@ -198,7 +199,15 @@ fun ReportsScreen(
                         items(uiState.productItems, key = { it.productId }) { item ->
                             ProductReportCard(
                                 item = item,
-                                decimalFormat = decimalFormat
+                                currencyFormat = currencyFormat,
+                                weightFormat = weightFormat
+                            )
+                        }
+                        
+                        item(key = "summary") {
+                            ReportsSummaryPanel(
+                                totalWeightKg = uiState.totalWeightKg,
+                                weightFormat = weightFormat
                             )
                         }
                         
@@ -214,7 +223,7 @@ fun ReportsScreen(
 private fun SummaryPanel(
     title: String,
     amount: BigDecimal,
-    decimalFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
     containerColor: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
@@ -233,10 +242,45 @@ private fun SummaryPanel(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "₴${decimalFormat.format(amount)}",
+                text = "₴${currencyFormat.format(amount)}",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = contentColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReportsSummaryPanel(
+    totalWeightKg: BigDecimal,
+    weightFormat: DecimalFormat,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Всього закуплено",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                text = "${weightFormat.format(totalWeightKg)} кг",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
     }
@@ -285,7 +329,8 @@ private fun LocationSelector(
 @Composable
 private fun ProductReportCard(
     item: ProductReportItem,
-    decimalFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -336,7 +381,7 @@ private fun ProductReportCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${decimalFormat.format(item.totalWeightKg)} кг",
+                    text = "${weightFormat.format(item.totalWeightKg)} кг",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -344,7 +389,7 @@ private fun ProductReportCard(
 
             // Amount spent
             Text(
-                text = "₴${decimalFormat.format(item.totalSpent)}",
+                text = "₴${currencyFormat.format(item.totalSpent)}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

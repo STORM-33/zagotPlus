@@ -75,7 +75,9 @@ class TransactionDtoTest {
             notes = null,
             deviceId = "device-xyz",
             createdAt = testInstant.toString(),
-            syncedAt = null
+            syncedAt = null,
+            batchId = null,
+            saleBatchId = null
         )
 
         val entity = dto.toEntity()
@@ -250,7 +252,9 @@ class TransactionDtoTest {
                 notes = null,
                 deviceId = null,
                 createdAt = testInstant.toString(),
-                syncedAt = null
+                syncedAt = null,
+                batchId = null,
+                saleBatchId = null
             )
 
             val entity = dto.toEntity()
@@ -273,7 +277,9 @@ class TransactionDtoTest {
             notes = null,
             deviceId = null,
             createdAt = testInstant.toString(),
-            syncedAt = null
+            syncedAt = null,
+            batchId = null,
+            saleBatchId = null
         )
 
         val entity = dto.toEntity()

@@ -29,6 +29,8 @@ object SupabaseModule {
         ) {
             defaultSerializer = KotlinXSerializer(Json {
                 ignoreUnknownKeys = true
+                explicitNulls = true  // Ensure all nullable fields are serialized with null value
+                encodeDefaults = true // Ensure fields with default values are always serialized
             })
             install(Postgrest)
             install(Storage)

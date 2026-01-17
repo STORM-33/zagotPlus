@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.cash
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zagot.zagotplus.data.IoDispatcher
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.DayCashGroup
@@ -12,14 +13,20 @@ import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.ZoneId
@@ -74,14 +81,17 @@ data class CashUiState(
     val canConfirmDeposit: Boolean
         get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
 
+    // Allow negative balance - no balance check
     val canConfirmWithdraw: Boolean
-        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true
+        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
 
+    // Allow negative balance - no balance check
     val canConfirmPayment: Boolean
-        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true
+        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
 
+    // Allow negative balance - no balance check
     val canConfirmTransfer: Boolean
-        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO && it <= balance } == true 
+        get() = dialogAmount.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true 
             && dialogTransferDestinationId != null
 
     val isTotalsView: Boolean
@@ -95,10 +105,23 @@ data class CashUiState(
         get() = locations.filter { it.id != selectedLocationId }
 }
 
+/**
+ * Helper data class for debounced balance updates.
+ * Enables distinctUntilChanged() to work properly with combined flow emissions.
+ */
+private data class BalanceUpdate(
+    val balance: BigDecimal,
+    val dailyChange: BigDecimal,
+    val dailyAddition: BigDecimal,
+    val categories: List<ExpenseCategory>
+)
+
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class CashViewModel @Inject constructor(
     private val cashRepository: CashRepository,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CashUiState())
@@ -151,42 +174,32 @@ class CashViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Load history items (one-time fetch)
-                val totalCount: Int
-                val items: List<CashHistoryItem>
+                // Load history items on IO thread to avoid blocking main thread
+                val (totalCount, items, dayGroups) = withContext(ioDispatcher) {
+                    val count: Int
+                    val historyItems: List<CashHistoryItem>
 
-                if (selectedLocationId == null) {
-                    // Totals view - all locations, transfers are excluded in SQL query
-                    totalCount = cashRepository.getTotalHistoryCount()
-                    Log.d(TAG, "TOTALS VIEW: totalCount=$totalCount")
-                    items = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
-                    Log.d(TAG, "TOTALS VIEW: fetched ${items.size} items from repository")
-
-                    // Log each item for debugging
-                    items.forEachIndexed { index, item ->
-                        Log.d(TAG, "  Item[$index]: id=${item.id}, type=${item.type}, amount=${item.amount}, " +
-                            "locationId=${item.locationId}, locationName=${item.locationName}, " +
-                            "batchCount=${item.batchCount}, isTransfer=${item.isTransfer}")
+                    if (selectedLocationId == null) {
+                        // Totals view - all locations, transfers are excluded in SQL query
+                        count = cashRepository.getTotalHistoryCount()
+                        Log.d(TAG, "TOTALS VIEW: totalCount=$count")
+                        historyItems = cashRepository.getCashHistoryPaged(PAGE_SIZE, 0)
+                        Log.d(TAG, "TOTALS VIEW: fetched ${historyItems.size} items from repository")
+                    } else {
+                        // Specific location - show all including transfers
+                        count = cashRepository.getTotalHistoryCountByLocation(selectedLocationId)
+                        historyItems = cashRepository.getCashHistoryByLocationPaged(selectedLocationId, PAGE_SIZE, 0)
+                        Log.d(TAG, "LOCATION VIEW: locationId=$selectedLocationId, totalCount=$count, fetched ${historyItems.size} items")
                     }
 
-                    // Log purchase items specifically
-                    val purchaseItems = items.filter { it.type == CashHistoryItemType.PURCHASE }
-                    Log.d(TAG, "TOTALS VIEW: purchase items count=${purchaseItems.size}")
-                    purchaseItems.forEach { item ->
-                        Log.d(TAG, "  PURCHASE: id=${item.id}, amount=${item.amount}, batchCount=${item.batchCount}")
-                    }
-                } else {
-                    // Specific location - show all including transfers
-                    totalCount = cashRepository.getTotalHistoryCountByLocation(selectedLocationId)
-                    items = cashRepository.getCashHistoryByLocationPaged(selectedLocationId, PAGE_SIZE, 0)
-                    Log.d(TAG, "LOCATION VIEW: locationId=$selectedLocationId, totalCount=$totalCount, fetched ${items.size} items")
+                    // Group items by day (also on IO thread since it's CPU work)
+                    val groups = groupItemsByDay(historyItems)
+                    Log.d(TAG, "Grouped into ${groups.size} day groups")
+                    
+                    Triple(count, historyItems, groups)
                 }
 
-                // Group items by day
-                val dayGroups = groupItemsByDay(items)
-                Log.d(TAG, "Grouped into ${dayGroups.size} day groups")
-
-                // Update state with history items immediately
+                // Update state with history items on main thread
                 _uiState.update { currentState ->
                     Log.d(TAG, "Updating state with ${items.size} history items")
                     currentState.copy(
@@ -218,15 +231,22 @@ class CashViewModel @Inject constructor(
                         cashRepository.getDailyDepositsGlobal(LocalDate.now()),
                         cashRepository.getActiveCategories()
                     ) { balance, dailyChange, dailyAddition, categories ->
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                balance = balance,
-                                dailyChange = dailyChange,
-                                dailyAddition = dailyAddition,
-                                categories = categories
-                            )
+                        BalanceUpdate(balance, dailyChange, dailyAddition, categories)
+                    }
+                        // Debounce disabled for now - causes test timing issues
+                        // TODO: Re-enable with proper test infrastructure
+                        // .debounce(50) // Coalesce rapid emissions during sync
+                        .distinctUntilChanged()
+                        .collect { update ->
+                            _uiState.update { currentState ->
+                                currentState.copy(
+                                    balance = update.balance,
+                                    dailyChange = update.dailyChange,
+                                    dailyAddition = update.dailyAddition,
+                                    categories = update.categories
+                                )
+                            }
                         }
-                    }.collect { }
                 } else {
                     combine(
                         cashRepository.getBalance(selectedLocationId),
@@ -234,15 +254,22 @@ class CashViewModel @Inject constructor(
                         cashRepository.getDailyDeposits(selectedLocationId, LocalDate.now()),
                         cashRepository.getActiveCategories()
                     ) { balance, dailyChange, dailyAddition, categories ->
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                balance = balance,
-                                dailyChange = dailyChange,
-                                dailyAddition = dailyAddition,
-                                categories = categories
-                            )
+                        BalanceUpdate(balance, dailyChange, dailyAddition, categories)
+                    }
+                        // Debounce disabled for now - causes test timing issues
+                        // TODO: Re-enable with proper test infrastructure
+                        // .debounce(50) // Coalesce rapid emissions during sync
+                        .distinctUntilChanged()
+                        .collect { update ->
+                            _uiState.update { currentState ->
+                                currentState.copy(
+                                    balance = update.balance,
+                                    dailyChange = update.dailyChange,
+                                    dailyAddition = update.dailyAddition,
+                                    categories = update.categories
+                                )
+                            }
                         }
-                    }.collect { }
                 }
             } catch (e: CancellationException) {
                 // Expected when switching locations, don't treat as error
@@ -289,11 +316,13 @@ class CashViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingMore = true) }
             try {
                 val offset = state.historyItems.size
-                val moreItems = if (state.selectedLocationId == null) {
-                    // Totals view - transfers are excluded in SQL query
-                    cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
-                } else {
-                    cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, PAGE_SIZE, offset)
+                val moreItems = withContext(ioDispatcher) {
+                    if (state.selectedLocationId == null) {
+                        // Totals view - transfers are excluded in SQL query
+                        cashRepository.getCashHistoryPaged(PAGE_SIZE, offset)
+                    } else {
+                        cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, PAGE_SIZE, offset)
+                    }
                 }
                 Log.d(TAG, "loadMoreOperations: loaded ${moreItems.size} more items")
                 _uiState.update { currentState ->
@@ -322,23 +351,26 @@ class CashViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val state = _uiState.value
-                val totalCount: Int
-                val items: List<CashHistoryItem>
                 val currentCount = state.historyItems.size.coerceAtLeast(PAGE_SIZE)
                 Log.d(TAG, "refreshOperations: selectedLocationId=${state.selectedLocationId}, currentCount=$currentCount")
 
-                if (state.selectedLocationId == null) {
-                    totalCount = cashRepository.getTotalHistoryCount()
-                    // Totals view - transfers are excluded in SQL query
-                    items = cashRepository.getCashHistoryPaged(currentCount, 0)
-                    Log.d(TAG, "refreshOperations TOTALS: totalCount=$totalCount, items=${items.size}")
-                } else {
-                    totalCount = cashRepository.getTotalHistoryCountByLocation(state.selectedLocationId)
-                    items = cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, currentCount, 0)
-                    Log.d(TAG, "refreshOperations LOCATION: totalCount=$totalCount, items=${items.size}")
+                val (totalCount, items, dayGroups) = withContext(ioDispatcher) {
+                    val count: Int
+                    val historyItems: List<CashHistoryItem>
+                    
+                    if (state.selectedLocationId == null) {
+                        count = cashRepository.getTotalHistoryCount()
+                        // Totals view - transfers are excluded in SQL query
+                        historyItems = cashRepository.getCashHistoryPaged(currentCount, 0)
+                        Log.d(TAG, "refreshOperations TOTALS: totalCount=$count, items=${historyItems.size}")
+                    } else {
+                        count = cashRepository.getTotalHistoryCountByLocation(state.selectedLocationId)
+                        historyItems = cashRepository.getCashHistoryByLocationPaged(state.selectedLocationId, currentCount, 0)
+                        Log.d(TAG, "refreshOperations LOCATION: totalCount=$count, items=${historyItems.size}")
+                    }
+                    
+                    Triple(count, historyItems, groupItemsByDay(historyItems))
                 }
-                
-                val dayGroups = groupItemsByDay(items)
                 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -477,10 +509,7 @@ class CashViewModel @Inject constructor(
         val state = _uiState.value
         val amount = state.dialogAmount.toBigDecimalOrNull() ?: return
 
-        if (amount > state.balance) {
-            _uiState.update { it.copy(error = "Недостатньо коштів") }
-            return
-        }
+        // Negative balance allowed - no check for insufficient funds
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
@@ -508,10 +537,7 @@ class CashViewModel @Inject constructor(
         val state = _uiState.value
         val amount = state.dialogAmount.toBigDecimalOrNull() ?: return
 
-        if (amount > state.balance) {
-            _uiState.update { it.copy(error = "Недостатньо коштів") }
-            return
-        }
+        // Negative balance allowed - no check for insufficient funds
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
@@ -542,10 +568,7 @@ class CashViewModel @Inject constructor(
         val sourceLocationId = state.selectedLocationId ?: return
         val destinationLocationId = state.dialogTransferDestinationId ?: return
 
-        if (amount > state.balance) {
-            _uiState.update { it.copy(error = "Недостатньо коштів") }
-            return
-        }
+        // Negative balance allowed - no check for insufficient funds
 
         val destName = state.locations.find { it.id == destinationLocationId }?.name ?: ""
 

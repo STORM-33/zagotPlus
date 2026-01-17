@@ -178,6 +178,17 @@ class TransactionRepositoryImpl @Inject constructor(
             results.map { it.toInventoryItem() }
         }
 
+    override fun getProductAvgPurchasePrices(): Flow<Map<UUID, BigDecimal>> =
+        transactionDao.observeProductAvgPurchasePrices().map { results ->
+            results.mapNotNull { result ->
+                val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
+                val avgPrice = result.avgPricePerKg?.let { 
+                    BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) 
+                } ?: return@mapNotNull null
+                productId to avgPrice
+            }.toMap()
+        }
+
     private fun InventoryAggregateResult.toInventoryItem() = InventoryItem(
         locationId = UUID.fromString(locationId),
         productId = UUID.fromString(productId),
@@ -260,6 +271,7 @@ class TransactionRepositoryImpl @Inject constructor(
         locationId: UUID,
         productId: UUID,
         adjustmentKg: BigDecimal,
+        pricePerKg: BigDecimal?,
         reason: String?,
         notes: String?
     ): Transaction {
@@ -271,6 +283,11 @@ class TransactionRepositoryImpl @Inject constructor(
             notes?.let { append(it) }
         }.ifBlank { null }
 
+        // Calculate total amount for profit tracking
+        val totalAmount = pricePerKg?.let { 
+            adjustmentKg.abs().multiply(it).setScale(2, java.math.RoundingMode.HALF_UP)
+        }
+
         val entity = TransactionEntity(
             id = UUID.randomUUID(),
             localId = UUID.randomUUID().toString(),
@@ -279,8 +296,8 @@ class TransactionRepositoryImpl @Inject constructor(
             transferLocationId = null,
             productId = productId,
             weightKg = adjustmentKg, // Already signed (positive or negative)
-            pricePerKg = null,
-            totalAmount = null,
+            pricePerKg = pricePerKg,
+            totalAmount = totalAmount,
             notes = fullNotes,
             deviceId = devicePreferences.getDeviceId(),
             createdAt = Instant.now(),

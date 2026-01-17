@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.activity.compose.setContent
 import java.util.Locale
 
@@ -74,6 +76,9 @@ class MainActivity : ComponentActivity() {
         
         // Set FLAG_SECURE initially if not authenticated (prevents screenshots of PIN screen)
         updateSecureFlag()
+        
+        // Keep screen on while app is in foreground (prevent dimming/sleep)
+        setupScreenWakeLock()
 
         setContent {
             ZagotPlusTheme {
@@ -156,5 +161,23 @@ class MainActivity : ComponentActivity() {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+    }
+    
+    /**
+     * Keeps the screen on while the app is in foreground.
+     * Uses FLAG_KEEP_SCREEN_ON which is managed by lifecycle observers.
+     */
+    private fun setupScreenWakeLock() {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                // Keep screen on when app is in foreground
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            
+            override fun onPause(owner: LifecycleOwner) {
+                // Allow screen to dim when app goes to background
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        })
     }
 }

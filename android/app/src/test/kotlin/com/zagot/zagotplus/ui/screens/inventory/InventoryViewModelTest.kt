@@ -115,6 +115,7 @@ class InventoryViewModelTest {
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation1, testLocation2))
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct, testProduct2))
         every { transactionRepository.getInventoryByLocation(any()) } returns inventoryFlow
+        every { transactionRepository.getProductAvgPurchasePrices() } returns flowOf(emptyMap())
         every { syncStatusRepository.syncStatus } returns syncStatusFlow
         every { devicePreferences.getSelectedLocationId() } returns testLocation1.id
     }

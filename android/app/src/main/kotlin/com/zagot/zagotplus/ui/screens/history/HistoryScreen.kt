@@ -25,10 +25,13 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,11 +68,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.DateRange
 import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.SkeletonList
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -89,13 +94,27 @@ fun HistoryScreen(
     val expandedBatchTransactions by viewModel.expandedBatchTransactions.collectAsStateWithLifecycle()
     val isLoadingBatchDetails by viewModel.isLoadingBatchDetails.collectAsStateWithLifecycle()
     
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+    val weightFormat = remember { DecimalFormat("#,##0.0") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
     // State for void confirmation dialog
     var pendingVoidBatch by remember { mutableStateOf<Pair<UUID, BatchType>?>(null) }
+    
+    // State for filter bottom sheet
+    var showFilterSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    
+    // Calculate active filter count (excluding search which is always visible)
+    val activeFilterCount = remember(uiState.selectedTypes, uiState.dateRange, uiState.selectedLocationId) {
+        var count = 0
+        if (uiState.selectedTypes.size != BatchType.entries.size) count++ // Type filter active
+        if (uiState.dateRange != null) count++ // Date filter active
+        if (uiState.selectedLocationId != null) count++ // Location filter active
+        count
+    }
 
     // Show snackbar on success message
     LaunchedEffect(uiState.successMessage) {
@@ -155,22 +174,96 @@ fun HistoryScreen(
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        // Filter section
-        FilterSection(
-            searchQuery = uiState.searchQuery,
-            onSearchQueryChange = viewModel::setSearchQuery,
-            selectedTypes = uiState.selectedTypes,
-            onTypeToggle = viewModel::toggleTypeFilter,
-            dateRange = uiState.dateRange,
-            onDateRangeChange = viewModel::setDateRange,
-            selectedLocationId = uiState.selectedLocationId,
-            locations = uiState.locations,
-            onLocationChange = viewModel::setLocationFilter,
-            hasActiveFilters = uiState.hasActiveFilters,
-            onClearFilters = viewModel::clearFilters
-        )
+        // Filter chip row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Filter chip that opens bottom sheet
+            FilterChip(
+                selected = activeFilterCount > 0,
+                onClick = { showFilterSheet = true },
+                label = { Text("Фільтри${if (activeFilterCount > 0) " ($activeFilterCount)" else ""}") },
+                leadingIcon = { Icon(Icons.Default.FilterList, null) }
+            )
+        }
 
         HorizontalDivider()
+        
+        // Filter bottom sheet
+        if (showFilterSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showFilterSheet = false },
+                sheetState = sheetState
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("Фільтри", style = MaterialTheme.typography.titleMedium)
+                    
+                    // Batch type filter chips
+                    Text("Тип операції", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BatchType.entries.forEach { type ->
+                            FilterChip(
+                                selected = type in uiState.selectedTypes,
+                                onClick = { viewModel.toggleTypeFilter(type) },
+                                label = { Text(type.toDisplayString()) }
+                            )
+                        }
+                    }
+                    
+                    // Date range dropdown
+                    Text("Період", style = MaterialTheme.typography.labelMedium)
+                    DateRangeDropdown(
+                        dateRange = uiState.dateRange,
+                        onDateRangeChange = viewModel::setDateRange,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // Location dropdown
+                    Text("Локація", style = MaterialTheme.typography.labelMedium)
+                    LocationDropdown(
+                        selectedLocationId = uiState.selectedLocationId,
+                        locations = uiState.locations,
+                        onLocationChange = viewModel::setLocationFilter,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    // Action buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (uiState.hasActiveFilters) {
+                            TextButton(
+                                onClick = { viewModel.clearFilters() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Скинути")
+                            }
+                        }
+                        Button(
+                            onClick = { showFilterSheet = false },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Застосувати")
+                        }
+                    }
+                }
+            }
+        }
 
         // Content with pull-to-refresh
         val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
@@ -182,12 +275,7 @@ fun HistoryScreen(
         ) {
             when {
                 uiState.isLoading && uiState.batches.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    SkeletonList(itemCount = 5) { BatchCardSkeleton() }
                 }
                 uiState.batches.isEmpty() -> {
                     Box(
@@ -251,7 +339,8 @@ fun HistoryScreen(
                                             { /* Virtual/transfer batches cannot be deleted */ }
                                     }
                                 },
-                                decimalFormat = decimalFormat,
+                                currencyFormat = currencyFormat,
+                                weightFormat = weightFormat,
                                 dateFormatter = dateFormatter,
                                 modifier = Modifier.animateItemPlacement()
                             )
@@ -271,104 +360,6 @@ fun HistoryScreen(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FilterSection(
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    selectedTypes: Set<BatchType>,
-    onTypeToggle: (BatchType) -> Unit,
-    dateRange: DateRange?,
-    onDateRangeChange: (DateRange?) -> Unit,
-    selectedLocationId: UUID?,
-    locations: List<Location>,
-    onLocationChange: (UUID?) -> Unit,
-    hasActiveFilters: Boolean,
-    onClearFilters: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Search field
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Пошук за назвою товару") },
-            leadingIcon = {
-                Icon(Icons.Filled.Search, contentDescription = "Пошук")
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
-                        Icon(Icons.Filled.Clear, contentDescription = "Очистити")
-                    }
-                }
-            },
-            singleLine = true
-        )
-
-        // Batch type filter chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BatchType.entries.forEach { type ->
-                FilterChip(
-                    selected = type in selectedTypes,
-                    onClick = { onTypeToggle(type) },
-                    label = { Text(type.toDisplayString()) }
-                )
-            }
-        }
-
-        // Date range and location row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Date range dropdown
-            DateRangeDropdown(
-                dateRange = dateRange,
-                onDateRangeChange = onDateRangeChange,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Location dropdown
-            LocationDropdown(
-                selectedLocationId = selectedLocationId,
-                locations = locations,
-                onLocationChange = onLocationChange,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Clear filters button
-        if (hasActiveFilters) {
-            TextButton(
-                onClick = onClearFilters,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Clear,
-                    contentDescription = "Очистити фільтри",
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Скинути фільтри",
-                    modifier = Modifier.padding(start = 4.dp)
-                )
             }
         }
     }
@@ -599,7 +590,8 @@ private fun ExpandableBatchCard(
     onClick: () -> Unit,
     onEditClick: (batchId: java.util.UUID) -> Unit,
     onDeleteClick: (batchId: java.util.UUID) -> Unit,
-    decimalFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
     dateFormatter: DateTimeFormatter,
     modifier: Modifier = Modifier
 ) {
@@ -639,11 +631,11 @@ private fun ExpandableBatchCard(
     val localTime = batch.createdAt.atZone(ZoneId.systemDefault())
     val weightText = if (batch.batchType == BatchType.ADJUSTMENT) {
         val sign = if (batch.totalWeightKg >= java.math.BigDecimal.ZERO) "+" else ""
-        "$sign${decimalFormat.format(batch.totalWeightKg)} кг"
+        "$sign${weightFormat.format(batch.totalWeightKg)} кг"
     } else {
-        "${decimalFormat.format(batch.totalWeightKg.abs())} кг"
+        "${weightFormat.format(batch.totalWeightKg.abs())} кг"
     }
-    val amountText = batch.totalAmount?.let { "₴${decimalFormat.format(it)}" }
+    val amountText = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" }
     
     val canEdit = !batch.isVoided && 
                   batch !is HistoryBatchDisplayItem.VirtualBatch && 
@@ -798,7 +790,8 @@ private fun ExpandableBatchCard(
                                 transactions.forEach { transaction ->
                                     TransactionRow(
                                         transaction = transaction,
-                                        decimalFormat = decimalFormat
+                                        currencyFormat = currencyFormat,
+                                        weightFormat = weightFormat
                                     )
                                 }
                             }
@@ -856,7 +849,8 @@ private fun ExpandableBatchCard(
 @Composable
 private fun TransactionRow(
     transaction: HistoryDisplayItem,
-    decimalFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
     modifier: Modifier = Modifier
 ) {
     val pricePerKg = transaction.totalAmount?.let { amount ->
@@ -875,13 +869,13 @@ private fun TransactionRow(
     val weightText = when {
         isTransfer -> {
             // Always show positive weight for transfers in dropdown (we only show TRANSFER_IN)
-            "${decimalFormat.format(transaction.weightKg.abs())} кг"
+            "${weightFormat.format(transaction.weightKg.abs())} кг"
         }
         isAdjustment -> {
             val sign = if (transaction.weightKg >= java.math.BigDecimal.ZERO) "+" else ""
-            "$sign${decimalFormat.format(transaction.weightKg)} кг"
+            "$sign${weightFormat.format(transaction.weightKg)} кг"
         }
-        else -> "${decimalFormat.format(transaction.weightKg.abs())} кг"
+        else -> "${weightFormat.format(transaction.weightKg.abs())} кг"
     }
     
     // For transfers, show "from → to" direction
@@ -917,7 +911,7 @@ private fun TransactionRow(
             } else {
                 pricePerKg?.let { price ->
                     Text(
-                        text = "₴${decimalFormat.format(price)}/кг",
+                        text = "₴${currencyFormat.format(price)}/кг",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -933,7 +927,7 @@ private fun TransactionRow(
             )
             transaction.totalAmount?.let { amount ->
                 Text(
-                    text = "₴${decimalFormat.format(amount.abs())}",
+                    text = "₴${currencyFormat.format(amount.abs())}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

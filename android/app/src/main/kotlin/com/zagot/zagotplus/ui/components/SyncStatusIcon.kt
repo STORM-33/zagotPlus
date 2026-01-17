@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 
 private const val TAG = "SyncStatusIcon"
+private const val DEBUG_LOGGING = false // Set to true for debugging, false for production
 
 @Composable
 fun SyncStatusIcon(
@@ -43,14 +44,14 @@ fun SyncStatusIcon(
     // Track if we should show success checkmark (temporary state)
     var showSuccessCheckmark by remember { mutableStateOf(false) }
 
-    // Log connectivity changes
+    // Log connectivity changes (debug only)
     LaunchedEffect(isOnline) {
-        Log.d(TAG, "isOnline changed: $isOnline")
+        if (DEBUG_LOGGING) Log.d(TAG, "isOnline changed: $isOnline")
     }
 
     // When sync status changes to SUCCESS, show checkmark for 2 seconds then hide
     LaunchedEffect(syncStatus.state) {
-        Log.d(TAG, "syncStatus changed: ${syncStatus.state}")
+        if (DEBUG_LOGGING) Log.d(TAG, "syncStatus changed: ${syncStatus.state}")
         if (syncStatus.state == SyncStatus.State.SUCCESS) {
             showSuccessCheckmark = true
             delay(2000)
@@ -58,30 +59,38 @@ fun SyncStatusIcon(
         }
     }
     
-    val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "sync_rotation"
-    )
+    // Only run infinite animation when actually syncing to avoid wasted frames
+    val isSyncing = syncStatus.state == SyncStatus.State.SYNCING
+    val rotation = if (isSyncing) {
+        val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "sync_rotation"
+        ).value
+    } else {
+        0f
+    }
     
     // When offline, disable the button
-    val isEnabled = isOnline && syncStatus.state != SyncStatus.State.SYNCING
+    val isEnabled = isOnline && !isSyncing
 
-    // Log which icon will be shown
-    val iconState = when {
-        !isOnline -> "OFFLINE"
-        syncStatus.state == SyncStatus.State.SYNCING -> "SYNCING"
-        syncStatus.state == SyncStatus.State.ERROR -> "ERROR"
-        syncStatus.state == SyncStatus.State.WARNING -> "WARNING"
-        showSuccessCheckmark -> "SUCCESS_CHECKMARK"
-        else -> "IDLE"
+    // Log only when debug enabled (this was causing excessive logging on every recomposition)
+    if (DEBUG_LOGGING) {
+        val iconState = when {
+            !isOnline -> "OFFLINE"
+            isSyncing -> "SYNCING"
+            syncStatus.state == SyncStatus.State.ERROR -> "ERROR"
+            syncStatus.state == SyncStatus.State.WARNING -> "WARNING"
+            showSuccessCheckmark -> "SUCCESS_CHECKMARK"
+            else -> "IDLE"
+        }
+        Log.d(TAG, "Rendering icon: $iconState (isOnline=$isOnline, syncState=${syncStatus.state}, showSuccessCheckmark=$showSuccessCheckmark)")
     }
-    Log.d(TAG, "Rendering icon: $iconState (isOnline=$isOnline, syncState=${syncStatus.state}, showSuccessCheckmark=$showSuccessCheckmark)")
 
     IconButton(
         onClick = onSyncClick,

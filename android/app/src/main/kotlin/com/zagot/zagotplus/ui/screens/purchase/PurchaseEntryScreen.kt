@@ -1,6 +1,12 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -61,7 +67,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -76,6 +85,7 @@ import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.PriceType
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
+import com.zagot.zagotplus.ui.components.StepIndicator
 import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,6 +97,7 @@ fun PurchaseEntryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val haptic = LocalHapticFeedback.current
 
     // Batch for editing is now loaded via SavedStateHandle in ViewModel - no LaunchedEffect needed
 
@@ -124,6 +135,15 @@ fun PurchaseEntryScreen(
         PurchaseEntryScreenState.SUMMARY -> if (isEditing) "Виправлення" else "Підсумок"
     }
 
+    // Step indicator configuration
+    val stepLabels = listOf("Товар", "Вага", "Позиції")
+    val currentStep = when (uiState.screenState) {
+        PurchaseEntryScreenState.PRODUCT_GRID -> 1
+        PurchaseEntryScreenState.WEIGHT_ENTRY -> 2
+        PurchaseEntryScreenState.POSITIONS_LIST -> 3
+        PurchaseEntryScreenState.SUMMARY -> 3  // Summary uses same step as positions (no separate confirmation)
+    }
+
     val showBackToGrid = uiState.screenState != PurchaseEntryScreenState.PRODUCT_GRID && 
                          uiState.screenState != PurchaseEntryScreenState.SUMMARY
     val showTopBar = uiState.screenState != PurchaseEntryScreenState.SUMMARY
@@ -151,11 +171,23 @@ fun PurchaseEntryScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Step indicator (show for all states except SUMMARY)
+            if (uiState.screenState != PurchaseEntryScreenState.SUMMARY) {
+                StepIndicator(
+                    currentStep = currentStep,
+                    totalSteps = stepLabels.size,
+                    stepLabels = stepLabels
+                )
+            }
+            
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
             // Show summary overlay if in SUMMARY state
             if (uiState.screenState == PurchaseEntryScreenState.SUMMARY) {
                 PurchaseSummaryOverlay(
@@ -163,9 +195,7 @@ fun PurchaseEntryScreen(
                     notes = uiState.notes,
                     totalWeight = uiState.totalWeight,
                     totalAmount = uiState.totalAmount,
-                    isSaving = uiState.isSaving,
-                    isEditing = isEditing,
-                    onConfirm = viewModel::confirmSave
+                    onExit = viewModel::exitFromSummary
                 )
             } else {
                 when {
@@ -185,7 +215,20 @@ fun PurchaseEntryScreen(
                     }
                 }
                 else -> {
-                    when (uiState.screenState) {
+                    AnimatedContent(
+                        targetState = uiState.screenState,
+                        transitionSpec = {
+                            if (targetState.ordinal > initialState.ordinal) {
+                                (fadeIn() + slideInHorizontally { it / 3 }) togetherWith
+                                    (fadeOut() + slideOutHorizontally { -it / 3 })
+                            } else {
+                                (fadeIn() + slideInHorizontally { -it / 3 }) togetherWith
+                                    (fadeOut() + slideOutHorizontally { it / 3 })
+                            }
+                        },
+                        label = "screenStateTransition"
+                    ) { state ->
+                    when (state) {
                         PurchaseEntryScreenState.PRODUCT_GRID -> {
                             ReorderableProductGrid(
                                 products = uiState.products,
@@ -206,8 +249,12 @@ fun PurchaseEntryScreen(
                                 canAdd = uiState.canAddPosition,
                                 onWeightChange = viewModel::onWeightChange,
                                 onPriceChange = viewModel::onPriceChange,
+                                onPriceFocused = viewModel::onPriceFocused,
                                 onToggleManualMode = viewModel::toggleManualWeightMode,
-                                onAddPosition = viewModel::addPosition,
+                                onAddPosition = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.addPosition()
+                                },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -222,8 +269,14 @@ fun PurchaseEntryScreen(
                                 onNotesChange = viewModel::onNotesChange,
                                 onRemovePosition = viewModel::removePosition,
                                 onEditPosition = viewModel::startEditPosition,
-                                onAddAnother = viewModel::addAnotherProduct,
-                                onFinalize = viewModel::finalize,
+                                onAddAnother = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.addAnotherProduct()
+                                },
+                                onFinalize = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.finalize()
+                                },
                                 onCancel = viewModel::cancel,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -232,9 +285,11 @@ fun PurchaseEntryScreen(
                             // Handled above as overlay
                         }
                     }
+                    }
                 }
             }
             }
+        }
         }
 
         // Edit position dialog
@@ -280,6 +335,7 @@ private fun WeightEntry(
     canAdd: Boolean,
     onWeightChange: (String) -> Unit,
     onPriceChange: (String) -> Unit,
+    onPriceFocused: () -> Unit,
     onToggleManualMode: () -> Unit,
     onAddPosition: () -> Unit,
     modifier: Modifier = Modifier
@@ -371,7 +427,8 @@ private fun WeightEntry(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Price input with color coding
+        // Price input with color coding - clears on focus for easy entry
+        var priceHasBeenFocused by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = price,
             onValueChange = onPriceChange,
@@ -382,7 +439,14 @@ private fun WeightEntry(
             ),
             singleLine = true,
             colors = priceFieldColors,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused && !priceHasBeenFocused) {
+                        priceHasBeenFocused = true
+                        onPriceFocused()
+                    }
+                }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -602,9 +666,34 @@ private fun PositionItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Product image thumbnail
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (position.product.imageUri != null) {
+                        AsyncImage(
+                            model = position.product.imageUri,
+                            contentDescription = position.product.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Image,
+                            contentDescription = "Немає зображення",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+                
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = position.product.name,

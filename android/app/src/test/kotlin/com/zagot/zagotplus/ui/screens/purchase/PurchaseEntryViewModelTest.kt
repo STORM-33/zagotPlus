@@ -314,7 +314,9 @@ class PurchaseEntryViewModelTest {
     // ==================== Finalization Tests ====================
 
     @Test
-    fun `finalize navigates to summary`() = runTest {
+    fun `finalize saves and navigates to summary`() = runTest {
+        coEvery { purchaseBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
+
         viewModel = createViewModel()
         advanceUntilIdle()
         viewModel.selectProduct(testProduct)
@@ -323,6 +325,7 @@ class PurchaseEntryViewModelTest {
         viewModel.addPosition()
 
         viewModel.finalize()
+        advanceUntilIdle()
 
         assertEquals(PurchaseEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
@@ -360,7 +363,7 @@ class PurchaseEntryViewModelTest {
     // ==================== Save Tests ====================
 
     @Test
-    fun `confirmSave creates batch with transactions and navigates back`() = runTest {
+    fun `finalize saves batch immediately and shows summary`() = runTest {
         coEvery { purchaseBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
 
         viewModel = createViewModel()
@@ -370,16 +373,32 @@ class PurchaseEntryViewModelTest {
         viewModel.onPriceChange("45")
         viewModel.addPosition()
         viewModel.finalize()
-
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         coVerify { purchaseBatchRepository.createBatchWithTransactions(any(), any()) }
+        assertEquals(PurchaseEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+    }
+
+    @Test
+    fun `exitFromSummary navigates back`() = runTest {
+        coEvery { purchaseBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("100")
+        viewModel.onPriceChange("45")
+        viewModel.addPosition()
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        viewModel.exitFromSummary()
+
         assertTrue(viewModel.uiState.value.navigateBack)
     }
 
     @Test
-    fun `confirmSave handles error`() = runTest {
+    fun `finalize handles error and stays in positions list`() = runTest {
         coEvery { 
             purchaseBatchRepository.createBatchWithTransactions(any(), any()) 
         } throws RuntimeException("Database error")
@@ -391,8 +410,6 @@ class PurchaseEntryViewModelTest {
         viewModel.onPriceChange("45")
         viewModel.addPosition()
         viewModel.finalize()
-
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -511,7 +528,6 @@ class PurchaseEntryViewModelTest {
         viewModel.onPriceChange("45")
         viewModel.addPosition()
         viewModel.finalize()
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         viewModel.dismissError()
@@ -580,7 +596,7 @@ class PurchaseEntryViewModelTest {
     }
 
     @Test
-    fun `confirmSave in editing mode calls correctBatch instead of create`() = runTest {
+    fun `finalize in editing mode calls correctBatch instead of create`() = runTest {
         val originalBatchId = UUID.randomUUID()
         val existingBatch = TestData.createPurchaseBatch(id = originalBatchId)
         val existingTransactions = listOf(
@@ -604,7 +620,6 @@ class PurchaseEntryViewModelTest {
 
         viewModel.onCorrectionReasonChange("Wrong weight")
         viewModel.finalize()
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         coVerify { 
@@ -616,11 +631,11 @@ class PurchaseEntryViewModelTest {
             ) 
         }
         coVerify(exactly = 0) { purchaseBatchRepository.createBatchWithTransactions(any(), any()) }
-        assertTrue(viewModel.uiState.value.navigateBack)
+        assertEquals(PurchaseEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
-    fun `confirmSave in editing mode uses default reason when not provided`() = runTest {
+    fun `finalize in editing mode uses default reason when not provided`() = runTest {
         val originalBatchId = UUID.randomUUID()
         val existingBatch = TestData.createPurchaseBatch(id = originalBatchId)
         val existingTransactions = listOf(
@@ -642,7 +657,6 @@ class PurchaseEntryViewModelTest {
         viewModel.loadBatchForEditing(originalBatchId.toString())
         advanceUntilIdle()
         viewModel.finalize()
-        viewModel.confirmSave()
         advanceUntilIdle()
 
         coVerify { 

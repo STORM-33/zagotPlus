@@ -39,5 +39,9 @@ data class ProductDailyTotal(
     val productId: UUID,
     val productName: String,
     val totalWeightKg: BigDecimal,
-    val totalAmount: BigDecimal
+    val totalAmount: BigDecimal,
+    /** Average purchase price per kg for current day. Null if no purchases. */
+    val avgPricePerKg: BigDecimal? = null,
+    /** Planned profit: (sellPrice - avgPurchasePrice) × weight. Null if prices missing. */
+    val plannedProfit: BigDecimal? = null
 )

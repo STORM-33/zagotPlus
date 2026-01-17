@@ -15,13 +15,17 @@ class TransactionQueryBuilderTest {
     private val testEndDate = Instant.parse("2024-01-31T23:59:59Z")
 
     @Test
-    fun `build creates basic query without filters`() {
+    fun `build creates basic query with voided batch exclusion`() {
         val query = TransactionQueryBuilder().build()
         val sql = query.sql
 
-        assertTrue(sql.contains("SELECT * FROM transactions t"))
+        assertTrue(sql.contains("SELECT t.* FROM transactions t"))
+        assertTrue(sql.contains("LEFT JOIN purchase_batches pb ON t.batch_id = pb.id"))
+        assertTrue(sql.contains("LEFT JOIN sale_batches sb ON t.sale_batch_id = sb.id"))
+        assertTrue(sql.contains("(t.batch_id IS NULL OR pb.is_voided = 0)"))
+        assertTrue(sql.contains("(t.sale_batch_id IS NULL OR sb.is_voided = 0)"))
         assertTrue(sql.contains("ORDER BY t.created_at DESC"))
-        assertFalse(sql.contains("WHERE"))
+        assertTrue(sql.contains("WHERE"))
     }
 
     @Test
@@ -173,9 +177,9 @@ class TransactionQueryBuilderTest {
 
         assertTrue(sql.contains("WHERE"))
         assertTrue(sql.contains("AND"))
-        // Should have type, location, and two date conditions
+        // Should have: 2 voided conditions + type + location + 2 date conditions = 5 ANDs
         val andCount = sql.split("AND").size - 1
-        assertEquals(3, andCount)
+        assertEquals(5, andCount)
     }
 
     @Test
@@ -197,6 +201,9 @@ class TransactionQueryBuilderTest {
         val sql = query.sql
 
         assertTrue(sql.contains("SELECT COUNT(*)"))
+        assertTrue(sql.contains("LEFT JOIN purchase_batches pb"))
+        assertTrue(sql.contains("LEFT JOIN sale_batches sb"))
+        assertTrue(sql.contains("(t.batch_id IS NULL OR pb.is_voided = 0)"))
         assertFalse(sql.contains("ORDER BY"))
         assertFalse(sql.contains("LIMIT"))
         assertFalse(sql.contains("OFFSET"))

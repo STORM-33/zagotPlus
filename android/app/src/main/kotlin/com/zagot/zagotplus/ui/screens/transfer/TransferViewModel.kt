@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -45,10 +46,10 @@ data class TransferPosition(
  * Screen state for the transfer entry flow.
  */
 enum class TransferScreenState {
-    PRODUCT_GRID,    // Selecting product from inventory
+    LOCATIONS,       // Step 1: Selecting source AND destination locations
+    PRODUCT_GRID,    // Step 2: Selecting product from inventory
     WEIGHT_ENTRY,    // Entering weight for selected product
     POSITIONS_LIST,  // Viewing/editing positions before finalizing
-    DESTINATION,     // Selecting destination location
     SUMMARY          // Showing summary overlay before saving
 }
 
@@ -68,7 +69,7 @@ data class TransferUiState(
     val tareWeightPerUnit: String = "0.1", // Default 100g per sack
     val positions: List<TransferPosition> = emptyList(),
     val notes: String = "",
-    val screenState: TransferScreenState = TransferScreenState.PRODUCT_GRID,
+    val screenState: TransferScreenState = TransferScreenState.LOCATIONS,
     val scaleWeight: BigDecimal? = null, // null = not connected (placeholder)
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -98,6 +99,9 @@ data class TransferUiState(
 
     val canFinalize: Boolean
         get() = positions.isNotEmpty()
+
+    val canProceedToProducts: Boolean
+        get() = sourceLocation != null && destinationLocation != null
 
     val canConfirmTransfer: Boolean
         get() = positions.isNotEmpty() && destinationLocation != null
@@ -237,7 +241,9 @@ class TransferViewModel @Inject constructor(
                             InventoryWithProduct(item, product)
                         }
                     }
-            }.collect { inventoryWithProducts ->
+            }
+            .distinctUntilChanged()
+            .collect { inventoryWithProducts ->
                 _uiState.update {
                     it.copy(inventoryItems = inventoryWithProducts)
                 }
@@ -249,23 +255,47 @@ class TransferViewModel @Inject constructor(
         val currentSource = _uiState.value.sourceLocation
         if (location.id == currentSource?.id) return
         
-        // Clear positions when changing source location
+        // Update destinations to exclude the selected source
         val destinations = allLocations.filter { it.id != location.id }
+        
+        // Clear destination if it was the same as new source
+        val currentDestination = _uiState.value.destinationLocation
+        val newDestination = if (currentDestination?.id == location.id) null else currentDestination
         
         _uiState.update {
             it.copy(
                 sourceLocation = location,
                 availableDestinations = destinations,
+                destinationLocation = newDestination,
                 positions = emptyList(),
                 selectedProduct = null,
                 currentWeight = "",
-                selectedAvailableStock = BigDecimal.ZERO,
-                screenState = TransferScreenState.PRODUCT_GRID
+                selectedAvailableStock = BigDecimal.ZERO
+                // Stay on LOCATIONS screen - don't change screenState
             )
         }
         
         // Reload inventory for new source location
         loadInventoryForLocation(location.id)
+    }
+
+    fun selectDestinationLocation(location: Location) {
+        val currentDestination = _uiState.value.destinationLocation
+        if (location.id == currentDestination?.id) return
+        
+        _uiState.update {
+            it.copy(destinationLocation = location)
+            // Stay on LOCATIONS screen
+        }
+    }
+
+    fun proceedToProducts() {
+        val state = _uiState.value
+        if (state.sourceLocation == null || state.destinationLocation == null) return
+        
+        _uiState.update {
+            it.copy(screenState = TransferScreenState.PRODUCT_GRID)
+        }
     }
 
     fun selectProduct(inventoryWithProduct: InventoryWithProduct) {
@@ -420,33 +450,36 @@ class TransferViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     positions = it.positions + newPositions,
-                    screenState = TransferScreenState.DESTINATION
+                    screenState = TransferScreenState.SUMMARY
                 )
             }
         }
     }
 
-    fun proceedToDestination() {
+    fun proceedToSummary() {
         val state = _uiState.value
         if (state.positions.isEmpty()) return
 
         _uiState.update {
-            it.copy(screenState = TransferScreenState.DESTINATION)
-        }
-    }
-
-    fun selectDestination(location: Location) {
-        _uiState.update {
-            it.copy(
-                destinationLocation = location,
-                screenState = TransferScreenState.SUMMARY
-            )
+            it.copy(screenState = TransferScreenState.SUMMARY)
         }
     }
 
     fun backToPositions() {
         _uiState.update {
             it.copy(screenState = TransferScreenState.POSITIONS_LIST)
+        }
+    }
+    
+    fun backToLocations() {
+        _uiState.update {
+            it.copy(
+                positions = emptyList(),
+                selectedProduct = null,
+                currentWeight = "",
+                selectedAvailableStock = BigDecimal.ZERO,
+                screenState = TransferScreenState.LOCATIONS
+            )
         }
     }
 
@@ -488,7 +521,7 @@ class TransferViewModel @Inject constructor(
 
     fun dismissSummary() {
         _uiState.update {
-            it.copy(screenState = TransferScreenState.DESTINATION)
+            it.copy(screenState = TransferScreenState.POSITIONS_LIST)
         }
     }
 

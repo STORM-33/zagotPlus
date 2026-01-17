@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.inventory
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,12 +13,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -26,6 +33,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,13 +48,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.InventoryItemSkeleton
+import com.zagot.zagotplus.ui.components.SkeletonList
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.ZoneId
@@ -69,18 +82,51 @@ fun InventoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayItems by viewModel.displayItems.collectAsStateWithLifecycle()
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+    val weightFormat = remember { DecimalFormat("#,##0.0") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    
+    // State for product selection (for summary calculation)
+    var selectedProductIds by remember { mutableStateOf<Set<UUID>>(emptySet()) }
+    
+    // Calculate summary based on selection
+    val summary = remember(displayItems, selectedProductIds) {
+        val itemsForSummary = if (selectedProductIds.isEmpty()) {
+            displayItems
+        } else {
+            displayItems.filter { it.productId in selectedProductIds }
+        }
+        
+        val totalWeight = itemsForSummary.sumOf { it.weightKg }
+        val totalProfit = itemsForSummary.mapNotNull { it.projectedProfit }.sumOf { it }
+        val totalInvested = itemsForSummary.sumOf { item ->
+            val price = item.salePrice ?: java.math.BigDecimal.ZERO
+            item.weightKg.multiply(price)
+        }.setScale(2, java.math.RoundingMode.HALF_UP)
+        
+        InventorySummary(
+            totalWeight = totalWeight,
+            totalExpectedProfit = totalProfit,
+            totalInvested = totalInvested
+        )
+    }
     
     // State for dialogs
     var selectedItem by remember { mutableStateOf<InventoryDisplayItem?>(null) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showAdjustDialog by remember { mutableStateOf(false) }
+    
+    val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading || uiState.isRefreshing)
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = { viewModel.refresh() },
             modifier = Modifier.fillMaxSize()
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             // Location tabs + Total tab
             if (uiState.locations.isNotEmpty()) {
                 val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
@@ -117,12 +163,7 @@ fun InventoryScreen(
             ) {
                 when {
                     uiState.isLoading || uiState.isRefreshing -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
+                        SkeletonList(itemCount = 6) { InventoryItemSkeleton() }
                     }
                     else -> {
                         if (displayItems.isEmpty()) {
@@ -146,10 +187,20 @@ fun InventoryScreen(
                             ) {
                                 // Inventory items as cards
                                 items(displayItems, key = { it.productId }) { item ->
+                                    val isSelected = item.productId in selectedProductIds
                                     InventoryItemCard(
                                         item = item,
-                                        decimalFormat = decimalFormat,
+                                        currencyFormat = currencyFormat,
+                                        weightFormat = weightFormat,
+                                        isSelected = isSelected,
                                         showContextMenuOption = !isTotalView,
+                                        onClick = {
+                                            selectedProductIds = if (isSelected) {
+                                                selectedProductIds - item.productId
+                                            } else {
+                                                selectedProductIds + item.productId
+                                            }
+                                        },
                                         onTransferClick = {
                                             selectedItem = item
                                             showMoveDialog = true
@@ -158,6 +209,16 @@ fun InventoryScreen(
                                             selectedItem = item
                                             showAdjustDialog = true
                                         }
+                                    )
+                                }
+                                
+                                // Summary panel at the end of the list
+                                item(key = "summary") {
+                                    InventorySummaryPanel(
+                                        summary = summary,
+                                        currencyFormat = currencyFormat,
+                                        weightFormat = weightFormat,
+                                        hasSelection = selectedProductIds.isNotEmpty()
                                     )
                                 }
                             }
@@ -184,6 +245,7 @@ fun InventoryScreen(
                     )
                 }
             }
+        }
         }
         
         // Move product dialog
@@ -219,7 +281,7 @@ fun InventoryScreen(
                 AdjustmentDialog(
                     productName = item.productName,
                     currentWeightKg = item.weightKg,
-                    decimalFormat = decimalFormat,
+                    weightFormat = weightFormat,
                     onDismiss = {
                         showAdjustDialog = false
                         selectedItem = null
@@ -300,23 +362,28 @@ private fun MoveProductDialog(
 @Composable
 private fun InventoryItemCard(
     item: InventoryDisplayItem,
-    decimalFormat: DecimalFormat,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
+    isSelected: Boolean = false,
     showContextMenuOption: Boolean = false,
+    onClick: () -> Unit = {},
     onTransferClick: () -> Unit = {},
     onAdjustClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
     
-    val weightText = "${decimalFormat.format(item.weightKg)} кг"
+    val weightText = "${weightFormat.format(item.weightKg)} кг"
     val isNegative = item.isNegative
     
     val containerColor = when {
+        isSelected -> MaterialTheme.colorScheme.primaryContainer
         isNegative -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     
     val contentColor = when {
+        isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
         isNegative -> MaterialTheme.colorScheme.onErrorContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -325,49 +392,104 @@ private fun InventoryItemCard(
         Card(
             modifier = modifier
                 .fillMaxWidth()
-                .then(
-                    if (showContextMenuOption) {
-                        Modifier.combinedClickable(
-                            onClick = { },
-                            onLongClick = { showContextMenu = true }
-                        )
-                    } else {
-                        Modifier
-                    }
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = if (showContextMenuOption) {
+                        { showContextMenu = true }
+                    } else null
                 ),
-            colors = CardDefaults.cardColors(containerColor = containerColor)
+            colors = CardDefaults.cardColors(containerColor = containerColor),
+            border = if (isSelected) {
+                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            } else null
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(16.dp)
             ) {
-                Text(
-                    text = item.productName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = contentColor,
-                    modifier = Modifier.weight(1f)
-                )
-                
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isNegative) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = "Від'ємний залишок",
-                            tint = MaterialTheme.colorScheme.error
+                    // Product image thumbnail
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (item.productImageUri != null) {
+                            AsyncImage(
+                                model = item.productImageUri,
+                                contentDescription = item.productName,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Image,
+                                contentDescription = "Немає зображення",
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                    
+                    Text(
+                        text = item.productName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = contentColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isNegative) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = "Від'ємний залишок",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Text(
+                            text = weightText,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Text(
-                        text = weightText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                    )
+                }
+                
+                // Projected profit display
+                item.projectedProfit?.let { profit ->
+                    val profitColor = if (profit >= BigDecimal.ZERO) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Очікуваний прибуток:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "₴${currencyFormat.format(profit)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = profitColor
+                        )
+                    }
                 }
             }
         }
@@ -420,11 +542,11 @@ private enum class AdjustmentReason(val displayName: String) {
 private fun AdjustmentDialog(
     productName: String,
     currentWeightKg: BigDecimal,
-    decimalFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
     onDismiss: () -> Unit,
     onConfirm: (actualWeight: BigDecimal, reason: String?) -> Unit
 ) {
-    var actualWeightText by remember { mutableStateOf(decimalFormat.format(currentWeightKg)) }
+    var actualWeightText by remember { mutableStateOf(weightFormat.format(currentWeightKg)) }
     var selectedReason by remember { mutableStateOf<AdjustmentReason?>(null) }
     var showReasonDropdown by remember { mutableStateOf(false) }
     
@@ -464,7 +586,7 @@ private fun AdjustmentDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${decimalFormat.format(currentWeightKg)} кг",
+                        text = "${weightFormat.format(currentWeightKg)} кг",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -483,9 +605,9 @@ private fun AdjustmentDialog(
                 // Difference display
                 if (difference != null && difference.compareTo(BigDecimal.ZERO) != 0) {
                     val diffText = if (difference > BigDecimal.ZERO) {
-                        "+${decimalFormat.format(difference)}"
+                        "+${weightFormat.format(difference)}"
                     } else {
-                        decimalFormat.format(difference)
+                        weightFormat.format(difference)
                     }
                     val diffColor = if (difference > BigDecimal.ZERO) {
                         MaterialTheme.colorScheme.primary
@@ -571,4 +693,105 @@ private fun AdjustmentDialog(
             }
         }
     )
+}
+
+/**
+ * Summary panel showing inventory totals.
+ */
+@Composable
+private fun InventorySummaryPanel(
+    summary: InventorySummary,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
+    hasSelection: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val profitColor = if (summary.totalExpectedProfit >= java.math.BigDecimal.ZERO) {
+        MaterialTheme.colorScheme.tertiary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    
+    val title = if (hasSelection) "Підсумок (вибрані)" else "Підсумок"
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+            )
+            
+            // Total weight
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Загальна вага",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = "${weightFormat.format(summary.totalWeight)} кг",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            
+            // Total invested (sell price value)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Вартість товару",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = "₴${currencyFormat.format(summary.totalInvested)}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+            )
+            
+            // Total expected profit - highlighted
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Очікуваний прибуток",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = "₴${currencyFormat.format(summary.totalExpectedProfit)}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = profitColor
+                )
+            }
+        }
+    }
 }

@@ -39,6 +39,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -76,6 +77,8 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
         }
     }
 
@@ -84,7 +87,11 @@ android {
             it.jvmArgs(
                 "-Xmx2g",
                 "-XX:+UseG1GC",
-                "-XX:MaxGCPauseMillis=100"
+                "-XX:MaxGCPauseMillis=100",
+                // Required for MockK/ByteBuddy on JDK 17+
+                "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+                "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+                "--add-opens", "java.base/java.util=ALL-UNNAMED"
             )
         }
         unitTests.isReturnDefaultValues = true
@@ -148,6 +155,9 @@ dependencies {
     
     // Biometric Authentication
     implementation(libs.androidx.biometric)
+    
+    // Profile Installer for Baseline Profiles
+    implementation(libs.androidx.profileinstaller)
     
     // App Update
     implementation(libs.play.app.update)

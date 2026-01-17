@@ -80,7 +80,7 @@ class CashViewModelTest {
     }
 
     private fun createViewModel(): CashViewModel {
-        return CashViewModel(cashRepository, locationRepository)
+        return CashViewModel(cashRepository, locationRepository, mainDispatcherRule.testDispatcher)
     }
 
     // ==================== Initial State Tests ====================
@@ -269,13 +269,13 @@ class CashViewModelTest {
     }
 
     @Test
-    fun `canConfirmWithdraw is false when amount exceeds balance`() = runTest {
+    fun `canConfirmWithdraw is true when amount exceeds balance - negative balance allowed`() = runTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
         viewModel.onAmountChange("10000")
 
-        assertFalse(viewModel.uiState.value.canConfirmWithdraw)
+        assertTrue(viewModel.uiState.value.canConfirmWithdraw)
     }
 
     // ==================== Deposit Tests ====================
@@ -326,15 +326,17 @@ class CashViewModelTest {
     }
 
     @Test
-    fun `confirmWithdraw sets error when amount exceeds balance`() = runTest {
+    fun `confirmWithdraw succeeds when amount exceeds balance - negative balance allowed`() = runTest {
+        coEvery { cashRepository.withdraw(any(), any(), any()) } returns Unit
         viewModel = createViewModel()
         advanceUntilIdle()
 
         viewModel.showWithdrawDialog()
         viewModel.onAmountChange("10000")
         viewModel.confirmWithdraw()
+        advanceUntilIdle()
 
-        assertNotNull(viewModel.uiState.value.error)
+        coVerify { cashRepository.withdraw(null, BigDecimal("10000"), null) }
     }
 
     // ==================== Payment Tests ====================
@@ -459,13 +461,15 @@ class CashViewModelTest {
 
     @Test
     fun `dismissError clears error`() = runTest {
+        coEvery { cashRepository.withdraw(any(), any(), any()) } throws RuntimeException("Test error")
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        // Trigger an error
+        // Trigger an error via failed withdraw
         viewModel.showWithdrawDialog()
-        viewModel.onAmountChange("10000")
+        viewModel.onAmountChange("100")
         viewModel.confirmWithdraw()
+        advanceUntilIdle()
 
         assertNotNull(viewModel.uiState.value.error)
 
@@ -1171,7 +1175,7 @@ class CashViewModelTest {
     }
 
     @Test
-    fun `canConfirmTransfer is false when amount exceeds balance`() = runTest {
+    fun `canConfirmTransfer is true when amount exceeds balance - negative balance allowed`() = runTest {
         setupLocationMocks()
         every { cashRepository.getBalance(testLocationId1) } returns flowOf(BigDecimal("100.00"))
         
@@ -1184,7 +1188,7 @@ class CashViewModelTest {
         viewModel.onAmountChange("500")
         viewModel.onTransferDestinationSelect(testLocationId2)
 
-        assertFalse(viewModel.uiState.value.canConfirmTransfer)
+        assertTrue(viewModel.uiState.value.canConfirmTransfer)  // Negative balance allowed
     }
 
     @Test

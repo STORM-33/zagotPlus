@@ -214,7 +214,7 @@ private fun ProductCard(
     onToggleActive: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val priceFormat = remember { DecimalFormat("#,##0.00") }
+    val priceFormat = remember { DecimalFormat("#,##0") }
     var showContextMenu by remember { mutableStateOf(false) }
     
     Card(

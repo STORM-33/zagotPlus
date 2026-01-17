@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,8 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.SaleBatch
+import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.SkeletonList
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -61,13 +65,20 @@ fun SaleScreen(
         }
     }
 
+    val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
+
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Section header
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                // Section header
             Text(
                 text = "Продажі сьогодні",
                 style = MaterialTheme.typography.titleMedium,
@@ -81,10 +92,9 @@ fun SaleScreen(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
                 ) {
-                    CircularProgressIndicator()
+                    SkeletonList(itemCount = 4) { BatchCardSkeleton() }
                 }
             } else if (uiState.todaysBatches.isEmpty()) {
                 Box(
@@ -127,6 +137,7 @@ fun SaleScreen(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+        }
         }
 
         SnackbarHost(
