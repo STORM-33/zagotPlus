@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,11 @@ import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
+import com.zagot.zagotplus.hardware.printer.PrinterService
+import com.zagot.zagotplus.hardware.printer.receipt.PurchaseReceiptBuilder
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesService
 import com.zagot.zagotplus.ui.navigation.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDateTime
 import java.util.UUID
 import javax.inject.Inject
 
@@ -56,10 +63,10 @@ data class PurchaseEntryUiState(
     val positions: List<PurchasePosition> = emptyList(),
     val notes: String = "",
     val screenState: PurchaseEntryScreenState = PurchaseEntryScreenState.PRODUCT_GRID,
-    // Phase 6 stub: Scale weight from Bluetooth/TCP connection
-    // Currently always null (scale not implemented yet)
-    // When implemented, this will be populated by ScaleService
+    // Scale weight from TCP connection (via ScalesService)
+    // null when scales not connected - falls back to manual entry
     val scaleWeight: BigDecimal? = null,
+    val isScaleStable: Boolean = false, // true when scale reading is stable
     val isManualWeightMode: Boolean = false, // true = user overriding scale weight
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -116,10 +123,13 @@ class PurchaseEntryViewModel @Inject constructor(
     private val purchaseBatchRepository: PurchaseBatchRepository,
     private val devicePreferences: DevicePreferences,
     private val productOrderPreferences: ProductOrderPreferences,
+    private val scalesService: ScalesService,
+    private val printerService: PrinterService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     companion object {
+        private const val TAG = "PurchaseEntryVM"
         // Pre-compiled regex pattern for decimal input validation (avoid recompilation on each keystroke)
         private val DECIMAL_PATTERN = Regex("^\\d*\\.?\\d*$")
     }
@@ -133,6 +143,44 @@ class PurchaseEntryViewModel @Inject constructor(
 
     init {
         loadProductsAndBatch()
+        observeScales()
+    }
+
+    /**
+     * Observe scales weight readings (optional - no-op if scales not connected).
+     * When scales are connected and not in manual mode, weight is auto-populated.
+     */
+    private fun observeScales() {
+        // Observe connection state
+        viewModelScope.launch {
+            scalesService.connectionState.collect { state ->
+                when (state) {
+                    is ScalesConnectionState.Connected -> {
+                        Log.d(TAG, "Scales connected: ${state.deviceInfo}")
+                    }
+                    is ScalesConnectionState.Disconnected -> {
+                        // Clear scale weight when disconnected - falls back to manual entry
+                        _uiState.update { it.copy(scaleWeight = null, isScaleStable = false) }
+                    }
+                    else -> { /* Connecting, Reconnecting, Error - ignore */ }
+                }
+            }
+        }
+
+        // Observe weight readings
+        viewModelScope.launch {
+            scalesService.weightReadings.collect { reading ->
+                // Only update if not in manual mode
+                if (!_uiState.value.isManualWeightMode) {
+                    _uiState.update {
+                        it.copy(
+                            scaleWeight = reading.weightKg,
+                            isScaleStable = reading.isStable
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun loadProductsAndBatch() {
@@ -363,8 +411,12 @@ class PurchaseEntryViewModel @Inject constructor(
                     purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
                 }
 
-                // TODO: Print receipt here (Phase 6 - hardware integration)
-                // printReceipt(batch, positions)
+                // Print receipt if printer is connected (optional - silently skip if not ready)
+                tryPrintReceipt(
+                    receiptNumber = batchLocalId.take(8).uppercase(),
+                    positions = state.positions,
+                    notes = state.notes.ifBlank { null }
+                )
 
                 _uiState.update {
                     it.copy(
@@ -502,5 +554,43 @@ class PurchaseEntryViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * Attempt to print receipt if printer is connected.
+     * Silently skips if printer is not ready - purchase is never blocked by print failure.
+     */
+    private fun tryPrintReceipt(
+        receiptNumber: String,
+        positions: List<PurchasePosition>,
+        notes: String?
+    ) {
+        // Skip if printer not ready (not connected, not configured, etc.)
+        if (!printerService.isReady()) {
+            Log.d(TAG, "Printer not ready, skipping receipt print")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val receipt = PurchaseReceiptBuilder()
+                    .receiptNumber(receiptNumber)
+                    .date(LocalDateTime.now())
+                    .also { builder ->
+                        positions.forEach { pos ->
+                            builder.addItem(pos.product.name, pos.weightKg, pos.pricePerKg)
+                        }
+                    }
+                    .notes(notes)
+                    .build()
+
+                printerService.print(receipt).onFailure { e ->
+                    // Log error but don't show to user - printing is optional
+                    Log.e(TAG, "Receipt print failed", e)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Receipt build/print error", e)
+            }
+        }
     }
 }
