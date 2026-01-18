@@ -86,7 +86,8 @@ fun HistoryScreen(
     modifier: Modifier = Modifier,
     viewModel: HistoryViewModel = hiltViewModel(),
     onNavigateToEditPurchase: (batchId: String) -> Unit = {},
-    onNavigateToEditSale: (batchId: String) -> Unit = {}
+    onNavigateToEditSale: (batchId: String) -> Unit = {},
+    isRestrictedMode: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     // Separate state flows for expansion - only recomposes affected items
@@ -100,6 +101,13 @@ fun HistoryScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     
+    // In restricted mode, lock location filter to current location
+    LaunchedEffect(isRestrictedMode) {
+        if (isRestrictedMode) {
+            viewModel.setRestrictedMode(true)
+        }
+    }
+    
     // State for void confirmation dialog
     var pendingVoidBatch by remember { mutableStateOf<Pair<UUID, BatchType>?>(null) }
     
@@ -108,11 +116,12 @@ fun HistoryScreen(
     val sheetState = rememberModalBottomSheetState()
     
     // Calculate active filter count (excluding search which is always visible)
-    val activeFilterCount = remember(uiState.selectedTypes, uiState.dateRange, uiState.selectedLocationId) {
+    // In restricted mode, don't count location filter since it's forced
+    val activeFilterCount = remember(uiState.selectedTypes, uiState.dateRange, uiState.selectedLocationId, isRestrictedMode) {
         var count = 0
         if (uiState.selectedTypes.size != BatchType.entries.size) count++ // Type filter active
         if (uiState.dateRange != null) count++ // Date filter active
-        if (uiState.selectedLocationId != null) count++ // Location filter active
+        if (uiState.selectedLocationId != null && !isRestrictedMode) count++ // Location filter active (not in restricted)
         count
     }
 
@@ -233,13 +242,16 @@ fun HistoryScreen(
                     )
                     
                     // Location dropdown
-                    Text("Локація", style = MaterialTheme.typography.labelMedium)
-                    LocationDropdown(
-                        selectedLocationId = uiState.selectedLocationId,
-                        locations = uiState.locations,
-                        onLocationChange = viewModel::setLocationFilter,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Location dropdown - hide in restricted mode
+                    if (!isRestrictedMode) {
+                        Text("Локація", style = MaterialTheme.typography.labelMedium)
+                        LocationDropdown(
+                            selectedLocationId = uiState.selectedLocationId,
+                            locations = uiState.locations,
+                            onLocationChange = viewModel::setLocationFilter,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     
                     // Action buttons
                     Row(

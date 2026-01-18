@@ -42,6 +42,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +79,7 @@ private enum class InventoryItemAction {
 fun InventoryScreen(
     modifier: Modifier = Modifier,
     onNavigateToTransfer: (productId: String, sourceLocationId: String) -> Unit = { _, _ -> },
+    isRestrictedMode: Boolean = false,
     viewModel: InventoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -85,6 +87,11 @@ fun InventoryScreen(
     val currencyFormat = remember { DecimalFormat("#,##0") }
     val weightFormat = remember { DecimalFormat("#,##0.0") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    
+    // Force current location when restricted mode is enabled
+    LaunchedEffect(isRestrictedMode) {
+        viewModel.setRestrictedMode(isRestrictedMode)
+    }
     
     // State for product selection (for summary calculation)
     var selectedProductIds by remember { mutableStateOf<Set<UUID>>(emptySet()) }
@@ -127,31 +134,43 @@ fun InventoryScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-            // Location tabs + Total tab
+            // Location tabs + Total tab (restricted mode: only current location, no Total)
             if (uiState.locations.isNotEmpty()) {
-                val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
-                val selectedIndex = if (isTotalView) {
-                    uiState.locations.size // Total tab is last
+                val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL && !isRestrictedMode
+                
+                // In restricted mode, filter to only show current location
+                val displayLocations = if (isRestrictedMode) {
+                    uiState.selectedLocation?.let { listOf(it) } ?: emptyList()
                 } else {
-                    uiState.locations.indexOfFirst { 
+                    uiState.locations
+                }
+                
+                val selectedIndex = if (isTotalView) {
+                    displayLocations.size // Total tab is last
+                } else {
+                    displayLocations.indexOfFirst { 
                         it.id == uiState.selectedLocation?.id 
                     }.coerceAtLeast(0)
                 }
                 
-                TabRow(selectedTabIndex = selectedIndex) {
-                    uiState.locations.forEachIndexed { index, location ->
-                        Tab(
-                            selected = index == selectedIndex,
-                            onClick = { viewModel.selectLocation(location) },
-                            text = { Text(location.name) }
-                        )
+                if (displayLocations.isNotEmpty()) {
+                    TabRow(selectedTabIndex = selectedIndex) {
+                        displayLocations.forEachIndexed { index, location ->
+                            Tab(
+                                selected = index == selectedIndex,
+                                onClick = { viewModel.selectLocation(location) },
+                                text = { Text(location.name) }
+                            )
+                        }
+                        // Total tab - hide in restricted mode
+                        if (!isRestrictedMode) {
+                            Tab(
+                                selected = isTotalView,
+                                onClick = { viewModel.selectTotalView() },
+                                text = { Text("Всього") }
+                            )
+                        }
                     }
-                    // Total tab
-                    Tab(
-                        selected = isTotalView,
-                        onClick = { viewModel.selectTotalView() },
-                        text = { Text("Всього") }
-                    )
                 }
             }
 
@@ -194,6 +213,7 @@ fun InventoryScreen(
                                         weightFormat = weightFormat,
                                         isSelected = isSelected,
                                         showContextMenuOption = !isTotalView,
+                                        isRestrictedMode = isRestrictedMode,
                                         onClick = {
                                             selectedProductIds = if (isSelected) {
                                                 selectedProductIds - item.productId
@@ -218,7 +238,8 @@ fun InventoryScreen(
                                         summary = summary,
                                         currencyFormat = currencyFormat,
                                         weightFormat = weightFormat,
-                                        hasSelection = selectedProductIds.isNotEmpty()
+                                        hasSelection = selectedProductIds.isNotEmpty(),
+                                        isRestrictedMode = isRestrictedMode
                                     )
                                 }
                             }
@@ -366,6 +387,7 @@ private fun InventoryItemCard(
     weightFormat: DecimalFormat,
     isSelected: Boolean = false,
     showContextMenuOption: Boolean = false,
+    isRestrictedMode: Boolean = false,
     onClick: () -> Unit = {},
     onTransferClick: () -> Unit = {},
     onAdjustClick: () -> Unit = {},
@@ -465,64 +487,68 @@ private fun InventoryItemCard(
                     }
                 }
                 
-                // Projected profit display
-                item.projectedProfit?.let { profit ->
-                    val profitColor = if (profit >= BigDecimal.ZERO) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Очікуваний прибуток:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            text = "₴${currencyFormat.format(profit)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = profitColor
-                        )
+                // Projected profit display - hide in restricted mode
+                if (!isRestrictedMode) {
+                    item.projectedProfit?.let { profit ->
+                        val profitColor = if (profit >= BigDecimal.ZERO) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Очікуваний прибуток:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = contentColor.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "₴${currencyFormat.format(profit)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = profitColor
+                            )
+                        }
                     }
                 }
             }
         }
         
-        // Context menu for long press
-        DropdownMenu(
-            expanded = showContextMenu,
-            onDismissRequest = { showContextMenu = false }
-        ) {
-            // Transfer option - only show if item has positive weight
-            if (item.weightKg.compareTo(BigDecimal.ZERO) == 1) {
+        // Context menu for long press - hide in restricted mode
+        if (!isRestrictedMode) {
+            DropdownMenu(
+                expanded = showContextMenu,
+                onDismissRequest = { showContextMenu = false }
+            ) {
+                // Transfer option - only show if item has positive weight
+                if (item.weightKg.compareTo(BigDecimal.ZERO) == 1) {
+                    DropdownMenuItem(
+                        text = { Text("Перемістити") },
+                        onClick = {
+                            showContextMenu = false
+                            onTransferClick()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Filled.SwapHoriz, contentDescription = "Перемістити")
+                        }
+                    )
+                }
+                // Adjust option - always available
                 DropdownMenuItem(
-                    text = { Text("Перемістити") },
+                    text = { Text("Коригувати") },
                     onClick = {
                         showContextMenu = false
-                        onTransferClick()
+                        onAdjustClick()
                     },
                     leadingIcon = {
-                        Icon(Icons.Filled.SwapHoriz, contentDescription = "Перемістити")
+                        Icon(Icons.Filled.Edit, contentDescription = "Коригувати")
                     }
                 )
             }
-            // Adjust option - always available
-            DropdownMenuItem(
-                text = { Text("Коригувати") },
-                onClick = {
-                    showContextMenu = false
-                    onAdjustClick()
-                },
-                leadingIcon = {
-                    Icon(Icons.Filled.Edit, contentDescription = "Коригувати")
-                }
-            )
         }
     }
 }
@@ -704,6 +730,7 @@ private fun InventorySummaryPanel(
     currencyFormat: DecimalFormat,
     weightFormat: DecimalFormat,
     hasSelection: Boolean = false,
+    isRestrictedMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val profitColor = if (summary.totalExpectedProfit >= java.math.BigDecimal.ZERO) {
@@ -738,7 +765,7 @@ private fun InventorySummaryPanel(
                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
             )
             
-            // Total weight
+            // Total weight - always show
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -755,42 +782,44 @@ private fun InventorySummaryPanel(
                 )
             }
             
-            // Total invested (sell price value)
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Вартість товару",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+            // Product value - hide in restricted mode
+            if (!isRestrictedMode) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Вартість товару",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "₴${currencyFormat.format(summary.totalInvested)}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
                 )
-                Text(
-                    text = "₴${currencyFormat.format(summary.totalInvested)}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-            
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
-            )
-            
-            // Total expected profit - highlighted
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Очікуваний прибуток",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = "₴${currencyFormat.format(summary.totalExpectedProfit)}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = profitColor
-                )
+                
+                // Expected profit - hide in restricted mode
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Очікуваний прибуток",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "₴${currencyFormat.format(summary.totalExpectedProfit)}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = profitColor
+                    )
+                }
             }
         }
     }

@@ -59,6 +59,8 @@ import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import com.zagot.zagotplus.ui.screens.transfer.TransferScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.data.preferences.AuthPreferences
 import kotlinx.coroutines.flow.Flow
 
 private const val BACK_PRESS_INTERVAL = 2000L // 2 seconds
@@ -69,6 +71,7 @@ fun NavGraph(
     syncStatusFlow: Flow<SyncStatus>,
     isOnline: Boolean,
     onSyncClick: () -> Unit,
+    authPreferences: AuthPreferences,
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
@@ -76,6 +79,9 @@ fun NavGraph(
     val currentDestination = navBackStackEntry?.destination
     var showMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    
+    // Restricted mode state - reactive via StateFlow
+    val isRestrictedMode by authPreferences.restrictedModeFlow.collectAsStateWithLifecycle()
     
     // Track last back press time for double-tap exit
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
@@ -135,46 +141,50 @@ fun NavGraph(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false }
                             ) {
-                            DropdownMenuItem(
-                                text = { Text("Товари") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(Destination.Products.route)
-                                },
-                                leadingIcon = {
-                                    Icon(Destination.Products.icon, contentDescription = "Товари")
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Каса") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(Destination.Cash.route)
-                                },
-                                leadingIcon = {
-                                    Icon(Destination.Cash.icon, contentDescription = "Каса")
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Переміщення") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(Destination.Transfer.route)
-                                },
-                                leadingIcon = {
-                                    Icon(Destination.Transfer.icon, contentDescription = "Переміщення")
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Звіти") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(Destination.Reports.route)
-                                },
-                                leadingIcon = {
-                                    Icon(Destination.Reports.icon, contentDescription = "Звіти")
-                                }
-                            )
+                            // In restricted mode: only show Settings (with admin PIN)
+                            // In full mode: show all items
+                            if (!isRestrictedMode) {
+                                DropdownMenuItem(
+                                    text = { Text("Товари") },
+                                    onClick = {
+                                        showMenu = false
+                                        navController.navigate(Destination.Products.route)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Destination.Products.icon, contentDescription = "Товари")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Каса") },
+                                    onClick = {
+                                        showMenu = false
+                                        navController.navigate(Destination.Cash.route)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Destination.Cash.icon, contentDescription = "Каса")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Переміщення") },
+                                    onClick = {
+                                        showMenu = false
+                                        navController.navigate(Destination.Transfer.route)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Destination.Transfer.icon, contentDescription = "Переміщення")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Звіти") },
+                                    onClick = {
+                                        showMenu = false
+                                        navController.navigate(Destination.Reports.route)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Destination.Reports.icon, contentDescription = "Звіти")
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Налаштування") },
                                 onClick = {
@@ -230,7 +240,8 @@ fun NavGraph(
                 PurchaseScreen(
                     onNavigateToNewClient = {
                         navController.navigate(Destination.PurchaseEntry.route)
-                    }
+                    },
+                    isRestrictedMode = isRestrictedMode
                 )
             }
             // Detail screens get slide transitions
@@ -288,7 +299,8 @@ fun NavGraph(
                         navController.navigate(
                             Destination.Transfer.createRoute(productId, sourceLocationId, null)
                         )
-                    }
+                    },
+                    isRestrictedMode = isRestrictedMode
                 )
             }
             composable(Destination.History.route) {
@@ -298,7 +310,8 @@ fun NavGraph(
                     },
                     onNavigateToEditSale = { batchId ->
                         navController.navigate(Destination.SaleEntry.createRoute(batchId))
-                    }
+                    },
+                    isRestrictedMode = isRestrictedMode
                 )
             }
             // Menu screens get slide transitions
@@ -333,7 +346,8 @@ fun NavGraph(
             ) {
                 SettingsScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    onNavigateToProducts = { navController.navigate(Destination.Products.route) }
+                    onNavigateToProducts = { navController.navigate(Destination.Products.route) },
+                    authPreferences = authPreferences
                 )
             }
             composable(

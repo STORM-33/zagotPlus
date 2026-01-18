@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.BuildConfig
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.LocationRepository
@@ -34,7 +35,8 @@ data class SettingsUiState(
     val locations: List<Location> = emptyList(),
     val selectedLocationId: UUID? = null,
     val appVersion: String = "",
-    val copySuccess: Boolean = false
+    val copySuccess: Boolean = false,
+    val isRestrictedMode: Boolean = false
 )
 
 @HiltViewModel
@@ -43,20 +45,22 @@ class SettingsViewModel @Inject constructor(
     private val syncStatusRepository: SyncStatusRepository,
     private val syncManager: SyncManager,
     private val devicePreferences: DevicePreferences,
+    private val authPreferences: AuthPreferences,
     private val locationRepository: LocationRepository,
     private val transactionDao: TransactionDao
 ) : ViewModel() {
 
     private val _copySuccess = MutableStateFlow(false)
     private val _selectedLocationId = MutableStateFlow(devicePreferences.getSelectedLocationId())
+    private val _isRestrictedMode = MutableStateFlow(authPreferences.isRestrictedMode())
 
     val uiState: StateFlow<SettingsUiState> = combine(
         syncStatusRepository.syncStatus,
         transactionDao.getUnsyncedCountFlow(),
         locationRepository.getAllLocations(),
         _copySuccess,
-        _selectedLocationId
-    ) { syncStatus, pendingCount, locations, copySuccess, selectedLocationId ->
+        combine(_selectedLocationId, _isRestrictedMode) { loc, restricted -> loc to restricted }
+    ) { syncStatus, pendingCount, locations, copySuccess, (selectedLocationId, isRestricted) ->
         SettingsUiState(
             syncStatus = syncStatus,
             pendingCount = pendingCount,
@@ -64,7 +68,8 @@ class SettingsViewModel @Inject constructor(
             locations = locations,
             selectedLocationId = selectedLocationId,
             appVersion = BuildConfig.VERSION_NAME,
-            copySuccess = copySuccess
+            copySuccess = copySuccess,
+            isRestrictedMode = isRestricted
         )
     }
     .distinctUntilChanged()
@@ -74,7 +79,8 @@ class SettingsViewModel @Inject constructor(
         initialValue = SettingsUiState(
             deviceId = devicePreferences.getDeviceId(),
             selectedLocationId = devicePreferences.getSelectedLocationId(),
-            appVersion = BuildConfig.VERSION_NAME
+            appVersion = BuildConfig.VERSION_NAME,
+            isRestrictedMode = authPreferences.isRestrictedMode()
         )
     )
 
@@ -85,6 +91,11 @@ class SettingsViewModel @Inject constructor(
     fun selectLocation(locationId: UUID) {
         devicePreferences.setSelectedLocationId(locationId)
         _selectedLocationId.value = locationId
+    }
+
+    fun setRestrictedMode(restricted: Boolean) {
+        authPreferences.setRestrictedMode(restricted)
+        _isRestrictedMode.value = restricted
     }
 
     fun copyDeviceId() {

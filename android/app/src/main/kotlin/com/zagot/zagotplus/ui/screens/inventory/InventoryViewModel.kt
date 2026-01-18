@@ -213,10 +213,28 @@ class InventoryViewModel @Inject constructor(
     }
 
     private var locationsMap: Map<UUID, Location> = emptyMap()
+    
+    // Track restricted mode for location change observation
+    private var isRestrictedModeEnabled = false
 
     init {
         loadInitialData()
         observeSyncStatus()
+        observeLocationChangesForRestrictedMode()
+    }
+    
+    /**
+     * Observe device location changes to update selection when in restricted mode.
+     */
+    private fun observeLocationChangesForRestrictedMode() {
+        viewModelScope.launch {
+            devicePreferences.selectedLocationIdFlow
+                .collect { newLocationId ->
+                    if (isRestrictedModeEnabled && newLocationId != null) {
+                        _manualLocationSelection.value = newLocationId
+                    }
+                }
+        }
     }
 
     private fun loadInitialData() {
@@ -300,6 +318,25 @@ class InventoryViewModel @Inject constructor(
     fun selectTotalView() {
         if (_uiState.value.viewMode == InventoryViewMode.TOTAL) return
         _viewMode.value = InventoryViewMode.TOTAL
+    }
+    
+    /**
+     * Forces selection to current device location and BY_LOCATION view mode.
+     * Used when entering restricted mode.
+     */
+    fun setRestrictedMode(enabled: Boolean = true) {
+        val wasRestricted = isRestrictedModeEnabled
+        isRestrictedModeEnabled = enabled
+        
+        if (enabled) {
+            // Entering restricted mode - force to device location
+            val currentLocationId = devicePreferences.getSelectedLocationId()
+            _viewMode.value = InventoryViewMode.BY_LOCATION
+            _manualLocationSelection.value = currentLocationId
+        } else if (wasRestricted) {
+            // Exiting restricted mode - can stay on current location, just enable switching
+            // No need to change location, just the flag is updated
+        }
     }
 
     fun refresh() {

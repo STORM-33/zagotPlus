@@ -26,6 +26,9 @@ object Config {
     /** Maximum PIN length */
     const val MAX_PIN_LENGTH = 4
     
+    /** Admin PIN length (5 digits) */
+    const val ADMIN_PIN_LENGTH = 5
+    
     /** PIN session timeout in hours */
     const val PIN_TIMEOUT_HOURS = 4
 

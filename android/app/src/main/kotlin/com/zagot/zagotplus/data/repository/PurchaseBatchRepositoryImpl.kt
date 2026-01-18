@@ -48,10 +48,38 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun observeTodaysBatches(locationId: UUID): Flow<List<PurchaseBatch>> {
+        val (startMillis, endMillis) = getTodayRange()
+        return purchaseBatchDao.observeBatchesInRangeByLocation(startMillis, endMillis, locationId).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
     override fun observeTodaysProductTotals(): Flow<List<ProductDailyTotal>> {
         val (startMillis, endMillis) = getTodayRange()
         return combine(
             transactionDao.observeTodaysPurchaseTotalsWithAvg(startMillis, endMillis),
+            productDao.getAllFlow()
+        ) { totals, products ->
+            val productMap = products.associate { it.id to it.name }
+            totals.mapNotNull { result ->
+                val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
+                val name = productMap[productId] ?: return@mapNotNull null
+                ProductDailyTotal(
+                    productId = productId,
+                    productName = name,
+                    totalWeightKg = BigDecimal(result.totalWeightKg),
+                    totalAmount = BigDecimal(result.totalAmount ?: "0"),
+                    avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
+                )
+            }.sortedBy { it.productName }
+        }
+    }
+
+    override fun observeTodaysProductTotals(locationId: UUID): Flow<List<ProductDailyTotal>> {
+        val (startMillis, endMillis) = getTodayRange()
+        return combine(
+            transactionDao.observeTodaysPurchaseTotalsWithAvgByLocation(startMillis, endMillis, locationId),
             productDao.getAllFlow()
         ) { totals, products ->
             val productMap = products.associate { it.id to it.name }

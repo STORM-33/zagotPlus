@@ -83,11 +83,15 @@ class HistoryViewModel @Inject constructor(
     private val purchaseBatchRepository: PurchaseBatchRepository,
     private val saleBatchRepository: SaleBatchRepository,
     private val productRepository: ProductRepository,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    private val devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
+    
+    // Restricted mode flag - locks location filter
+    private var isRestrictedModeEnabled = false
 
     // Separate flows for frequently-changing state to avoid full screen recomposition
     private val _expandedBatchIds = MutableStateFlow<Set<String>>(emptySet())
@@ -108,6 +112,22 @@ class HistoryViewModel @Inject constructor(
     init {
         loadInitialData()
         observeBatchChanges()
+        observeLocationChangesForRestrictedMode()
+    }
+    
+    /**
+     * Observe device location changes to update filter when in restricted mode.
+     */
+    private fun observeLocationChangesForRestrictedMode() {
+        viewModelScope.launch {
+            devicePreferences.selectedLocationIdFlow
+                .collect { newLocationId ->
+                    if (isRestrictedModeEnabled && newLocationId != null) {
+                        _uiState.update { it.copy(selectedLocationId = newLocationId) }
+                        reloadWithFilter()
+                    }
+                }
+        }
     }
 
     /**
@@ -558,8 +578,33 @@ class HistoryViewModel @Inject constructor(
     }
 
     fun setLocationFilter(locationId: UUID?) {
+        // In restricted mode, don't allow changing location filter
+        if (isRestrictedModeEnabled) return
         _uiState.update { it.copy(selectedLocationId = locationId) }
         reloadWithFilter()
+    }
+    
+    /**
+     * Enable or disable restricted mode.
+     * When enabled: locks location filter to current device location.
+     * When disabled: resets location filter to show all locations.
+     */
+    fun setRestrictedMode(enabled: Boolean) {
+        val wasRestricted = isRestrictedModeEnabled
+        isRestrictedModeEnabled = enabled
+        
+        if (enabled && !wasRestricted) {
+            // Entering restricted mode - set location filter to current device location
+            val currentLocationId = devicePreferences.getSelectedLocationId()
+            if (currentLocationId != null) {
+                _uiState.update { it.copy(selectedLocationId = currentLocationId) }
+                reloadWithFilter()
+            }
+        } else if (!enabled && wasRestricted) {
+            // Exiting restricted mode - reset to show all locations
+            _uiState.update { it.copy(selectedLocationId = null) }
+            reloadWithFilter()
+        }
     }
 
     fun setSearchQuery(query: String) {
@@ -577,7 +622,8 @@ class HistoryViewModel @Inject constructor(
             it.copy(
                 selectedTypes = emptySet(),
                 dateRange = null,
-                selectedLocationId = null,
+                // In restricted mode, keep the location filter locked
+                selectedLocationId = if (isRestrictedModeEnabled) it.selectedLocationId else null,
                 searchQuery = ""
             )
         }

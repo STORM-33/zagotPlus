@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.settings
 import android.content.ClipboardManager
 import android.content.Context
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.sync.SyncManager
@@ -33,6 +34,7 @@ class SettingsViewModelTest {
     private lateinit var syncStatusRepository: SyncStatusRepository
     private lateinit var syncManager: SyncManager
     private lateinit var devicePreferences: DevicePreferences
+    private lateinit var authPreferences: AuthPreferences
     private lateinit var locationRepository: LocationRepository
     private lateinit var transactionDao: TransactionDao
     private lateinit var clipboardManager: ClipboardManager
@@ -43,6 +45,7 @@ class SettingsViewModelTest {
     private val syncStatusFlow = MutableStateFlow(SyncStatus.idle())
     private val pendingCountFlow = MutableStateFlow(5)
     private val locationsFlow = MutableStateFlow(TestData.allLocations())
+    private val restrictedModeFlow = MutableStateFlow(false)
 
     @Before
     fun setup() {
@@ -50,6 +53,7 @@ class SettingsViewModelTest {
         syncStatusRepository = mockk()
         syncManager = mockk(relaxed = true)
         devicePreferences = mockk(relaxed = true)
+        authPreferences = mockk(relaxed = true)
         locationRepository = mockk()
         transactionDao = mockk()
         clipboardManager = mockk(relaxed = true)
@@ -60,6 +64,8 @@ class SettingsViewModelTest {
         every { locationRepository.getAllLocations() } returns locationsFlow
         every { transactionDao.getUnsyncedCountFlow() } returns pendingCountFlow
         every { context.getSystemService(Context.CLIPBOARD_SERVICE) } returns clipboardManager
+        every { authPreferences.isRestrictedMode() } returns false
+        every { authPreferences.restrictedModeFlow } returns restrictedModeFlow
     }
 
     private fun createViewModel(): SettingsViewModel {
@@ -68,6 +74,7 @@ class SettingsViewModelTest {
             syncStatusRepository = syncStatusRepository,
             syncManager = syncManager,
             devicePreferences = devicePreferences,
+            authPreferences = authPreferences,
             locationRepository = locationRepository,
             transactionDao = transactionDao
         )

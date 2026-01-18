@@ -120,7 +120,8 @@ class MainActivity : ComponentActivity() {
                             NavGraph(
                                 syncStatusFlow = syncStatusRepository.syncStatus,
                                 isOnline = isOnline,
-                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() }
+                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() },
+                                authPreferences = authPreferences
                             )
 
                             // Show blocking location selection dialog
@@ -139,7 +140,8 @@ class MainActivity : ComponentActivity() {
                             NavGraph(
                                 syncStatusFlow = syncStatusRepository.syncStatus,
                                 isOnline = isOnline,
-                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() }
+                                onSyncClick = { if (isOnline) syncManager.triggerManualSync() },
+                                authPreferences = authPreferences
                             )
                         }
                     }

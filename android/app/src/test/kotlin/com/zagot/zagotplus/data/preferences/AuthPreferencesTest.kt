@@ -211,4 +211,127 @@ class AuthPreferencesTest {
         val remaining = authPreferences.getLockoutRemainingSeconds()
         assertTrue(remaining in 14..15)
     }
+
+    // === Admin PIN Tests ===
+
+    @Test
+    fun `isAdminPinSet returns false when no admin PIN stored`() {
+        every { sharedPreferences.contains("admin_pin_hash") } returns false
+        
+        assertFalse(authPreferences.isAdminPinSet())
+    }
+
+    @Test
+    fun `isAdminPinSet returns true when admin PIN stored`() {
+        every { sharedPreferences.contains("admin_pin_hash") } returns true
+        
+        assertTrue(authPreferences.isAdminPinSet())
+    }
+
+    @Test
+    fun `setAdminPin stores hash not plain text`() {
+        val pin = "12345"
+        
+        authPreferences.setAdminPin(pin)
+        
+        verify { editor.putString("admin_pin_hash", match { it != pin && it.isNotEmpty() }) }
+        verify { editor.apply() }
+    }
+
+    @Test
+    fun `verifyAdminPin returns true for correct PIN`() {
+        val pin = "12345"
+        
+        val hashSlot = slot<String>()
+        val saltSlot = slot<String>()
+        every { editor.putString("admin_pin_hash", capture(hashSlot)) } returns editor
+        every { editor.putString("admin_pin_salt", capture(saltSlot)) } returns editor
+        
+        authPreferences.setAdminPin(pin)
+        
+        every { sharedPreferences.getString("admin_pin_hash", null) } returns hashSlot.captured
+        every { sharedPreferences.getString("admin_pin_salt", null) } returns saltSlot.captured
+        
+        assertTrue(authPreferences.verifyAdminPin(pin))
+    }
+
+    @Test
+    fun `verifyAdminPin returns false for incorrect PIN`() {
+        val correctPin = "12345"
+        
+        val hashSlot = slot<String>()
+        val saltSlot = slot<String>()
+        every { editor.putString("admin_pin_hash", capture(hashSlot)) } returns editor
+        every { editor.putString("admin_pin_salt", capture(saltSlot)) } returns editor
+        
+        authPreferences.setAdminPin(correctPin)
+        
+        every { sharedPreferences.getString("admin_pin_hash", null) } returns hashSlot.captured
+        every { sharedPreferences.getString("admin_pin_salt", null) } returns saltSlot.captured
+        
+        assertFalse(authPreferences.verifyAdminPin("99999"))
+    }
+
+    // === Restricted Mode Tests ===
+
+    @Test
+    fun `isRestrictedMode returns false by default`() {
+        every { sharedPreferences.getBoolean("restricted_mode", false) } returns false
+        
+        assertFalse(authPreferences.isRestrictedMode())
+    }
+
+    @Test
+    fun `isRestrictedMode returns true when set`() {
+        every { sharedPreferences.getBoolean("restricted_mode", false) } returns true
+        
+        assertTrue(authPreferences.isRestrictedMode())
+    }
+
+    @Test
+    fun `setRestrictedMode stores the value`() {
+        every { editor.putBoolean("restricted_mode", true) } returns editor
+        
+        authPreferences.setRestrictedMode(true)
+        
+        verify { editor.putBoolean("restricted_mode", true) }
+        verify { editor.apply() }
+    }
+
+    // === Restricted Mode StateFlow Tests ===
+
+    @Test
+    fun `restrictedModeFlow initial value matches stored preference`() {
+        every { sharedPreferences.getBoolean("restricted_mode", false) } returns true
+        
+        val newAuthPrefs = AuthPreferencesImpl(context)
+        
+        assertTrue(newAuthPrefs.restrictedModeFlow.value)
+    }
+
+    @Test
+    fun `setRestrictedMode updates restrictedModeFlow value`() {
+        every { sharedPreferences.getBoolean("restricted_mode", false) } returns false
+        every { editor.putBoolean("restricted_mode", true) } returns editor
+        
+        val newAuthPrefs = AuthPreferencesImpl(context)
+        assertFalse(newAuthPrefs.restrictedModeFlow.value)
+        
+        newAuthPrefs.setRestrictedMode(true)
+        
+        assertTrue(newAuthPrefs.restrictedModeFlow.value)
+    }
+
+    @Test
+    fun `setRestrictedMode to false updates restrictedModeFlow value`() {
+        every { sharedPreferences.getBoolean("restricted_mode", false) } returns true
+        every { editor.putBoolean("restricted_mode", false) } returns editor
+        
+        val newAuthPrefs = AuthPreferencesImpl(context)
+        assertTrue(newAuthPrefs.restrictedModeFlow.value)
+        
+        newAuthPrefs.setRestrictedMode(false)
+        
+        assertFalse(newAuthPrefs.restrictedModeFlow.value)
+    }
 }

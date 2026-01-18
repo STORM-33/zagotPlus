@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.zagot.zagotplus.Config
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.SecretKeyFactory
@@ -29,6 +32,18 @@ interface AuthPreferences {
     fun isAuthenticated(): Boolean
     fun isSessionValid(): Boolean
     fun getSessionRemainingMinutes(): Int
+    
+    // Admin password (5-digit)
+    fun isAdminPinSet(): Boolean
+    fun setAdminPin(pin: String)
+    fun verifyAdminPin(pin: String): Boolean
+    
+    // Restricted mode
+    fun isRestrictedMode(): Boolean
+    fun setRestrictedMode(restricted: Boolean)
+    
+    // Reactive state for restricted mode
+    val restrictedModeFlow: StateFlow<Boolean>
 }
 
 /**
@@ -58,6 +73,10 @@ class AuthPreferencesImpl @Inject constructor(
     // Session start time for timeout tracking
     @Volatile
     private var sessionStartTime: Long = 0
+    
+    // Reactive state for restricted mode
+    private val _restrictedModeFlow = MutableStateFlow(prefs.getBoolean(KEY_RESTRICTED_MODE, false))
+    override val restrictedModeFlow: StateFlow<Boolean> = _restrictedModeFlow.asStateFlow()
 
     override fun isPinSet(): Boolean {
         return prefs.contains(KEY_PIN_HASH)
@@ -218,6 +237,46 @@ class AuthPreferencesImpl @Inject constructor(
         return if (remaining > 0) (remaining / 60_000).toInt() else 0
     }
 
+    // === Admin PIN Management ===
+    
+    override fun isAdminPinSet(): Boolean {
+        return prefs.contains(KEY_ADMIN_PIN_HASH)
+    }
+
+    override fun setAdminPin(pin: String) {
+        require(pin.length == Config.ADMIN_PIN_LENGTH) {
+            "Admin PIN must be ${Config.ADMIN_PIN_LENGTH} digits"
+        }
+        require(pin.all { it.isDigit() }) { "Admin PIN must contain only digits" }
+        
+        val salt = generateSalt()
+        val hash = hashPinWithPbkdf2(pin, salt)
+        prefs.edit()
+            .putString(KEY_ADMIN_PIN_SALT, Base64.getEncoder().encodeToString(salt))
+            .putString(KEY_ADMIN_PIN_HASH, hash)
+            .apply()
+    }
+
+    override fun verifyAdminPin(pin: String): Boolean {
+        val storedHash = prefs.getString(KEY_ADMIN_PIN_HASH, null) ?: return false
+        val storedSaltBase64 = prefs.getString(KEY_ADMIN_PIN_SALT, null) ?: return false
+        
+        val salt = Base64.getDecoder().decode(storedSaltBase64)
+        val inputHash = hashPinWithPbkdf2(pin, salt)
+        return storedHash == inputHash
+    }
+
+    // === Restricted Mode Management ===
+    
+    override fun isRestrictedMode(): Boolean {
+        return prefs.getBoolean(KEY_RESTRICTED_MODE, false)
+    }
+
+    override fun setRestrictedMode(restricted: Boolean) {
+        prefs.edit().putBoolean(KEY_RESTRICTED_MODE, restricted).apply()
+        _restrictedModeFlow.value = restricted
+    }
+
     companion object {
         private const val PREFS_NAME = "zagot_auth_prefs"
         private const val KEY_PIN_HASH = "pin_hash"
@@ -226,6 +285,9 @@ class AuthPreferencesImpl @Inject constructor(
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
         private const val KEY_PIN_LENGTH = "pin_length"
+        private const val KEY_ADMIN_PIN_HASH = "admin_pin_hash"
+        private const val KEY_ADMIN_PIN_SALT = "admin_pin_salt"
+        private const val KEY_RESTRICTED_MODE = "restricted_mode"
 
         // PIN length constants - reference Config for values, expose for external use
         /** Minimum PIN length - delegates to Config */

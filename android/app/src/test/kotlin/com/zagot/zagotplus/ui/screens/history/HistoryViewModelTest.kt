@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.history
 
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.DateRange
 import com.zagot.zagotplus.ui.components.DateRangePreset
@@ -42,6 +43,7 @@ class HistoryViewModelTest {
     private lateinit var saleBatchRepository: SaleBatchRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
+    private lateinit var devicePreferences: DevicePreferences
     private lateinit var viewModel: HistoryViewModel
     private val testDispatcher = UnconfinedTestDispatcher()
     private val testScope = TestScope(testDispatcher)
@@ -60,6 +62,13 @@ class HistoryViewModelTest {
     private val testLocation = Location(
         id = UUID.randomUUID(),
         name = "Кіоск 1",
+        type = LocationType.KIOSK,
+        createdAt = Instant.now()
+    )
+
+    private val testLocation2 = Location(
+        id = UUID.randomUUID(),
+        name = "Кіоск 2",
         type = LocationType.KIOSK,
         createdAt = Instant.now()
     )
@@ -115,9 +124,10 @@ class HistoryViewModelTest {
         saleBatchRepository = mockk()
         productRepository = mockk()
         locationRepository = mockk()
+        devicePreferences = mockk()
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
-        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
+        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation, testLocation2))
         every { purchaseBatchRepository.observeTotalBatchCount() } returns purchaseBatchCountFlow
         every { saleBatchRepository.observeTotalBatchCount() } returns saleBatchCountFlow
         coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 2
@@ -126,6 +136,9 @@ class HistoryViewModelTest {
         coEvery { saleBatchRepository.getAllBatchesPaginated(any(), any()) } returns emptyList()
         // Return empty list for unbatched transactions by default to avoid virtual batches
         coEvery { transactionRepository.getFilteredTransactions(any(), any(), any()) } returns emptyList()
+        // Mock device preferences for restricted mode
+        every { devicePreferences.getSelectedLocationId() } returns testLocation.id
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation.id)
     }
 
     @After
@@ -136,7 +149,7 @@ class HistoryViewModelTest {
     }
 
     private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository)
+        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository, devicePreferences)
     }
 
     @Test
@@ -352,5 +365,87 @@ class HistoryViewModelTest {
 
         assertNotNull(viewModel.uiState.value.error)
         assertEquals("Void failed", viewModel.uiState.value.error)
+    }
+
+    // === Restricted Mode Tests ===
+
+    @Test
+    fun `setRestrictedMode sets location filter to device location`() = testScope.runTest {
+        every { devicePreferences.getSelectedLocationId() } returns testLocation.id
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation.id)
+        
+        viewModel = createViewModel()
+        
+        // Initially location filter is null (all locations)
+        assertNull(viewModel.uiState.value.selectedLocationId)
+        
+        // Enable restricted mode
+        viewModel.setRestrictedMode(true)
+        
+        // Location filter should be set to device location
+        assertEquals(testLocation.id, viewModel.uiState.value.selectedLocationId)
+    }
+
+    @Test
+    fun `location change in restricted mode updates filter and reloads`() = testScope.runTest {
+        val locationFlow = MutableStateFlow(testLocation.id)
+        every { devicePreferences.selectedLocationIdFlow } returns locationFlow
+        every { devicePreferences.getSelectedLocationId() } returns testLocation.id
+        
+        viewModel = createViewModel()
+        
+        // Enable restricted mode
+        viewModel.setRestrictedMode(true)
+        assertEquals(testLocation.id, viewModel.uiState.value.selectedLocationId)
+        
+        // Change location in preferences
+        every { devicePreferences.getSelectedLocationId() } returns testLocation2.id
+        locationFlow.value = testLocation2.id
+        
+        // Wait for the flow to be collected
+        testScheduler.advanceUntilIdle()
+        
+        // Should update filter to new location
+        assertEquals(testLocation2.id, viewModel.uiState.value.selectedLocationId)
+    }
+
+    @Test
+    fun `location change when not in restricted mode does not affect filter`() = testScope.runTest {
+        val locationFlow = MutableStateFlow(testLocation.id)
+        every { devicePreferences.selectedLocationIdFlow } returns locationFlow
+        
+        viewModel = createViewModel()
+        
+        // Not in restricted mode, set a specific location filter
+        viewModel.setLocationFilter(testLocation2.id)
+        assertEquals(testLocation2.id, viewModel.uiState.value.selectedLocationId)
+        
+        // Change device location - should NOT affect filter since not in restricted mode
+        locationFlow.value = testLocation.id
+        testScheduler.advanceUntilIdle()
+        
+        // Should still be on location2
+        assertEquals(testLocation2.id, viewModel.uiState.value.selectedLocationId)
+    }
+
+    @Test
+    fun `exiting restricted mode resets location filter to all locations`() = testScope.runTest {
+        every { devicePreferences.getSelectedLocationId() } returns testLocation.id
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation.id)
+        
+        viewModel = createViewModel()
+        
+        // Initially location filter is null (all locations)
+        assertNull(viewModel.uiState.value.selectedLocationId)
+        
+        // Enable restricted mode
+        viewModel.setRestrictedMode(true)
+        assertEquals(testLocation.id, viewModel.uiState.value.selectedLocationId)
+        
+        // Exit restricted mode
+        viewModel.setRestrictedMode(false)
+        
+        // Location filter should be reset to null (all locations)
+        assertNull(viewModel.uiState.value.selectedLocationId)
     }
 }

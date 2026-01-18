@@ -2,6 +2,7 @@ package com.zagot.zagotplus.ui.screens.purchase
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
@@ -9,6 +10,7 @@ import com.zagot.zagotplus.domain.repository.CashRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -40,23 +43,40 @@ data class PurchaseUiState(
 class PurchaseViewModel @Inject constructor(
     private val purchaseBatchRepository: PurchaseBatchRepository,
     private val cashRepository: CashRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val devicePreferences: DevicePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PurchaseUiState())
     val uiState: StateFlow<PurchaseUiState> = _uiState.asStateFlow()
 
+    private var dataObservationJob: Job? = null
+
     init {
-        observeData()
+        observeLocationChanges()
     }
 
-    private fun observeData() {
+    /**
+     * Observe location changes and restart data observation when location changes.
+     */
+    private fun observeLocationChanges() {
         viewModelScope.launch {
+            devicePreferences.selectedLocationIdFlow.collect { locationId ->
+                locationId?.let { observeData(it) }
+            }
+        }
+    }
+
+    private fun observeData(locationId: UUID) {
+        // Cancel previous observation job
+        dataObservationJob?.cancel()
+        
+        dataObservationJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             combine(
-                cashRepository.getTotalBalance(),
-                purchaseBatchRepository.observeTodaysProductTotals(),
-                purchaseBatchRepository.observeTodaysBatches(),
+                cashRepository.getBalance(locationId),
+                purchaseBatchRepository.observeTodaysProductTotals(locationId),
+                purchaseBatchRepository.observeTodaysBatches(locationId),
                 productRepository.getActiveProducts()
             ) { balance, productTotals, batches, products ->
                 val productMap = products.associateBy { it.id }
@@ -121,6 +141,6 @@ class PurchaseViewModel @Inject constructor(
     }
 
     fun refresh() {
-        observeData()
+        devicePreferences.getSelectedLocationId()?.let { observeData(it) }
     }
 }

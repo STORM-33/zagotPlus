@@ -43,6 +43,13 @@ class SaleBatchRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun observeTodaysBatches(locationId: UUID): Flow<List<SaleBatch>> {
+        val (startMillis, endMillis) = getTodayRange()
+        return saleBatchDao.observeBatchesInRangeByLocation(startMillis, endMillis, locationId).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
     override suspend fun getTodaysBatches(): List<SaleBatch> {
         val (startMillis, endMillis) = getTodayRange()
         return saleBatchDao.getBatchesInRange(startMillis, endMillis).map { it.toDomain() }

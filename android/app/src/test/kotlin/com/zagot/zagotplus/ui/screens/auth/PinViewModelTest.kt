@@ -77,6 +77,7 @@ class PinViewModelTest {
     @Test
     fun `matching confirmation PIN authenticates user`() {
         every { authPreferences.isPinSet() } returns false
+        every { authPreferences.isAdminPinSet() } returns true
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
         viewModel = PinViewModel(authPreferences)
@@ -128,6 +129,7 @@ class PinViewModelTest {
     @Test
     fun `correct PIN verification authenticates user`() {
         every { authPreferences.isPinSet() } returns true
+        every { authPreferences.isAdminPinSet() } returns true
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
         every { authPreferences.verifyPin("1234") } returns true

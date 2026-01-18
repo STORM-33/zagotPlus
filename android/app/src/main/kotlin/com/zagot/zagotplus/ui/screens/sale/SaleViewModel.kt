@@ -2,15 +2,18 @@ package com.zagot.zagotplus.ui.screens.sale
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -25,20 +28,37 @@ data class SaleUiState(
 
 @HiltViewModel
 class SaleViewModel @Inject constructor(
-    private val saleBatchRepository: SaleBatchRepository
+    private val saleBatchRepository: SaleBatchRepository,
+    private val devicePreferences: DevicePreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SaleUiState())
     val uiState: StateFlow<SaleUiState> = _uiState.asStateFlow()
 
+    private var dataObservationJob: Job? = null
+
     init {
-        observeTodaysBatches()
+        observeLocationChanges()
     }
 
-    private fun observeTodaysBatches() {
+    /**
+     * Observe location changes and restart data observation when location changes.
+     */
+    private fun observeLocationChanges() {
         viewModelScope.launch {
+            devicePreferences.selectedLocationIdFlow.collect { locationId ->
+                locationId?.let { observeTodaysBatches(it) }
+            }
+        }
+    }
+
+    private fun observeTodaysBatches(locationId: UUID) {
+        // Cancel previous observation job
+        dataObservationJob?.cancel()
+        
+        dataObservationJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            saleBatchRepository.observeTodaysBatches()
+            saleBatchRepository.observeTodaysBatches(locationId)
                 .catch { e ->
                     _uiState.update {
                         it.copy(
@@ -71,6 +91,6 @@ class SaleViewModel @Inject constructor(
     }
 
     fun refresh() {
-        observeTodaysBatches()
+        devicePreferences.getSelectedLocationId()?.let { observeTodaysBatches(it) }
     }
 }

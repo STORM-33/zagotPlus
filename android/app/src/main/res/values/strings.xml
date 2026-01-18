@@ -12,6 +12,9 @@
     <string name="pin_error_locked_seconds">Too many failed attempts. Wait %d seconds.</string>
     <string name="pin_error_locked_minutes">Too many failed attempts. Wait %d minutes.</string>
     <string name="pin_min_length_error">PIN must be at least %d digits</string>
+    <string name="admin_pin_set_title">Встановіть пароль адміністратора</string>
+    <string name="admin_pin_confirm_title">Підтвердіть пароль адміністратора</string>
+    <string name="admin_pin_verify_title">Введіть пароль адміністратора</string>
     
     <!-- Cash Screen -->
     <string name="cash_deposit">Deposit</string>

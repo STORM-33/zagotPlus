@@ -64,6 +64,19 @@ interface SaleBatchDao {
     """)
     suspend fun getBatchesInRange(startMillis: Long, endMillis: Long): List<SaleBatchEntity>
 
+    /**
+     * Observe batches for a specific location within a date range (index-friendly).
+     * Excludes voided batches.
+     */
+    @Query("""
+        SELECT * FROM sale_batches 
+        WHERE created_at >= :startMillis AND created_at < :endMillis
+          AND location_id = :locationId
+          AND is_voided = 0
+        ORDER BY created_at DESC
+    """)
+    fun observeBatchesInRangeByLocation(startMillis: Long, endMillis: Long, locationId: UUID): Flow<List<SaleBatchEntity>>
+
     @Query("SELECT * FROM sale_batches WHERE synced_at IS NULL")
     suspend fun getUnsynced(): List<SaleBatchEntity>
 

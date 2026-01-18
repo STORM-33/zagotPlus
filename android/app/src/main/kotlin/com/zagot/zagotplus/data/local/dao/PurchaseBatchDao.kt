@@ -64,6 +64,19 @@ interface PurchaseBatchDao {
     """)
     suspend fun getBatchesInRange(startMillis: Long, endMillis: Long): List<PurchaseBatchEntity>
 
+    /**
+     * Observe batches for a specific location within a date range (index-friendly).
+     * Excludes voided batches.
+     */
+    @Query("""
+        SELECT * FROM purchase_batches 
+        WHERE created_at >= :startMillis AND created_at < :endMillis
+          AND location_id = :locationId
+          AND is_voided = 0
+        ORDER BY created_at DESC
+    """)
+    fun observeBatchesInRangeByLocation(startMillis: Long, endMillis: Long, locationId: UUID): Flow<List<PurchaseBatchEntity>>
+
     @Query("SELECT * FROM purchase_batches WHERE synced_at IS NULL")
     suspend fun getUnsynced(): List<PurchaseBatchEntity>
 

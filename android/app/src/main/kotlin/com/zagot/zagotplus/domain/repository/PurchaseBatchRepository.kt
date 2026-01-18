@@ -22,10 +22,21 @@ interface PurchaseBatchRepository {
     fun observeTodaysBatches(): Flow<List<PurchaseBatch>>
 
     /**
+     * Observe today's batches for a specific location ordered by creation date (newest first).
+     */
+    fun observeTodaysBatches(locationId: UUID): Flow<List<PurchaseBatch>>
+
+    /**
      * Observe today's purchase totals grouped by product.
      * Returns list with product name resolved.
      */
     fun observeTodaysProductTotals(): Flow<List<ProductDailyTotal>>
+
+    /**
+     * Observe today's purchase totals for a specific location grouped by product.
+     * Returns list with product name resolved.
+     */
+    fun observeTodaysProductTotals(locationId: UUID): Flow<List<ProductDailyTotal>>
 
     /**
      * Get today's batches.

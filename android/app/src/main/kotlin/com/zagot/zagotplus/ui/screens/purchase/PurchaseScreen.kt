@@ -45,7 +45,8 @@ import java.text.DecimalFormat
 fun PurchaseScreen(
     modifier: Modifier = Modifier,
     viewModel: PurchaseViewModel = hiltViewModel(),
-    onNavigateToNewClient: () -> Unit = {}
+    onNavigateToNewClient: () -> Unit = {},
+    isRestrictedMode: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -157,7 +158,8 @@ fun PurchaseScreen(
                                 .takeIf { it.isNotEmpty() }
                                 ?.reduce { acc, profit -> acc + profit },
                             weightFormat = weightFormat,
-                            currencyFormat = currencyFormat
+                            currencyFormat = currencyFormat,
+                            isRestrictedMode = isRestrictedMode
                         )
                     }
                 }
@@ -261,6 +263,7 @@ private fun SummaryTotalItem(
     plannedProfit: BigDecimal?,
     weightFormat: DecimalFormat,
     currencyFormat: DecimalFormat,
+    isRestrictedMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -292,21 +295,23 @@ private fun SummaryTotalItem(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            // Planned profit row
-            Text(
-                text = plannedProfit?.let { "Плановий прибуток: ₴${currencyFormat.format(it)}" }
-                    ?: "Плановий прибуток: —",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                color = if (plannedProfit != null && plannedProfit > BigDecimal.ZERO)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
+            // Planned profit row - hide in restricted mode
+            if (!isRestrictedMode) {
+                Text(
+                    text = plannedProfit?.let { "Плановий прибуток: ₴${currencyFormat.format(it)}" }
+                        ?: "Плановий прибуток: —",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    color = if (plannedProfit != null && plannedProfit > BigDecimal.ZERO)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+            }
         }
     }
 }

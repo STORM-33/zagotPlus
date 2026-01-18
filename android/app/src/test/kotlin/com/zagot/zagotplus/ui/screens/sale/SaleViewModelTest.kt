@@ -1,11 +1,13 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,6 +25,7 @@ import java.util.UUID
 class SaleViewModelTest {
 
     private lateinit var saleBatchRepository: SaleBatchRepository
+    private lateinit var devicePreferences: DevicePreferences
     private lateinit var viewModel: SaleViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -45,12 +48,15 @@ class SaleViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         saleBatchRepository = mockk()
+        devicePreferences = mockk()
 
-        every { saleBatchRepository.observeTodaysBatches() } returns flowOf(listOf(testSaleBatch))
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocationId)
+        every { devicePreferences.getSelectedLocationId() } returns testLocationId
+        every { saleBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(listOf(testSaleBatch))
     }
 
     private fun createViewModel(): SaleViewModel {
-        return SaleViewModel(saleBatchRepository)
+        return SaleViewModel(saleBatchRepository, devicePreferences)
     }
 
     @Test
@@ -88,7 +94,7 @@ class SaleViewModelTest {
     @Test
     fun `handles error during loading`() = runTest {
         // Mock with flow that throws on collection
-        every { saleBatchRepository.observeTodaysBatches() } returns flow<List<SaleBatch>> {
+        every { saleBatchRepository.observeTodaysBatches(testLocationId) } returns flow<List<SaleBatch>> {
             throw RuntimeException("Database error")
         }
 
@@ -103,7 +109,7 @@ class SaleViewModelTest {
 
     @Test
     fun `dismissError clears error`() = runTest {
-        every { saleBatchRepository.observeTodaysBatches() } returns flow<List<SaleBatch>> {
+        every { saleBatchRepository.observeTodaysBatches(testLocationId) } returns flow<List<SaleBatch>> {
             throw RuntimeException("Database error")
         }
 
@@ -117,7 +123,7 @@ class SaleViewModelTest {
 
     @Test
     fun `empty state when no batches`() = runTest {
-        every { saleBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+        every { saleBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()

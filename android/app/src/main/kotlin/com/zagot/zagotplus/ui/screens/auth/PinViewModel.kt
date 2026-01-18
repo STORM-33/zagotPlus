@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.AuthPreferencesImpl
+import com.zagot.zagotplus.Config
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,15 +23,23 @@ class PinViewModel @Inject constructor(
 
     init {
         val isSettingPin = !authPreferences.isPinSet()
+        val needsAdminPin = authPreferences.isPinSet() && !authPreferences.isAdminPinSet()
         val isLockedOut = authPreferences.isLockedOut()
         val failedAttempts = authPreferences.getFailedAttempts()
         
+        val initialMode = when {
+            isSettingPin -> PinMode.SET_PIN
+            needsAdminPin -> PinMode.VERIFY_PIN  // First verify, then set admin PIN
+            else -> PinMode.VERIFY_PIN
+        }
+        
         _uiState.value = _uiState.value.copy(
-            mode = if (isSettingPin) PinMode.SET_PIN else PinMode.VERIFY_PIN,
+            mode = initialMode,
             isLockedOut = isLockedOut,
             failedAttempts = failedAttempts,
             minPinLength = AuthPreferencesImpl.MIN_PIN_LENGTH,
-            maxPinLength = AuthPreferencesImpl.MAX_PIN_LENGTH
+            maxPinLength = AuthPreferencesImpl.MAX_PIN_LENGTH,
+            expectedPinLength = Config.MIN_PIN_LENGTH
         )
         
         if (isLockedOut) {
@@ -40,7 +49,8 @@ class PinViewModel @Inject constructor(
 
     fun onDigitPressed(digit: Int) {
         val currentState = _uiState.value
-        if (currentState.currentPin.length >= currentState.maxPinLength || currentState.isLockedOut) return
+        val maxLen = currentState.expectedPinLength
+        if (currentState.currentPin.length >= maxLen || currentState.isLockedOut) return
 
         val newPin = currentState.currentPin + digit.toString()
         _uiState.value = currentState.copy(
@@ -48,12 +58,15 @@ class PinViewModel @Inject constructor(
             errorMessage = null
         )
 
-        // Auto-submit when PIN reaches max length
-        if (newPin.length == currentState.maxPinLength) {
+        // Auto-submit when PIN reaches expected length
+        if (newPin.length == maxLen) {
             when (currentState.mode) {
                 PinMode.SET_PIN -> handleSetPinComplete(newPin)
                 PinMode.CONFIRM_PIN -> handleConfirmPinComplete(newPin)
                 PinMode.VERIFY_PIN -> handleVerifyPinComplete(newPin)
+                PinMode.SET_ADMIN_PIN -> handleSetAdminPinComplete(newPin)
+                PinMode.CONFIRM_ADMIN_PIN -> handleConfirmAdminPinComplete(newPin)
+                PinMode.VERIFY_ADMIN_PIN -> handleVerifyAdminPinComplete(newPin)
             }
         }
     }
@@ -75,10 +88,11 @@ class PinViewModel @Inject constructor(
     fun onConfirmPressed() {
         val currentState = _uiState.value
         val pin = currentState.currentPin
+        val expectedLen = currentState.expectedPinLength
         
-        if (pin.length < currentState.minPinLength) {
+        if (pin.length < expectedLen) {
             _uiState.value = currentState.copy(
-                errorMessage = "PIN має бути мінімум ${currentState.minPinLength} цифр"
+                errorMessage = "PIN має бути $expectedLen цифр"
             )
             return
         }
@@ -87,6 +101,9 @@ class PinViewModel @Inject constructor(
             PinMode.SET_PIN -> handleSetPinComplete(pin)
             PinMode.CONFIRM_PIN -> handleConfirmPinComplete(pin)
             PinMode.VERIFY_PIN -> handleVerifyPinComplete(pin)
+            PinMode.SET_ADMIN_PIN -> handleSetAdminPinComplete(pin)
+            PinMode.CONFIRM_ADMIN_PIN -> handleConfirmAdminPinComplete(pin)
+            PinMode.VERIFY_ADMIN_PIN -> handleVerifyAdminPinComplete(pin)
         }
     }
 
@@ -102,7 +119,18 @@ class PinViewModel @Inject constructor(
         val tempPin = _uiState.value.tempPin
         if (pin == tempPin) {
             authPreferences.setPin(pin)
-            _uiState.value = _uiState.value.copy(isAuthenticated = true)
+            // After setting local PIN, require admin PIN setup
+            if (!authPreferences.isAdminPinSet()) {
+                _uiState.value = _uiState.value.copy(
+                    mode = PinMode.SET_ADMIN_PIN,
+                    currentPin = "",
+                    tempPin = null,
+                    expectedPinLength = Config.ADMIN_PIN_LENGTH,
+                    errorMessage = null
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(isAuthenticated = true)
+            }
         } else {
             _uiState.value = _uiState.value.copy(
                 currentPin = "",
@@ -116,10 +144,21 @@ class PinViewModel @Inject constructor(
     private fun handleVerifyPinComplete(pin: String) {
         if (authPreferences.verifyPin(pin)) {
             authPreferences.clearLockout()
-            _uiState.value = _uiState.value.copy(
-                isAuthenticated = true,
-                failedAttempts = 0
-            )
+            // Check if admin PIN needs to be set (migration for existing users)
+            if (!authPreferences.isAdminPinSet()) {
+                _uiState.value = _uiState.value.copy(
+                    mode = PinMode.SET_ADMIN_PIN,
+                    currentPin = "",
+                    failedAttempts = 0,
+                    expectedPinLength = Config.ADMIN_PIN_LENGTH,
+                    errorMessage = null
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticated = true,
+                    failedAttempts = 0
+                )
+            }
         } else {
             authPreferences.recordFailedAttempt()
             val failedAttempts = authPreferences.getFailedAttempts()
@@ -147,6 +186,44 @@ class PinViewModel @Inject constructor(
                     failedAttempts = failedAttempts
                 )
             }
+        }
+    }
+
+    private fun handleSetAdminPinComplete(pin: String) {
+        _uiState.value = _uiState.value.copy(
+            mode = PinMode.CONFIRM_ADMIN_PIN,
+            currentPin = "",
+            tempPin = pin
+        )
+    }
+
+    private fun handleConfirmAdminPinComplete(pin: String) {
+        val tempPin = _uiState.value.tempPin
+        if (pin == tempPin) {
+            authPreferences.setAdminPin(pin)
+            _uiState.value = _uiState.value.copy(isAuthenticated = true)
+        } else {
+            _uiState.value = _uiState.value.copy(
+                currentPin = "",
+                errorMessage = "Паролі не співпадають. Спробуйте ще раз.",
+                mode = PinMode.SET_ADMIN_PIN,
+                tempPin = null
+            )
+        }
+    }
+
+    private fun handleVerifyAdminPinComplete(pin: String) {
+        if (authPreferences.verifyAdminPin(pin)) {
+            _uiState.value = _uiState.value.copy(
+                adminPinVerified = true,
+                currentPin = "",
+                errorMessage = null
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(
+                currentPin = "",
+                errorMessage = "Неправильний пароль адміністратора"
+            )
         }
     }
 
@@ -193,14 +270,19 @@ data class PinUiState(
     val isAuthenticated: Boolean = false,
     val minPinLength: Int = 4,
     val maxPinLength: Int = 4,
-    val biometricPromptShown: Boolean = false
+    val biometricPromptShown: Boolean = false,
+    val adminPinVerified: Boolean = false,  // For protected action verification
+    val expectedPinLength: Int = 4  // Dynamic based on current mode
 ) {
     val canSubmit: Boolean
         get() = currentPin.length >= minPinLength && !isLockedOut
 }
 
 enum class PinMode {
-    SET_PIN,      // First-time PIN setup
-    CONFIRM_PIN,  // Confirm new PIN
-    VERIFY_PIN    // Normal login
+    SET_PIN,           // First-time PIN setup
+    CONFIRM_PIN,       // Confirm new PIN
+    VERIFY_PIN,        // Normal login
+    SET_ADMIN_PIN,     // Admin PIN setup (after local PIN)
+    CONFIRM_ADMIN_PIN, // Confirm admin PIN
+    VERIFY_ADMIN_PIN   // Verify admin PIN (for protected actions)
 }

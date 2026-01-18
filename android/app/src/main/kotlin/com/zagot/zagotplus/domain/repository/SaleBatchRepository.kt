@@ -21,6 +21,11 @@ interface SaleBatchRepository {
     fun observeTodaysBatches(): Flow<List<SaleBatch>>
 
     /**
+     * Observe today's batches for a specific location ordered by creation date (newest first).
+     */
+    fun observeTodaysBatches(locationId: UUID): Flow<List<SaleBatch>>
+
+    /**
      * Get today's batches.
      */
     suspend fun getTodaysBatches(): List<SaleBatch>

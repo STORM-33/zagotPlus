@@ -118,6 +118,7 @@ class InventoryViewModelTest {
         every { transactionRepository.getProductAvgPurchasePrices() } returns flowOf(emptyMap())
         every { syncStatusRepository.syncStatus } returns syncStatusFlow
         every { devicePreferences.getSelectedLocationId() } returns testLocation1.id
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation1.id)
     }
 
     @After
@@ -271,5 +272,87 @@ class InventoryViewModelTest {
 
         // State should be unchanged
         assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
+    }
+
+    // === Restricted Mode Tests ===
+
+    @Test
+    fun `setRestrictedMode forces device location selection`() = testScope.runTest {
+        // Set device location to location2
+        every { devicePreferences.getSelectedLocationId() } returns testLocation2.id
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation2.id)
+        
+        viewModel = createViewModel()
+        
+        // Initially selects based on device preference
+        assertEquals(testLocation2, viewModel.uiState.value.selectedLocation)
+        
+        // Switch to a different location
+        viewModel.selectLocation(testLocation1)
+        assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
+        
+        // Now call setRestrictedMode - should force back to device location
+        viewModel.setRestrictedMode(true)
+        
+        assertEquals(testLocation2, viewModel.uiState.value.selectedLocation)
+        assertEquals(InventoryViewMode.BY_LOCATION, viewModel.uiState.value.viewMode)
+    }
+
+    @Test
+    fun `setRestrictedMode switches from total view to by_location`() = testScope.runTest {
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation1.id)
+        
+        viewModel = createViewModel()
+        
+        // First verify we start in BY_LOCATION mode
+        assertEquals(InventoryViewMode.BY_LOCATION, viewModel.uiState.value.viewMode)
+        
+        // Call setRestrictedMode - should remain in BY_LOCATION mode and use device location
+        viewModel.setRestrictedMode(true)
+        
+        assertEquals(InventoryViewMode.BY_LOCATION, viewModel.uiState.value.viewMode)
+        assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
+    }
+
+    @Test
+    fun `location change in restricted mode updates selected location`() = testScope.runTest {
+        val locationFlow = MutableStateFlow(testLocation1.id)
+        every { devicePreferences.selectedLocationIdFlow } returns locationFlow
+        every { devicePreferences.getSelectedLocationId() } returns testLocation1.id
+        
+        viewModel = createViewModel()
+        
+        // Enable restricted mode
+        viewModel.setRestrictedMode(true)
+        assertEquals(testLocation1, viewModel.uiState.value.selectedLocation)
+        
+        // Change location in preferences
+        every { devicePreferences.getSelectedLocationId() } returns testLocation2.id
+        locationFlow.value = testLocation2.id
+        
+        // Wait for the flow to be collected
+        testScheduler.advanceUntilIdle()
+        
+        // Should update to new location
+        assertEquals(testLocation2, viewModel.uiState.value.selectedLocation)
+    }
+
+    @Test
+    fun `location change when not in restricted mode does not force location`() = testScope.runTest {
+        val locationFlow = MutableStateFlow(testLocation1.id)
+        every { devicePreferences.selectedLocationIdFlow } returns locationFlow
+        
+        viewModel = createViewModel()
+        
+        // Not in restricted mode, manually select location2
+        viewModel.selectLocation(testLocation2)
+        assertEquals(testLocation2, viewModel.uiState.value.selectedLocation)
+        
+        // Change device location - should NOT affect current selection since not in restricted mode
+        locationFlow.value = testLocation1.id
+        testScheduler.advanceUntilIdle()
+        
+        // Should still be on location2
+        assertEquals(testLocation2, viewModel.uiState.value.selectedLocation)
     }
 }

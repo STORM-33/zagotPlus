@@ -73,6 +73,9 @@ fun PinScreen(
                     PinMode.SET_PIN -> stringResource(R.string.pin_set_title)
                     PinMode.CONFIRM_PIN -> stringResource(R.string.pin_confirm_title)
                     PinMode.VERIFY_PIN -> stringResource(R.string.pin_verify_title)
+                    PinMode.SET_ADMIN_PIN -> stringResource(R.string.admin_pin_set_title)
+                    PinMode.CONFIRM_ADMIN_PIN -> stringResource(R.string.admin_pin_confirm_title)
+                    PinMode.VERIFY_ADMIN_PIN -> stringResource(R.string.admin_pin_verify_title)
                 },
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 32.dp)
@@ -80,6 +83,7 @@ fun PinScreen(
 
             PinDots(
                 pinLength = uiState.currentPin.length,
+                expectedLength = uiState.expectedPinLength,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
 
@@ -114,13 +118,14 @@ fun PinScreen(
 @Composable
 private fun PinDots(
     pinLength: Int,
+    expectedLength: Int = 4,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        repeat(4) { index ->
+        repeat(expectedLength) { index ->
             Box(
                 modifier = Modifier
                     .size(16.dp)

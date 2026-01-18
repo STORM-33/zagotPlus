@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.repository.CashRepository
@@ -9,6 +10,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -27,8 +29,10 @@ class PurchaseViewModelTest {
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
     private lateinit var cashRepository: CashRepository
     private lateinit var productRepository: ProductRepository
+    private lateinit var devicePreferences: DevicePreferences
     private lateinit var viewModel: PurchaseViewModel
     private val testDispatcher = StandardTestDispatcher()
+    private val testLocationId = UUID.randomUUID()
 
     private val testBatch = PurchaseBatch(
         id = UUID.randomUUID(),
@@ -56,18 +60,21 @@ class PurchaseViewModelTest {
         purchaseBatchRepository = mockk()
         cashRepository = mockk()
         productRepository = mockk()
+        devicePreferences = mockk()
         every { productRepository.getActiveProducts() } returns flowOf(emptyList())
+        every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocationId)
+        every { devicePreferences.getSelectedLocationId() } returns testLocationId
     }
 
     private fun createViewModel(): PurchaseViewModel {
-        return PurchaseViewModel(purchaseBatchRepository, cashRepository, productRepository)
+        return PurchaseViewModel(purchaseBatchRepository, cashRepository, productRepository, devicePreferences)
     }
 
     @Test
     fun `loads cash balance and product totals on init`() = runTest {
-        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("5000.00"))
-        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(listOf(testProductTotal))
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(listOf(testBatch))
+        every { cashRepository.getBalance(testLocationId) } returns flowOf(BigDecimal("5000.00"))
+        every { purchaseBatchRepository.observeTodaysProductTotals(testLocationId) } returns flowOf(listOf(testProductTotal))
+        every { purchaseBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(listOf(testBatch))
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -82,9 +89,9 @@ class PurchaseViewModelTest {
 
     @Test
     fun `shows empty state when no purchases today`() = runTest {
-        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal("1000.00"))
-        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+        every { cashRepository.getBalance(testLocationId) } returns flowOf(BigDecimal("1000.00"))
+        every { purchaseBatchRepository.observeTodaysProductTotals(testLocationId) } returns flowOf(emptyList())
+        every { purchaseBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -97,9 +104,9 @@ class PurchaseViewModelTest {
 
     @Test
     fun `onNewClientClick sets navigate flag`() = runTest {
-        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
-        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+        every { cashRepository.getBalance(testLocationId) } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals(testLocationId) } returns flowOf(emptyList())
+        every { purchaseBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -111,9 +118,9 @@ class PurchaseViewModelTest {
 
     @Test
     fun `onNavigationHandled clears navigate flag`() = runTest {
-        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
-        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+        every { cashRepository.getBalance(testLocationId) } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals(testLocationId) } returns flowOf(emptyList())
+        every { purchaseBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()
@@ -127,9 +134,9 @@ class PurchaseViewModelTest {
 
     @Test
     fun `dismissError clears error`() = runTest {
-        every { cashRepository.getTotalBalance() } returns flowOf(BigDecimal.ZERO)
-        every { purchaseBatchRepository.observeTodaysProductTotals() } returns flowOf(emptyList())
-        every { purchaseBatchRepository.observeTodaysBatches() } returns flowOf(emptyList())
+        every { cashRepository.getBalance(testLocationId) } returns flowOf(BigDecimal.ZERO)
+        every { purchaseBatchRepository.observeTodaysProductTotals(testLocationId) } returns flowOf(emptyList())
+        every { purchaseBatchRepository.observeTodaysBatches(testLocationId) } returns flowOf(emptyList())
 
         viewModel = createViewModel()
         advanceUntilIdle()

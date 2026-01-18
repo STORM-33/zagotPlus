@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Sync
@@ -39,12 +40,15 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,7 +58,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.sync.SyncStatus
+import com.zagot.zagotplus.ui.components.AdminPinDialog
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -63,6 +69,7 @@ import java.time.format.DateTimeFormatter
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToProducts: () -> Unit,
+    authPreferences: AuthPreferences,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -71,12 +78,65 @@ fun SettingsScreen(
     val dateTimeFormatter = remember {
         DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
     }
+    
+    // State for admin PIN dialogs
+    var showAdminPinForMode by remember { mutableStateOf(false) }
+    var showAdminPinForLocation by remember { mutableStateOf(false) }
+    var showAdminPinForProducts by remember { mutableStateOf(false) }
+    var pendingLocationId by remember { mutableStateOf<java.util.UUID?>(null) }
+    var pendingModeChange by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(uiState.copySuccess) {
         if (uiState.copySuccess) {
             snackbarHostState.showSnackbar("ID скопійовано")
             viewModel.dismissCopySuccess()
         }
+    }
+    
+    // Admin PIN dialog for mode change
+    if (showAdminPinForMode && pendingModeChange != null) {
+        AdminPinDialog(
+            authPreferences = authPreferences,
+            onSuccess = {
+                viewModel.setRestrictedMode(pendingModeChange!!)
+                showAdminPinForMode = false
+                pendingModeChange = null
+            },
+            onDismiss = {
+                showAdminPinForMode = false
+                pendingModeChange = null
+            }
+        )
+    }
+    
+    // Admin PIN dialog for location change (in restricted mode)
+    if (showAdminPinForLocation && pendingLocationId != null) {
+        AdminPinDialog(
+            authPreferences = authPreferences,
+            onSuccess = {
+                viewModel.selectLocation(pendingLocationId!!)
+                showAdminPinForLocation = false
+                pendingLocationId = null
+            },
+            onDismiss = {
+                showAdminPinForLocation = false
+                pendingLocationId = null
+            }
+        )
+    }
+    
+    // Admin PIN dialog for Products access (in restricted mode)
+    if (showAdminPinForProducts) {
+        AdminPinDialog(
+            authPreferences = authPreferences,
+            onSuccess = {
+                showAdminPinForProducts = false
+                onNavigateToProducts()
+            },
+            onDismiss = {
+                showAdminPinForProducts = false
+            }
+        )
     }
 
     Scaffold(
@@ -245,7 +305,15 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .selectable(
                                         selected = uiState.selectedLocationId == location.id,
-                                        onClick = { viewModel.selectLocation(location.id) },
+                                        onClick = {
+                                            if (uiState.isRestrictedMode) {
+                                                // Require admin PIN in restricted mode
+                                                pendingLocationId = location.id
+                                                showAdminPinForLocation = true
+                                            } else {
+                                                viewModel.selectLocation(location.id)
+                                            }
+                                        },
                                         role = Role.RadioButton
                                     )
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -277,13 +345,58 @@ fun SettingsScreen(
             }
 
             HorizontalDivider()
+            
+            // Security section - Operation Mode
+            SettingsSection(title = "Безпека", icon = Icons.Filled.Lock) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Обмежений режим",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = if (uiState.isRestrictedMode) "Увімкнено" else "Вимкнено",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.isRestrictedMode,
+                        onCheckedChange = { newValue ->
+                            // Always require admin PIN to change mode
+                            pendingModeChange = newValue
+                            showAdminPinForMode = true
+                        }
+                    )
+                }
+                Text(
+                    text = "В обмеженому режимі приховано прибуток та додаткові функції",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
+            HorizontalDivider()
 
             // Data section
             SettingsSection(title = "Дані", icon = Icons.Filled.Category) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateToProducts() }
+                        .clickable {
+                            if (uiState.isRestrictedMode) {
+                                showAdminPinForProducts = true
+                            } else {
+                                onNavigateToProducts()
+                            }
+                        }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
