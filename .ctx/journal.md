@@ -961,3 +961,10 @@ Added location filtering support to CashViewModel/CashRepository with selectLoca
 
 ### 2026-01-14T15:35 - completed: cash-ui-tabs
 Added TabRow with location tabs + Всього tab to CashScreen. History items show location in totals view. Action buttons disabled in totals view.
+
+### 2026-01-19T21:47 - completed: audit-domain-and-business-logic
+Audited 15 domain layer files. Findings:
+- �� HIGH: CashRepositoryImpl.transfer() not atomic (confirmed from Phase 1)
+- 🟡 MEDIUM: Enum fromDbValue methods throw on unknown values (forward compat risk)
+- 🟡 MEDIUM: DTO precision loss (duplicate from Phase 1)
+- ✅ Good: BigDecimal everywhere, atomic operations for transfers/batches, voided batch exclusion

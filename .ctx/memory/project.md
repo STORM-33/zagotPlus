@@ -108,7 +108,7 @@ Physical goods movement creates two linked transactions atomically:
 - Single organization (no multi-tenancy)
 
 ## Status
-**Test Coverage Plan complete!** 🎉 Comprehensive unit tests added.
+**Hardware Integration Phase 1 in progress** - Scales and printer interfaces added.
 
 ### Verified Working
 - Android build: `./gradlew assembleDebug` (BUILD SUCCESSFUL, 19MB APK)
@@ -135,6 +135,8 @@ Physical goods movement creates two linked transactions atomically:
 - Purchase batches: Atomic batch + transactions creation, today's batches query
 - Product images: Image picker, Coil async loading, placeholder icons
 - Test coverage: 14 test files, 100+ tests covering repositories and ViewModels
+- Cash screen: Location tabs with totals view, per-location filtering
+- Hardware layer: Scales and printer service interfaces (mock implementations)
 
 ### Tooling Versions (confirmed)
 - AGP: 8.3.1 (upgraded from 8.2.0 for JDK 21)
@@ -152,5 +154,7 @@ See MASTER_PLAN.md for complete breakdown:
 - Phase 4: Supporting UI (4 sessions) - history, products, reports, settings ✓
 - Phase 5: Purchase Flow Redesign (5 sessions) - batches, images, entry flow ✓
 - Test Coverage (2 sessions) - repository and ViewModel unit tests ✓
+- Location-Cash (3 sessions) - location tabs and filtering in CashScreen ✓
+- Hardware Phase 1 (in progress) - scales and printer interfaces
 
-Completed: 30 sessions | Test Coverage: 14 test files, 100+ tests | Next: Phase 6 (Hardware Integration)
+Completed: 33 sessions | Test Coverage: 14 test files, 100+ tests | Current: Production Readiness Audit
