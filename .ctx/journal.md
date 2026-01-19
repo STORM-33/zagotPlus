@@ -968,3 +968,9 @@ Audited 15 domain layer files. Findings:
 - 🟡 MEDIUM: Enum fromDbValue methods throw on unknown values (forward compat risk)
 - 🟡 MEDIUM: DTO precision loss (duplicate from Phase 1)
 - ✅ Good: BigDecimal everywhere, atomic operations for transfers/batches, voided batch exclusion
+
+### 2026-01-19T21:53 - completed: audit-migrations-and-schema
+Audited 17 migrations + 8 test files + schema.sql. Findings:
+- 🟠 HIGH: schema.sql missing voided_at/voided_by_device_id columns (migration applied?)
+- 🟡 MEDIUM: RLS "Allow all for anon" still active (auth not implemented)
+- ✅ Good: Idempotent migrations, comprehensive indexes, proper FK behavior, voided filtering
