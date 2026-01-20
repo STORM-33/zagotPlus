@@ -45,6 +45,13 @@ data class ReportsUiState(
     val totalEarnings: BigDecimal = BigDecimal.ZERO,
     val totalWeightKg: BigDecimal = BigDecimal.ZERO,
     
+    // Spendings breakdown
+    val purchaseTotal: BigDecimal = BigDecimal.ZERO,
+    val paymentsByCategory: List<PaymentCategoryItem> = emptyList(),
+    
+    // Sales breakdown (for earnings detail)
+    val salesItems: List<SalesReportItem> = emptyList(),
+    
     // Location selection
     val locations: List<Location> = emptyList(),
     val selectedLocationId: UUID? = null, // null = all locations ("всього")
@@ -54,7 +61,7 @@ data class ReportsUiState(
     
     val hasData: Boolean = false,
     val error: String? = null
-) {
+){
     val isTotalsView: Boolean
         get() = selectedLocationId == null
     
@@ -70,6 +77,25 @@ data class ProductReportItem(
     val productName: String,
     val imageUri: String?,
     val totalSpent: BigDecimal,
+    val totalWeightKg: BigDecimal
+)
+
+/**
+ * Payment category item for spendings breakdown.
+ */
+data class PaymentCategoryItem(
+    val categoryName: String,
+    val amount: BigDecimal
+)
+
+/**
+ * Sales item for earnings breakdown by product.
+ */
+data class SalesReportItem(
+    val productId: UUID,
+    val productName: String,
+    val imageUri: String?,
+    val totalEarned: BigDecimal,
     val totalWeightKg: BigDecimal
 )
 
@@ -179,14 +205,18 @@ class ReportsViewModel @Inject constructor(
                 val purchases = transactions.filter { it.type == TransactionType.PURCHASE }
                 val purchaseTotal = purchases.sumOf { it.totalAmount ?: BigDecimal.ZERO }
 
-                // Get cash operations (payments + withdrawals) for the period
-                val cashSpendings = calculateCashSpendings(startInstant, endInstant, state.selectedLocationId)
+                // Get cash operations (payments) for the period with categories
+                val paymentsByCategory = calculatePaymentsByCategory(startInstant, endInstant, state.selectedLocationId)
+                val paymentsTotal = paymentsByCategory.sumOf { it.amount }
 
-                val totalSpendings = purchaseTotal.add(cashSpendings)
+                val totalSpendings = purchaseTotal.add(paymentsTotal)
 
                 // Calculate earnings (sales)
                 val sales = transactions.filter { it.type == TransactionType.SALE }
                 val totalEarnings = sales.sumOf { it.totalAmount ?: BigDecimal.ZERO }
+                
+                // Build sales items for earnings breakdown
+                val salesItems = computeSalesItems(sales)
 
                 // Build product list from purchases
                 val productItems = computeProductItems(purchases)
@@ -202,6 +232,9 @@ class ReportsViewModel @Inject constructor(
                         totalSpendings = totalSpendings,
                         totalEarnings = totalEarnings,
                         totalWeightKg = totalWeightKg,
+                        purchaseTotal = purchaseTotal,
+                        paymentsByCategory = paymentsByCategory,
+                        salesItems = salesItems,
                         productItems = productItems,
                         hasData = hasData
                     )
@@ -218,15 +251,15 @@ class ReportsViewModel @Inject constructor(
     }
 
     /**
-     * Calculate cash spendings (payments only) for the period.
+     * Calculate payments grouped by category for the period.
      * Note: Withdrawals (виведення коштів) are excluded from spendings.
      * If dates are null, includes all time.
      */
-    private suspend fun calculateCashSpendings(
+    private suspend fun calculatePaymentsByCategory(
         startDate: Instant?,
         endDate: Instant?,
         locationId: UUID?
-    ): BigDecimal {
+    ): List<PaymentCategoryItem> {
         return try {
             val operations = if (locationId != null) {
                 cashRepository.getCashHistoryByLocationPaged(locationId, 10000, 0)
@@ -242,9 +275,16 @@ class ReportsViewModel @Inject constructor(
                 .filter { 
                     it.type == com.zagot.zagotplus.domain.model.CashHistoryItemType.PAYMENT
                 }
-                .sumOf { it.amount }
+                .groupBy { it.categoryName ?: "Без категорії" }
+                .map { (category, items) ->
+                    PaymentCategoryItem(
+                        categoryName = category,
+                        amount = items.sumOf { it.amount }
+                    )
+                }
+                .sortedByDescending { it.amount }
         } catch (e: Exception) {
-            BigDecimal.ZERO
+            emptyList()
         }
     }
 
@@ -266,6 +306,26 @@ class ReportsViewModel @Inject constructor(
                 totalWeightKg = productPurchases.sumOf { it.weightKg }
             )
         }.sortedByDescending { it.totalSpent }
+    }
+    
+    /**
+     * Compute sales items from sales transactions, sorted by total earned descending.
+     */
+    private fun computeSalesItems(sales: List<Transaction>): List<SalesReportItem> {
+        val productIds = sales.mapNotNull { it.productId }.toSet()
+
+        return productIds.mapNotNull { productId ->
+            val product = products[productId] ?: return@mapNotNull null
+            val productSales = sales.filter { it.productId == productId }
+
+            SalesReportItem(
+                productId = productId,
+                productName = product.name,
+                imageUri = product.imageUri,
+                totalEarned = productSales.sumOf { it.totalAmount ?: BigDecimal.ZERO },
+                totalWeightKg = productSales.sumOf { it.weightKg }
+            )
+        }.sortedByDescending { it.totalEarned }
     }
 
     fun dismissError() {

@@ -26,7 +26,7 @@ data class CashOperationDto(
     val type: String,
 
     @SerialName("amount")
-    val amount: Double,
+    val amount: String,
 
     @SerialName("category_id")
     val categoryId: String?,
@@ -49,6 +49,9 @@ data class CashOperationDto(
     @SerialName("is_transfer")
     val isTransfer: Boolean = false,
 
+    @SerialName("transfer_pair_id")
+    val transferPairId: String? = null,
+
     @SerialName("server_updated_at")
     val serverUpdatedAt: String? = null
 ) {
@@ -60,14 +63,15 @@ data class CashOperationDto(
         localId = localId,
         locationId = locationId?.let { UUID.fromString(it) },
         type = type,
-        amount = BigDecimal.valueOf(amount),
+        amount = BigDecimal(amount),
         categoryId = categoryId?.let { UUID.fromString(it) },
         batchId = batchId?.let { UUID.fromString(it) },
         notes = notes,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
-        isTransfer = isTransfer
+        isTransfer = isTransfer,
+        transferPairId = transferPairId
     )
 
     companion object {
@@ -79,14 +83,15 @@ data class CashOperationDto(
             localId = entity.localId,
             locationId = entity.locationId?.toString(),
             type = entity.type,
-            amount = entity.amount.toDouble(),
+            amount = entity.amount.toPlainString(),
             categoryId = entity.categoryId?.toString(),
             batchId = entity.batchId?.toString(),
             notes = entity.notes,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString(),
-            isTransfer = entity.isTransfer
+            isTransfer = entity.isTransfer,
+            transferPairId = entity.transferPairId
         )
     }
 }

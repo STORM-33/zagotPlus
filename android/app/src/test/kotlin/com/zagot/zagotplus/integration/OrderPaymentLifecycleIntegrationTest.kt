@@ -80,10 +80,12 @@ class OrderPaymentLifecycleIntegrationTest {
             database = database,
             saleBatchDao = database.saleBatchDao(),
             transactionDao = database.transactionDao(),
-            syncManager = syncManager
+            syncManager = syncManager,
+            devicePreferences = devicePreferences
         )
 
         cashRepository = CashRepositoryImpl(
+            database = database,
             cashOperationDao = database.cashOperationDao(),
             expenseCategoryDao = database.expenseCategoryDao(),
             devicePreferences = devicePreferences
@@ -103,7 +105,8 @@ class OrderPaymentLifecycleIntegrationTest {
                 id = locationId,
                 name = "Кіоск Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId"
             )
         )
     }
@@ -194,21 +197,14 @@ class OrderPaymentLifecycleIntegrationTest {
         insertTestLocation()
         insertTestProducts()
 
-        // Step 1: Purchase goods (inventory increases, cash decreases)
+        // Step 1: Purchase goods (inventory increases, cash decreases automatically via transaction)
         transactionRepository.createPurchase(
             locationId = locationId,
             productId = productId,
             weightKg = BigDecimal("100.00"),
             pricePerKg = BigDecimal("45.00")
         )
-
-        // Record cash payment for purchase
-        cashRepository.payment(
-            locationId = locationId,
-            amount = BigDecimal("4500.00"), // 100 * 45
-            categoryId = null,
-            notes = "Закупка горіхів"
-        )
+        // Note: No separate payment() call - purchase transactions automatically affect cash balance
 
         // Verify inventory and cash state after purchase
         val inventoryAfterPurchase = transactionRepository.getInventory().first()
@@ -216,16 +212,17 @@ class OrderPaymentLifecycleIntegrationTest {
         
         assertEquals(1, inventoryAfterPurchase.size)
         assertTrue(inventoryAfterPurchase[0].totalWeightKg.compareTo(BigDecimal("100.00")) == 0)
-        assertTrue(balanceAfterPurchase.compareTo(BigDecimal("-4500.00")) == 0) // Payment = negative
+        assertTrue(balanceAfterPurchase.compareTo(BigDecimal("-4500.00")) == 0) // Purchase = negative
 
-        // Step 2: Sell some goods (inventory decreases, cash increases)
+        // Step 2: Sell some goods (inventory decreases, but cash does NOT increase automatically)
+        // Sales go to owner's pocket - owner deposits what they choose back into business
         val batchId = UUID.randomUUID()
         val batch = createSaleBatch(batchId, BigDecimal("30.00"), BigDecimal("1650.00"), 1)
         val transaction = createSaleTransaction(batchId, productId, BigDecimal("30.00"), BigDecimal("55.00"))
         
         saleBatchRepository.createBatchWithTransactions(batch, listOf(transaction))
 
-        // Record cash deposit from sale
+        // Owner deposits sale proceeds back into business
         cashRepository.deposit(
             locationId = locationId,
             amount = BigDecimal("1650.00"), // 30 * 55
@@ -248,7 +245,7 @@ class OrderPaymentLifecycleIntegrationTest {
         insertTestLocation()
         insertTestProducts()
 
-        // Purchase initial stock
+        // Purchase initial stock: 500kg @ 45/kg = 22500 (decreases cash)
         transactionRepository.createPurchase(
             locationId = locationId,
             productId = productId,
@@ -256,7 +253,7 @@ class OrderPaymentLifecycleIntegrationTest {
             pricePerKg = BigDecimal("45.00")
         )
 
-        // First sale: 50kg @ 55/kg = 2750
+        // First sale: 50kg @ 55/kg = 2750 (owner deposits proceeds)
         val batch1Id = UUID.randomUUID()
         val batch1 = createSaleBatch(batch1Id, BigDecimal("50.00"), BigDecimal("2750.00"), 1)
         val tx1 = createSaleTransaction(batch1Id, productId, BigDecimal("50.00"), BigDecimal("55.00"))
@@ -281,9 +278,9 @@ class OrderPaymentLifecycleIntegrationTest {
         val inventory = transactionRepository.getInventory().first()
         assertTrue(inventory[0].totalWeightKg.compareTo(BigDecimal("350.00")) == 0)
 
-        // Verify cash: 2750 + 4125 + 1500 = 8375
+        // Verify cash: -22500 (purchase) + 2750 + 4125 + 1500 (deposits) = -14125
         val balance = cashRepository.getBalance(locationId).first()
-        assertTrue(balance.compareTo(BigDecimal("8375.00")) == 0)
+        assertTrue(balance.compareTo(BigDecimal("-14125.00")) == 0)
     }
 
     @Test

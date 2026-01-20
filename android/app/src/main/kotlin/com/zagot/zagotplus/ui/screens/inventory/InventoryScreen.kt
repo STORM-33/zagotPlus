@@ -61,6 +61,8 @@ import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.InventoryItemSkeleton
 import com.zagot.zagotplus.ui.components.SkeletonList
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.ZoneId
@@ -198,11 +200,13 @@ fun InventoryScreen(
                             }
                         } else {
                             val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
+                            val horizontalPadding = adaptiveHorizontalPadding()
+                            val itemSpacing = adaptiveItemSpacing()
                             
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(itemSpacing)
                             ) {
                                 // Inventory items as cards
                                 items(displayItems, key = { it.productId }) { item ->

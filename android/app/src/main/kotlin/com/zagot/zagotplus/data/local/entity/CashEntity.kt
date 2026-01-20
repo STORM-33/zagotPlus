@@ -122,7 +122,8 @@ data class CashHistoryProjection(
         Index(value = ["synced_at"]),
         Index(value = ["created_at"]),
         Index(value = ["type"]),
-        Index(value = ["is_transfer"])
+        Index(value = ["is_transfer"]),
+        Index(value = ["transfer_pair_id"])
     ]
 )
 data class CashOperationEntity(
@@ -161,5 +162,8 @@ data class CashOperationEntity(
     val syncedAt: Instant? = null,
 
     @ColumnInfo(name = "is_transfer", defaultValue = "0")
-    val isTransfer: Boolean = false
+    val isTransfer: Boolean = false,
+
+    @ColumnInfo(name = "transfer_pair_id")
+    val transferPairId: String? = null
 )

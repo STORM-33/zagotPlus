@@ -24,8 +24,8 @@ class SaleBatchDtoTest {
             localId = "local-123",
             locationId = testLocationId.toString(),
             notes = "Test notes",
-            totalWeightKg = 150.5,
-            totalAmount = 7525.00,
+            totalWeightKg = "150.5",
+            totalAmount = "7525.00",
             itemCount = 5,
             deviceId = "device-abc",
             createdAt = testInstant.toString(),
@@ -38,8 +38,8 @@ class SaleBatchDtoTest {
         assertEquals("local-123", entity.localId)
         assertEquals(testLocationId, entity.locationId)
         assertEquals("Test notes", entity.notes)
-        assertEquals(BigDecimal.valueOf(150.5), entity.totalWeightKg)
-        assertEquals(BigDecimal.valueOf(7525.00), entity.totalAmount)
+        assertEquals(0, BigDecimal("150.5").compareTo(entity.totalWeightKg))
+        assertEquals(0, BigDecimal("7525.00").compareTo(entity.totalAmount))
         assertEquals(5, entity.itemCount)
         assertEquals("device-abc", entity.deviceId)
         assertEquals(testInstant, entity.createdAt)
@@ -96,8 +96,8 @@ class SaleBatchDtoTest {
         assertEquals("local-789", dto.localId)
         assertEquals(testLocationId.toString(), dto.locationId)
         assertEquals("Entity notes", dto.notes)
-        assertEquals(200.50, dto.totalWeightKg!!, 0.001)
-        assertEquals(10025.00, dto.totalAmount!!, 0.001)
+        assertEquals("200.50", dto.totalWeightKg)
+        assertEquals("10025.00", dto.totalAmount)
         assertEquals(10, dto.itemCount)
         assertEquals("device-xyz", dto.deviceId)
         assertEquals(testInstant.toString(), dto.createdAt)
@@ -171,8 +171,8 @@ class SaleBatchDtoTest {
             localId = "local-zero",
             locationId = null,
             notes = null,
-            totalWeightKg = 0.0,
-            totalAmount = 0.0,
+            totalWeightKg = "0.0",
+            totalAmount = "0.0",
             itemCount = 0,
             deviceId = null,
             createdAt = testInstant.toString(),

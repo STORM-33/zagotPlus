@@ -97,7 +97,7 @@ interface CashOperationDao {
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
                 ELSE 0
             END), 0) FROM cash_operations WHERE location_id = :locationId)
             +
@@ -105,7 +105,7 @@ interface CashOperationDao {
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.location_id = :locationId
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getBalanceByLocation(locationId: UUID): Flow<java.math.BigDecimal>
@@ -114,7 +114,7 @@ interface CashOperationDao {
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
                 ELSE 0
             END), 0) FROM cash_operations
             WHERE location_id = :locationId
@@ -127,7 +127,7 @@ interface CashOperationDao {
               AND t.created_at >= :startOfDay
               AND t.created_at < :endOfDay
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(
@@ -165,14 +165,14 @@ interface CashOperationDao {
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
                 ELSE 0
             END), 0) FROM cash_operations)
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getTotalBalance(): Flow<java.math.BigDecimal>
@@ -181,7 +181,7 @@ interface CashOperationDao {
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
                 WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
                 ELSE 0
             END), 0) FROM cash_operations
             WHERE created_at >= :startOfDay AND created_at < :endOfDay)
@@ -190,7 +190,7 @@ interface CashOperationDao {
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.created_at >= :startOfDay AND t.created_at < :endOfDay
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>

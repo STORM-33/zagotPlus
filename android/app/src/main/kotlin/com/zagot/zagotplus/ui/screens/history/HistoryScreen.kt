@@ -75,7 +75,10 @@ import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.SkeletonList
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import java.text.DecimalFormat
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -312,50 +315,72 @@ fun HistoryScreen(
                     }
                 }
                 else -> {
+                    // Group batches by date
+                    val dateDividerFormatter = remember { DateTimeFormatter.ofPattern("dd.MM") }
+                    val batchesByDate = remember(uiState.batches) {
+                        uiState.batches.groupBy { batch ->
+                            batch.createdAt.atZone(ZoneId.systemDefault()).toLocalDate()
+                        }.toSortedMap(compareByDescending { it })
+                    }
+                    val horizontalPadding = adaptiveHorizontalPadding()
+                    val itemSpacing = adaptiveItemSpacing()
+                    
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = listState,
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(itemSpacing)
                     ) {
-                        items(uiState.batches, key = { it.id }) { batch ->
-                            val isExpanded = batch.id in expandedBatchIds
-                            val transactions = expandedBatchTransactions[batch.id]
-                            val isLoadingTransactions = batch.id in isLoadingBatchDetails
+                        batchesByDate.forEach { (date, batchesForDate) ->
+                            // Date divider
+                            stickyHeader(key = "date_$date") {
+                                DateDivider(
+                                    date = date,
+                                    formatter = dateDividerFormatter,
+                                    itemCount = batchesForDate.size
+                                )
+                            }
+                            
+                            // Batches for this date
+                            items(batchesForDate, key = { it.id }) { batch ->
+                                val isExpanded = batch.id in expandedBatchIds
+                                val transactions = expandedBatchTransactions[batch.id]
+                                val isLoadingTransactions = batch.id in isLoadingBatchDetails
 
-                            ExpandableBatchCard(
-                                batch = batch,
-                                isExpanded = isExpanded,
-                                transactions = transactions,
-                                isLoadingTransactions = isLoadingTransactions,
-                                onClick = { viewModel.toggleBatchExpansion(batch.id) },
-                                onEditClick = { batchId ->
-                                    when (batch) {
-                                        is HistoryBatchDisplayItem.RealBatch -> 
-                                            onNavigateToEditPurchase(batchId.toString())
-                                        is HistoryBatchDisplayItem.RealSaleBatch -> 
-                                            onNavigateToEditSale(batchId.toString())
-                                        is HistoryBatchDisplayItem.VirtualBatch,
-                                        is HistoryBatchDisplayItem.TransferBatch -> 
-                                            { /* Virtual/transfer batches cannot be edited */ }
-                                    }
-                                },
-                                onDeleteClick = { batchId ->
-                                    when (batch) {
-                                        is HistoryBatchDisplayItem.RealBatch -> 
-                                            pendingVoidBatch = batchId to BatchType.PURCHASE
-                                        is HistoryBatchDisplayItem.RealSaleBatch -> 
-                                            pendingVoidBatch = batchId to BatchType.SALE
-                                        is HistoryBatchDisplayItem.VirtualBatch,
-                                        is HistoryBatchDisplayItem.TransferBatch -> 
-                                            { /* Virtual/transfer batches cannot be deleted */ }
-                                    }
-                                },
-                                currencyFormat = currencyFormat,
-                                weightFormat = weightFormat,
-                                dateFormatter = dateFormatter,
-                                modifier = Modifier.animateItemPlacement()
-                            )
+                                ExpandableBatchCard(
+                                    batch = batch,
+                                    isExpanded = isExpanded,
+                                    transactions = transactions,
+                                    isLoadingTransactions = isLoadingTransactions,
+                                    onClick = { viewModel.toggleBatchExpansion(batch.id) },
+                                    onEditClick = { batchId ->
+                                        when (batch) {
+                                            is HistoryBatchDisplayItem.RealBatch -> 
+                                                onNavigateToEditPurchase(batchId.toString())
+                                            is HistoryBatchDisplayItem.RealSaleBatch -> 
+                                                onNavigateToEditSale(batchId.toString())
+                                            is HistoryBatchDisplayItem.VirtualBatch,
+                                            is HistoryBatchDisplayItem.TransferBatch -> 
+                                                { /* Virtual/transfer batches cannot be edited */ }
+                                        }
+                                    },
+                                    onDeleteClick = { batchId ->
+                                        when (batch) {
+                                            is HistoryBatchDisplayItem.RealBatch -> 
+                                                pendingVoidBatch = batchId to BatchType.PURCHASE
+                                            is HistoryBatchDisplayItem.RealSaleBatch -> 
+                                                pendingVoidBatch = batchId to BatchType.SALE
+                                            is HistoryBatchDisplayItem.VirtualBatch,
+                                            is HistoryBatchDisplayItem.TransferBatch -> 
+                                                { /* Virtual/transfer batches cannot be deleted */ }
+                                        }
+                                    },
+                                    currencyFormat = currencyFormat,
+                                    weightFormat = weightFormat,
+                                    dateFormatter = dateFormatter,
+                                    modifier = Modifier.animateItemPlacement()
+                                )
+                            }
                         }
 
                         if (uiState.isLoadingMore) {
@@ -589,6 +614,43 @@ private fun LocationDropdown(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DateDivider(
+    date: LocalDate,
+    formatter: DateTimeFormatter,
+    itemCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val today = remember { LocalDate.now() }
+    val yesterday = remember { LocalDate.now().minusDays(1) }
+    
+    val dateText = when (date) {
+        today -> "Сьогодні"
+        yesterday -> "Вчора"
+        else -> date.format(formatter)
+    }
+    
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = dateText,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "$itemCount операцій",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

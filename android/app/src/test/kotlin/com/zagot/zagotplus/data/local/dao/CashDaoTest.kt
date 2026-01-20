@@ -62,7 +62,8 @@ class CashDaoTest {
                 id = testLocationId,
                 name = "Склад №1",
                 type = "kiosk",
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-local-$testLocationId"
             ))
             productDao.insert(ProductEntity(
                 id = testProductId,

@@ -26,10 +26,10 @@ data class SaleBatchDto(
     val notes: String?,
 
     @SerialName("total_weight_kg")
-    val totalWeightKg: Double?,
+    val totalWeightKg: String?,
 
     @SerialName("total_amount")
-    val totalAmount: Double?,
+    val totalAmount: String?,
 
     @SerialName("item_count")
     val itemCount: Int?,
@@ -53,7 +53,13 @@ data class SaleBatchDto(
     val correctsBatchId: String? = null,
 
     @SerialName("correction_reason")
-    val correctionReason: String? = null
+    val correctionReason: String? = null,
+
+    @SerialName("voided_at")
+    val voidedAt: String? = null,
+
+    @SerialName("voided_by_device_id")
+    val voidedByDeviceId: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -63,15 +69,17 @@ data class SaleBatchDto(
         localId = localId,
         locationId = locationId?.let { UUID.fromString(it) },
         notes = notes,
-        totalWeightKg = totalWeightKg?.let { BigDecimal.valueOf(it) },
-        totalAmount = totalAmount?.let { BigDecimal.valueOf(it) },
+        totalWeightKg = totalWeightKg?.let { BigDecimal(it) },
+        totalAmount = totalAmount?.let { BigDecimal(it) },
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
         isVoided = isVoided,
         correctsBatchId = correctsBatchId?.let { UUID.fromString(it) },
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt?.let { Instant.parse(it) },
+        voidedByDeviceId = voidedByDeviceId
     )
 
     companion object {
@@ -83,15 +91,17 @@ data class SaleBatchDto(
             localId = entity.localId,
             locationId = entity.locationId?.toString(),
             notes = entity.notes,
-            totalWeightKg = entity.totalWeightKg?.toDouble(),
-            totalAmount = entity.totalAmount?.toDouble(),
+            totalWeightKg = entity.totalWeightKg?.toPlainString(),
+            totalAmount = entity.totalAmount?.toPlainString(),
             itemCount = entity.itemCount,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString(),
             isVoided = entity.isVoided,
             correctsBatchId = entity.correctsBatchId?.toString(),
-            correctionReason = entity.correctionReason
+            correctionReason = entity.correctionReason,
+            voidedAt = entity.voidedAt?.toString(),
+            voidedByDeviceId = entity.voidedByDeviceId
         )
     }
 }

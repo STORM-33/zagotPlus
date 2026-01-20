@@ -83,10 +83,10 @@ class MultiLocationReconciliationIntegrationTest {
 
     private suspend fun insertAllLocations() {
         listOf(
-            LocationEntity(warehouseId, "Центральний склад", LocationType.KIOSK.name, testInstant),
-            LocationEntity(kiosk1Id, "Кіоск №1", LocationType.KIOSK.name, testInstant),
-            LocationEntity(kiosk2Id, "Кіоск №2", LocationType.KIOSK.name, testInstant),
-            LocationEntity(mobileId, "Мобільна точка", LocationType.MOBILE.name, testInstant)
+            LocationEntity(warehouseId, "Центральний склад", LocationType.KIOSK.name, testInstant, localId = "loc-$warehouseId"),
+            LocationEntity(kiosk1Id, "Кіоск №1", LocationType.KIOSK.name, testInstant, localId = "loc-$kiosk1Id"),
+            LocationEntity(kiosk2Id, "Кіоск №2", LocationType.KIOSK.name, testInstant, localId = "loc-$kiosk2Id"),
+            LocationEntity(mobileId, "Мобільна точка", LocationType.MOBILE.name, testInstant, localId = "loc-$mobileId")
         ).forEach { database.locationDao().insert(it) }
     }
 

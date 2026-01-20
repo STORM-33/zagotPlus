@@ -47,7 +47,7 @@ class SaleBatchDaoTest {
         // Create required foreign key entity
         testLocationId = UUID.randomUUID()
         kotlinx.coroutines.runBlocking {
-            locationDao.insert(LocationEntity(testLocationId, "Test Location", "kiosk", testInstant))
+            locationDao.insert(LocationEntity(testLocationId, "Test Location", "kiosk", testInstant, localId = "loc-$testLocationId"))
         }
     }
 

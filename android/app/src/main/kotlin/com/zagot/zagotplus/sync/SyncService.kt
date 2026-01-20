@@ -39,7 +39,9 @@ class SyncService @Inject constructor(
     private val productDao: ProductDao,
     private val expenseCategoryDao: ExpenseCategoryDao,
     private val cashOperationDao: CashOperationDao,
-    private val syncPreferences: SyncPreferences
+    private val syncPreferences: SyncPreferences,
+    private val supabaseAuthManager: com.zagot.zagotplus.data.remote.SupabaseAuthManager,
+    private val devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences
 ) {
     companion object {
         private const val TAG = "SyncService"
@@ -55,6 +57,13 @@ class SyncService @Inject constructor(
      */
     suspend fun sync(): SyncResult {
         Log.d(TAG, "Starting sync...")
+
+        // Ensure authenticated before syncing
+        val deviceId = devicePreferences.getDeviceId()
+        if (!supabaseAuthManager.ensureAuthenticated(deviceId)) {
+            Log.e(TAG, "Authentication failed, cannot sync")
+            return SyncResult.Failure("Помилка автентифікації")
+        }
 
         // Capture the sync timestamp ONCE at the start for all pull operations
         val syncStartTimestamp = syncPreferences.getLastSyncTimestamp()
@@ -212,11 +221,15 @@ class SyncService @Inject constructor(
     ): PullCounts {
         Log.d(TAG, "Fetching all remote records updated after $since")
         
+        // Track which entity types failed to pull
+        val pullFailures = mutableListOf<String>()
+        
         // Step 1: Fetch all remote data (network calls outside transaction)
         val remoteCategories = try {
             syncDataSource.pullExpenseCategories(since)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch expense categories", e)
+            pullFailures.add("expense_categories: ${e.message}")
             emptyList()
         }
         
@@ -224,6 +237,7 @@ class SyncService @Inject constructor(
             syncDataSource.pullBatches(since)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch batches", e)
+            pullFailures.add("batches: ${e.message}")
             emptyList()
         }
         
@@ -231,6 +245,7 @@ class SyncService @Inject constructor(
             syncDataSource.pullSaleBatches(since)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch sale batches", e)
+            pullFailures.add("sale_batches: ${e.message}")
             emptyList()
         }
         
@@ -241,7 +256,14 @@ class SyncService @Inject constructor(
             syncDataSource.pullCashOperations(since)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch cash operations", e)
+            pullFailures.add("cash_operations: ${e.message}")
             emptyList()
+        }
+        
+        // If ANY entity type failed to pull, throw an exception to prevent timestamp advancement
+        // This ensures we retry all entity types on next sync, preventing data loss
+        if (pullFailures.isNotEmpty()) {
+            throw Exception("Partial pull failure: ${pullFailures.joinToString("; ")}")
         }
         
         // Track timestamps from all fetched records
@@ -296,10 +318,12 @@ class SyncService @Inject constructor(
     
     /**
      * Helper class to track the maximum server_updated_at timestamp across all pulled records.
+     * Thread-safe to handle potential future parallelization.
      */
     private class MaxTimestampTracker {
         private var maxTimestamp: Instant? = null
         
+        @Synchronized
         fun update(timestamp: String?) {
             if (timestamp == null) return
             try {
@@ -313,6 +337,7 @@ class SyncService @Inject constructor(
             }
         }
         
+        @Synchronized
         fun getMaxTimestamp(): Instant? = maxTimestamp
     }
 

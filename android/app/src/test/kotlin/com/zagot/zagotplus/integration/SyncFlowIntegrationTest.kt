@@ -23,6 +23,7 @@ import com.zagot.zagotplus.sync.SyncDataSource
 import com.zagot.zagotplus.sync.SyncPreferences
 import com.zagot.zagotplus.sync.SyncResult
 import com.zagot.zagotplus.sync.SyncService
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -55,6 +56,8 @@ class SyncFlowIntegrationTest {
     private lateinit var database: ZagotDatabase
     private lateinit var fakeSyncDataSource: FakeSyncDataSource
     private lateinit var syncPreferences: SyncPreferences
+    private lateinit var supabaseAuthManager: com.zagot.zagotplus.data.remote.SupabaseAuthManager
+    private lateinit var devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences
     private lateinit var syncService: SyncService
     private lateinit var context: Context
 
@@ -80,9 +83,13 @@ class SyncFlowIntegrationTest {
         // Create fake sync data source (simulates Supabase)
         fakeSyncDataSource = FakeSyncDataSource()
 
-        // Mock SyncPreferences
+        // Mock SyncPreferences and auth
         syncPreferences = mockk(relaxed = true)
+        supabaseAuthManager = mockk()
+        devicePreferences = mockk()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        coEvery { supabaseAuthManager.ensureAuthenticated(any()) } returns true
+        every { devicePreferences.getDeviceId() } returns "test-device-id"
 
         // Create real SyncService with fake data source
         syncService = SyncService(
@@ -95,7 +102,9 @@ class SyncFlowIntegrationTest {
             productDao = database.productDao(),
             expenseCategoryDao = database.expenseCategoryDao(),
             cashOperationDao = database.cashOperationDao(),
-            syncPreferences = syncPreferences
+            syncPreferences = syncPreferences,
+            supabaseAuthManager = supabaseAuthManager,
+            devicePreferences = devicePreferences
         )
     }
 
@@ -112,7 +121,8 @@ class SyncFlowIntegrationTest {
                 id = locationId1,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId1"
             )
         )
         database.locationDao().insert(
@@ -120,7 +130,8 @@ class SyncFlowIntegrationTest {
                 id = locationId2,
                 name = "Склад Київ",
                 type = LocationType.MOBILE.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId2"
             )
         )
     }
@@ -347,9 +358,9 @@ class SyncFlowIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId1.toString(),
-            weightKg = 75.0,
-            pricePerKg = 48.0,
-            totalAmount = 3600.0,
+            weightKg = "75.0",
+            pricePerKg = "48.0",
+            totalAmount = "3600.0",
             notes = "From another device",
             deviceId = "other-device",
             createdAt = testInstant.plusSeconds(300).toString(),
@@ -364,8 +375,8 @@ class SyncFlowIntegrationTest {
             localId = "remote-batch-1",
             locationId = locationId1.toString(),
             notes = "Remote batch",
-            totalWeightKg = 75.0,
-            totalAmount = 3600.0,
+            totalWeightKg = "75.0",
+            totalAmount = "3600.0",
             itemCount = 1,
             deviceId = "other-device",
             createdAt = testInstant.plusSeconds(300).toString(),
@@ -446,7 +457,7 @@ class SyncFlowIntegrationTest {
             assertEquals(
                 "Product buy price should match",
                 localProduct.defaultBuyPrice?.toDouble(),
-                remoteProduct.defaultBuyPrice
+                remoteProduct.defaultBuyPrice?.toDouble()
             )
         }
 
@@ -467,7 +478,7 @@ class SyncFlowIntegrationTest {
             assertEquals(
                 "Transaction weight should match",
                 localTx.weightKg.toDouble(),
-                remoteTx.weightKg,
+                remoteTx.weightKg.toDouble(),
                 0.001
             )
         }
@@ -602,8 +613,8 @@ class SyncFlowIntegrationTest {
                 id = productId1.toString(),
                 localId = "local-product-1",
                 name = "Горіх білий",
-                defaultBuyPrice = 45.0,
-                defaultSellPrice = 55.0,
+                defaultBuyPrice = "45.0",
+                defaultSellPrice = "55.0",
                 isActive = true,
                 createdAt = testInstant.toString()
             )
@@ -617,9 +628,9 @@ class SyncFlowIntegrationTest {
             type = "sale",
             transferLocationId = null,
             productId = productId1.toString(),
-            weightKg = 15.0,
-            pricePerKg = 55.0,
-            totalAmount = 825.0,
+            weightKg = "15.0",
+            pricePerKg = "55.0",
+            totalAmount = "825.0",
             notes = null,
             deviceId = "device-B",
             createdAt = testInstant.plusSeconds(60).toString(),

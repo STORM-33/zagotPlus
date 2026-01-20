@@ -52,7 +52,13 @@ class TransactionDaoTest {
         testProductId = UUID.randomUUID()
 
         kotlinx.coroutines.runBlocking {
-            locationDao.insert(LocationEntity(testLocationId, "Test Location", "kiosk", testInstant))
+            locationDao.insert(LocationEntity(
+                id = testLocationId,
+                name = "Test Location",
+                type = "kiosk",
+                createdAt = testInstant,
+                localId = "loc-local-$testLocationId"
+            ))
             productDao.insert(ProductEntity(
                 id = testProductId,
                 localId = "product-local-id",

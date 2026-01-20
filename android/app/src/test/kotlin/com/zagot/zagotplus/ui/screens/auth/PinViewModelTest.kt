@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.auth
 
 import com.zagot.zagotplus.data.preferences.AuthPreferences
+import com.zagot.zagotplus.debug.CrashLogger
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -20,6 +21,7 @@ import org.junit.Test
 class PinViewModelTest {
 
     private lateinit var authPreferences: AuthPreferences
+    private lateinit var crashLogger: CrashLogger
     private lateinit var viewModel: PinViewModel
     private val testDispatcher = StandardTestDispatcher()
 
@@ -27,6 +29,7 @@ class PinViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         authPreferences = mockk(relaxed = true)
+        crashLogger = mockk(relaxed = true)
     }
 
     @After
@@ -40,7 +43,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
         
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         assertEquals(PinMode.SET_PIN, viewModel.uiState.value.mode)
     }
@@ -51,7 +54,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
         
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         assertEquals(PinMode.VERIFY_PIN, viewModel.uiState.value.mode)
     }
@@ -61,7 +64,7 @@ class PinViewModelTest {
         every { authPreferences.isPinSet() } returns false
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         viewModel.onDigitPressed(1)
         viewModel.onDigitPressed(2)
@@ -80,7 +83,7 @@ class PinViewModelTest {
         every { authPreferences.isAdminPinSet() } returns true
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         // Set PIN
         viewModel.onDigitPressed(1)
@@ -105,7 +108,7 @@ class PinViewModelTest {
         every { authPreferences.isPinSet() } returns false
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         // Set PIN
         viewModel.onDigitPressed(1)
@@ -133,7 +136,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
         every { authPreferences.verifyPin("1234") } returns true
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         viewModel.onDigitPressed(1)
         viewModel.onDigitPressed(2)
@@ -150,7 +153,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1)
         every { authPreferences.verifyPin(any()) } returns false
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         viewModel.onDigitPressed(9)
         viewModel.onDigitPressed(9)
@@ -169,7 +172,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returnsMany listOf(false, false, false, true)
         every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1, 2, 3)
         every { authPreferences.verifyPin(any()) } returns false
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         // Attempt 1
         repeat(4) { viewModel.onDigitPressed(9) }
@@ -188,7 +191,7 @@ class PinViewModelTest {
         every { authPreferences.isLockedOut() } returnsMany listOf(false, false, false, true, true, false)
         every { authPreferences.getFailedAttempts() } returnsMany listOf(0, 1, 2, 3)
         every { authPreferences.verifyPin(any()) } returns false
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         // Trigger lockout
         repeat(3) {
@@ -209,7 +212,7 @@ class PinViewModelTest {
         every { authPreferences.isPinSet() } returns true
         every { authPreferences.isLockedOut() } returns false
         every { authPreferences.getFailedAttempts() } returns 0
-        viewModel = PinViewModel(authPreferences)
+        viewModel = PinViewModel(authPreferences, crashLogger)
         
         viewModel.onDigitPressed(1)
         viewModel.onDigitPressed(2)

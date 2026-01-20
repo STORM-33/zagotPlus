@@ -52,6 +52,8 @@ class SyncServiceTest {
     private lateinit var expenseCategoryDao: ExpenseCategoryDao
     private lateinit var cashOperationDao: CashOperationDao
     private lateinit var syncPreferences: SyncPreferences
+    private lateinit var supabaseAuthManager: com.zagot.zagotplus.data.remote.SupabaseAuthManager
+    private lateinit var devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences
     private lateinit var syncService: SyncService
 
     // Test data
@@ -105,7 +107,13 @@ class SyncServiceTest {
         expenseCategoryDao = mockk()
         cashOperationDao = mockk()
         syncPreferences = mockk()
+        supabaseAuthManager = mockk()
+        devicePreferences = mockk()
         database = mockk()
+
+        // Mock auth and device
+        coEvery { supabaseAuthManager.ensureAuthenticated(any()) } returns true
+        every { devicePreferences.getDeviceId() } returns "test-device-id"
 
         // Default empty responses
         coEvery { productDao.getUnsynced() } returns emptyList()
@@ -153,7 +161,9 @@ class SyncServiceTest {
             productDao = productDao,
             expenseCategoryDao = expenseCategoryDao,
             cashOperationDao = cashOperationDao,
-            syncPreferences = syncPreferences
+            syncPreferences = syncPreferences,
+            supabaseAuthManager = supabaseAuthManager,
+            devicePreferences = devicePreferences
         )
     }
 
@@ -218,9 +228,9 @@ class SyncServiceTest {
             type = "purchase",
             transferLocationId = null,
             productId = UUID.randomUUID().toString(),
-            weightKg = 10.0,
-            pricePerKg = 50.0,
-            totalAmount = 500.0,
+            weightKg = "10.0",
+            pricePerKg = "50.0",
+            totalAmount = "500.0",
             notes = null,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -323,8 +333,8 @@ class SyncServiceTest {
             id = UUID.randomUUID().toString(),
             localId = UUID.randomUUID().toString(),
             name = "Test Product",
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = Instant.now().toString()
         )
@@ -387,9 +397,9 @@ class SyncServiceTest {
             type = "sale",
             transferLocationId = null,
             productId = UUID.randomUUID().toString(),
-            weightKg = 5.0,
-            pricePerKg = 50.0,
-            totalAmount = 250.0,
+            weightKg = "5.0",
+            pricePerKg = "50.0",
+            totalAmount = "250.0",
             notes = null,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -427,9 +437,9 @@ class SyncServiceTest {
             type = "sale",
             transferLocationId = null,
             productId = UUID.randomUUID().toString(),
-            weightKg = 5.0,
-            pricePerKg = 50.0,
-            totalAmount = 250.0,
+            weightKg = "5.0",
+            pricePerKg = "50.0",
+            totalAmount = "250.0",
             notes = null,
             deviceId = "this-device",
             createdAt = Instant.now().toString(),
@@ -597,7 +607,7 @@ class SyncServiceTest {
             localId = "remote-cash-id",
             locationId = UUID.randomUUID().toString(),
             type = "withdrawal",
-            amount = 500.0,
+            amount = "500.0",
             categoryId = null,
             batchId = null,
             notes = "Видача готівки",
@@ -631,7 +641,7 @@ class SyncServiceTest {
             localId = "existing-cash-id",
             locationId = UUID.randomUUID().toString(),
             type = "deposit",
-            amount = 1000.0,
+            amount = "1000.0",
             categoryId = null,
             batchId = null,
             notes = "Updated notes",  // Changed field from server
@@ -751,9 +761,9 @@ class SyncServiceTest {
             type = "purchase",
             transferLocationId = null,
             productId = UUID.randomUUID().toString(),
-            weightKg = 10.0,
-            pricePerKg = 50.0,
-            totalAmount = 500.0,
+            weightKg = "10.0",
+            pricePerKg = "50.0",
+            totalAmount = "500.0",
             notes = null,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -797,9 +807,9 @@ class SyncServiceTest {
             type = "purchase",
             transferLocationId = null,
             productId = UUID.randomUUID().toString(),
-            weightKg = 10.0,
-            pricePerKg = 50.0,
-            totalAmount = 500.0,
+            weightKg = "10.0",
+            pricePerKg = "50.0",
+            totalAmount = "500.0",
             notes = null,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -841,8 +851,8 @@ class SyncServiceTest {
             localId = localId,
             locationId = UUID.randomUUID().toString(),
             notes = "Original batch",
-            totalWeightKg = 100.0,
-            totalAmount = 5000.0,
+            totalWeightKg = "100.0",
+            totalAmount = "5000.0",
             itemCount = 5,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -883,8 +893,8 @@ class SyncServiceTest {
             localId = localId,
             locationId = UUID.randomUUID().toString(),
             notes = "Original sale batch",
-            totalWeightKg = 50.0,
-            totalAmount = 3000.0,
+            totalWeightKg = "50.0",
+            totalAmount = "3000.0",
             itemCount = 3,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),
@@ -926,8 +936,8 @@ class SyncServiceTest {
             localId = localId,
             locationId = UUID.randomUUID().toString(),
             notes = "Corrected batch",
-            totalWeightKg = 95.0,  // Corrected weight
-            totalAmount = 4750.0,
+            totalWeightKg = "95.0",  // Corrected weight
+            totalAmount = "4750.0",
             itemCount = 5,
             deviceId = "other-device",
             createdAt = Instant.now().toString(),

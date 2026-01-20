@@ -6,6 +6,7 @@ import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
@@ -28,7 +29,8 @@ class SaleBatchRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
     private val saleBatchDao: SaleBatchDao,
     private val transactionDao: TransactionDao,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val devicePreferences: DevicePreferences
 ) : SaleBatchRepository {
 
     override fun observeAll(): Flow<List<SaleBatch>> =
@@ -100,7 +102,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markVoided(id: UUID) {
-        saleBatchDao.markVoided(id)
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        saleBatchDao.markVoided(id, now, deviceId)
         syncManager.triggerManualSync()
     }
 
@@ -134,9 +138,12 @@ class SaleBatchRepositoryImpl @Inject constructor(
             correctionReason = reason
         )
         
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        
         database.withTransaction {
-            // 1. Mark the original batch as voided
-            saleBatchDao.markVoided(originalBatchId)
+            // 1. Mark the original batch as voided with audit trail
+            saleBatchDao.markVoided(originalBatchId, now, deviceId)
             
             // 2. Insert the new correction batch
             saleBatchDao.insert(batchWithCorrection.toEntity())
@@ -163,7 +170,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun SaleBatch.toEntity() = SaleBatchEntity(
@@ -179,7 +188,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun Transaction.toEntity(saleBatchId: UUID) = TransactionEntity(

@@ -26,7 +26,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 11 (added is_transfer flag for explicit transfer detection, optimized date grouping queries)
+ * Version: 13 (drop stale composite index on transactions)
  */
 @Database(
     entities = [
@@ -38,7 +38,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         ExpenseCategoryEntity::class,
         CashOperationEntity::class
     ],
-    version = 11,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -459,6 +459,49 @@ abstract class ZagotDatabase : RoomDatabase() {
                 
                 // Create index for efficient filtering
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_is_transfer ON cash_operations(is_transfer)")
+            }
+        }
+
+        /**
+         * Migration from version 11 to 12: Add sync columns to locations, audit columns for voiding,
+         * transfer_pair_id for linking transfer pairs, and composite index for inventory queries.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add sync columns to locations
+                db.execSQL("ALTER TABLE locations ADD COLUMN local_id TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE locations SET local_id = id WHERE local_id = ''")
+                db.execSQL("ALTER TABLE locations ADD COLUMN synced_at INTEGER")
+                db.execSQL("ALTER TABLE locations ADD COLUMN device_id TEXT")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_locations_local_id ON locations(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_locations_synced_at ON locations(synced_at)")
+                
+                // Add audit columns to purchase_batches
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN voided_at INTEGER")
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN voided_by_device_id TEXT")
+                
+                // Add audit columns to sale_batches
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN voided_at INTEGER")
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN voided_by_device_id TEXT")
+                
+                // Add transfer_pair_id to cash_operations
+                db.execSQL("ALTER TABLE cash_operations ADD COLUMN transfer_pair_id TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_transfer_pair_id ON cash_operations(transfer_pair_id)")
+                
+                // Add composite index for inventory queries
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_location_product ON transactions(location_id, product_id)")
+            }
+        }
+        
+        /**
+         * Migration from version 12 to 13: Drop stale composite index.
+         * The index_transactions_location_product was added in MIGRATION_11_12 but the entity
+         * was later changed to only use single-column indices. Room validates schema exactly,
+         * so this stale index must be removed.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS index_transactions_location_product")
             }
         }
     }

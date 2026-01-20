@@ -92,6 +92,7 @@ import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.DayCashGroup
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.roundBalanceForDisplay
 import com.zagot.zagotplus.ui.theme.CashInfo
 import com.zagot.zagotplus.ui.theme.CashNegative
 import com.zagot.zagotplus.ui.theme.CashPositive
@@ -192,7 +193,7 @@ fun CashScreen(
 
                 // Balance Card
                 BalanceCard(
-                    balance = uiState.balance,
+                    balance = uiState.balance.roundBalanceForDisplay(),
                     dailyChange = uiState.dailyChange,
                     dailyAddition = uiState.dailyAddition,
                     selectedLocationId = uiState.selectedLocationId,

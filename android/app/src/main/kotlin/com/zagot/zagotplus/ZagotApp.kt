@@ -11,6 +11,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.zagot.zagotplus.debug.CrashLogger
 import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
@@ -35,10 +36,19 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
     lateinit var performanceTracer: PerformanceTracer
     
     @Inject
+    lateinit var crashLogger: CrashLogger
+    
+    @Inject
     lateinit var preferencesWarmer: PreferencesWarmer
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Install crash handler FIRST to catch any initialization crashes
+        crashLogger.install()
+        
+        // Log device info for crash debugging
+        crashLogger.logDeviceInfo()
         
         // Pre-warm preferences on background thread FIRST to avoid main thread disk I/O
         preferencesWarmer.warmUp()

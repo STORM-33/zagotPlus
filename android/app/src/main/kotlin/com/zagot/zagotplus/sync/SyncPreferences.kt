@@ -35,8 +35,9 @@ class SyncPreferences @Inject constructor(
     fun getLastSyncTimestamp(): Instant {
         val millis = prefs.getLong(KEY_LAST_SYNC, 0L)
         return if (millis > 0) {
-            // Subtract 1ms buffer to handle precision differences
-            Instant.ofEpochMilli(millis - TIMESTAMP_BUFFER_MS)
+            // No buffer subtraction needed: SyncService uses strict `gt` filter
+            // and deduplication via local_id handles any edge cases safely
+            Instant.ofEpochMilli(millis)
         } else {
             Instant.EPOCH
         }
@@ -59,8 +60,5 @@ class SyncPreferences @Inject constructor(
     companion object {
         private const val PREFS_NAME = "zagot_sync_prefs"
         private const val KEY_LAST_SYNC = "last_sync_timestamp"
-        
-        /** Buffer to subtract from timestamp to handle ms/microsecond precision differences */
-        private const val TIMESTAMP_BUFFER_MS = 1L
     }
 }

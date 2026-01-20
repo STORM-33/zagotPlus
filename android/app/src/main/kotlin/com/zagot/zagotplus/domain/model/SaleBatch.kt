@@ -29,5 +29,9 @@ data class SaleBatch(
     /** ID of the batch this one corrects (null if not a correction). */
     val correctsBatchId: UUID? = null,
     /** Reason for correction (only set on correction batches). */
-    val correctionReason: String? = null
+    val correctionReason: String? = null,
+    /** When this batch was voided (null if not voided). */
+    val voidedAt: Instant? = null,
+    /** Device that voided this batch (null if not voided). */
+    val voidedByDeviceId: String? = null
 )

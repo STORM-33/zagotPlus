@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.AuthPreferencesImpl
+import com.zagot.zagotplus.debug.CrashLogger
 import com.zagot.zagotplus.Config
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -13,9 +14,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "PinViewModel"
+
 @HiltViewModel
 class PinViewModel @Inject constructor(
-    private val authPreferences: AuthPreferences
+    private val authPreferences: AuthPreferences,
+    private val crashLogger: CrashLogger
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PinUiState())
@@ -118,18 +122,32 @@ class PinViewModel @Inject constructor(
     private fun handleConfirmPinComplete(pin: String) {
         val tempPin = _uiState.value.tempPin
         if (pin == tempPin) {
-            authPreferences.setPin(pin)
-            // After setting local PIN, require admin PIN setup
-            if (!authPreferences.isAdminPinSet()) {
+            try {
+                crashLogger.logDebug(TAG, "handleConfirmPinComplete: PIN confirmed, saving...")
+                authPreferences.setPin(pin)
+                crashLogger.logDebug(TAG, "handleConfirmPinComplete: PIN saved, checking admin PIN status")
+                // After setting local PIN, require admin PIN setup
+                if (!authPreferences.isAdminPinSet()) {
+                    crashLogger.logDebug(TAG, "handleConfirmPinComplete: Admin PIN not set, transitioning to SET_ADMIN_PIN")
+                    _uiState.value = _uiState.value.copy(
+                        mode = PinMode.SET_ADMIN_PIN,
+                        currentPin = "",
+                        tempPin = null,
+                        expectedPinLength = Config.ADMIN_PIN_LENGTH,
+                        errorMessage = null
+                    )
+                } else {
+                    crashLogger.logDebug(TAG, "handleConfirmPinComplete: Admin PIN already set, authentication complete")
+                    _uiState.value = _uiState.value.copy(isAuthenticated = true)
+                }
+            } catch (e: Exception) {
+                crashLogger.logError(TAG, "handleConfirmPinComplete: CRASH - Failed to save PIN", e)
                 _uiState.value = _uiState.value.copy(
-                    mode = PinMode.SET_ADMIN_PIN,
                     currentPin = "",
-                    tempPin = null,
-                    expectedPinLength = Config.ADMIN_PIN_LENGTH,
-                    errorMessage = null
+                    errorMessage = "Помилка збереження PIN: ${e.message}",
+                    mode = PinMode.SET_PIN,
+                    tempPin = null
                 )
-            } else {
-                _uiState.value = _uiState.value.copy(isAuthenticated = true)
             }
         } else {
             _uiState.value = _uiState.value.copy(
@@ -200,8 +218,20 @@ class PinViewModel @Inject constructor(
     private fun handleConfirmAdminPinComplete(pin: String) {
         val tempPin = _uiState.value.tempPin
         if (pin == tempPin) {
-            authPreferences.setAdminPin(pin)
-            _uiState.value = _uiState.value.copy(isAuthenticated = true)
+            try {
+                crashLogger.logDebug(TAG, "handleConfirmAdminPinComplete: Admin PIN confirmed, saving...")
+                authPreferences.setAdminPin(pin)
+                crashLogger.logDebug(TAG, "handleConfirmAdminPinComplete: Admin PIN saved, authentication complete")
+                _uiState.value = _uiState.value.copy(isAuthenticated = true)
+            } catch (e: Exception) {
+                crashLogger.logError(TAG, "handleConfirmAdminPinComplete: CRASH - Failed to save admin PIN", e)
+                _uiState.value = _uiState.value.copy(
+                    currentPin = "",
+                    errorMessage = "Помилка збереження паролю: ${e.message}",
+                    mode = PinMode.SET_ADMIN_PIN,
+                    tempPin = null
+                )
+            }
         } else {
             _uiState.value = _uiState.value.copy(
                 currentPin = "",

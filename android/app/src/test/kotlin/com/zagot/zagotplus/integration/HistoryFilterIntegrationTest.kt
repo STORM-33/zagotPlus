@@ -88,7 +88,8 @@ class HistoryFilterIntegrationTest {
                 id = locationRivne,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = baseInstant
+                createdAt = baseInstant,
+                localId = "loc-$locationRivne"
             )
         )
         database.locationDao().insert(
@@ -96,7 +97,8 @@ class HistoryFilterIntegrationTest {
                 id = locationKyiv,
                 name = "Склад Київ",
                 type = LocationType.MOBILE.name,
-                createdAt = baseInstant
+                createdAt = baseInstant,
+                localId = "loc-$locationKyiv"
             )
         )
     }

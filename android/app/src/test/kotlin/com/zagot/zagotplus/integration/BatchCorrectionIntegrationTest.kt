@@ -64,7 +64,8 @@ class BatchCorrectionIntegrationTest {
             purchaseBatchDao = database.purchaseBatchDao(),
             transactionDao = database.transactionDao(),
             productDao = database.productDao(),
-            syncManager = syncManager
+            syncManager = syncManager,
+            devicePreferences = mockk(relaxed = true)
         )
         
         // Insert test location and product
@@ -74,7 +75,8 @@ class BatchCorrectionIntegrationTest {
                     id = locationId,
                     name = "Test Location",
                     type = "kiosk",
-                    createdAt = testInstant
+                    createdAt = testInstant,
+                    localId = "loc-$locationId"
                 )
             )
             database.productDao().insert(

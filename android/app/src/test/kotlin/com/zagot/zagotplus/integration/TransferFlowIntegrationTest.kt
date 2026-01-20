@@ -84,7 +84,8 @@ class TransferFlowIntegrationTest {
                 id = locationRivne,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationRivne"
             )
         )
         database.locationDao().insert(
@@ -92,7 +93,8 @@ class TransferFlowIntegrationTest {
                 id = locationKyiv,
                 name = "Склад Київ",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationKyiv"
             )
         )
         database.locationDao().insert(
@@ -100,7 +102,8 @@ class TransferFlowIntegrationTest {
                 id = locationLviv,
                 name = "Склад Львів",
                 type = LocationType.MOBILE.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationLviv"
             )
         )
     }

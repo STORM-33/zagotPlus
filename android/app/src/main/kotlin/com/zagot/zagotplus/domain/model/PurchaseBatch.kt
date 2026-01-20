@@ -29,7 +29,11 @@ data class PurchaseBatch(
     /** ID of the batch this one corrects (null if not a correction). */
     val correctsBatchId: UUID? = null,
     /** Reason for correction (only set on correction batches). */
-    val correctionReason: String? = null
+    val correctionReason: String? = null,
+    /** When this batch was voided (null if not voided). */
+    val voidedAt: Instant? = null,
+    /** Device that voided this batch (null if not voided). */
+    val voidedByDeviceId: String? = null
 )
 
 /**
@@ -40,6 +44,8 @@ data class ProductDailyTotal(
     val productName: String,
     val totalWeightKg: BigDecimal,
     val totalAmount: BigDecimal,
+    /** Product image URI, if available. */
+    val imageUri: String? = null,
     /** Average purchase price per kg for current day. Null if no purchases. */
     val avgPricePerKg: BigDecimal? = null,
     /** Planned profit: (sellPrice - avgPurchasePrice) × weight. Null if prices missing. */

@@ -8,7 +8,8 @@
       "Bash(./gradlew :app:testDebugUnitTest:*)",
       "Bash(cmd.exe /c \"gradlew.bat :app:testDebugUnitTest\")",
       "Bash(bash -c:*)",
-      "Bash(./gradlew :app:assembleDebug:*)"
+      "Bash(./gradlew :app:assembleDebug:*)",
+      "Bash(__NEW_LINE_b4f201bf33ead433__ echo \"=== HARDWARE/PRINTER ===\")"
     ]
   }
 }

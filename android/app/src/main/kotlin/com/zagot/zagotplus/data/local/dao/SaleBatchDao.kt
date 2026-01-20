@@ -110,9 +110,17 @@ interface SaleBatchDao {
 
     /**
      * Mark a batch as voided (for correction workflow).
+     * Sets voided_at timestamp and voided_by_device_id for audit trail.
+     */
+    @Query("UPDATE sale_batches SET is_voided = 1, synced_at = NULL, voided_at = :voidedAt, voided_by_device_id = :deviceId WHERE id = :id")
+    suspend fun markVoided(id: UUID, voidedAt: Long, deviceId: String)
+    
+    /**
+     * Mark a batch as voided (legacy, without audit trail).
+     * @deprecated Use markVoided(id, voidedAt, deviceId) instead
      */
     @Query("UPDATE sale_batches SET is_voided = 1, synced_at = NULL WHERE id = :id")
-    suspend fun markVoided(id: UUID)
+    suspend fun markVoidedLegacy(id: UUID)
 
     /**
      * Get paginated non-voided batches (for inventory and history display).

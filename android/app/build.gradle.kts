@@ -139,6 +139,7 @@ dependencies {
     implementation(libs.supabase.postgrest.kt)
     implementation(libs.supabase.realtime.kt)
     implementation(libs.supabase.storage.kt)
+    implementation(libs.supabase.gotrue.kt)
     implementation(libs.ktor.client.android)
 
     // Coroutines

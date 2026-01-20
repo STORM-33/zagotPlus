@@ -2,6 +2,7 @@ package com.zagot.zagotplus.data.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.zagot.zagotplus.debug.CrashLogger
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -15,6 +16,7 @@ class AuthPreferencesTest {
     private lateinit var context: Context
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var editor: SharedPreferences.Editor
+    private lateinit var crashLogger: CrashLogger
     private lateinit var authPreferences: AuthPreferencesImpl
 
     @Before
@@ -22,6 +24,7 @@ class AuthPreferencesTest {
         context = mockk(relaxed = true)
         sharedPreferences = mockk(relaxed = true)
         editor = mockk(relaxed = true)
+        crashLogger = mockk(relaxed = true)
 
         every { context.getSharedPreferences(any(), any()) } returns sharedPreferences
         every { sharedPreferences.edit() } returns editor
@@ -31,7 +34,7 @@ class AuthPreferencesTest {
         every { editor.remove(any()) } returns editor
         every { editor.apply() } returns Unit
 
-        authPreferences = AuthPreferencesImpl(context)
+        authPreferences = AuthPreferencesImpl(context, crashLogger)
     }
 
     @Test
@@ -304,7 +307,7 @@ class AuthPreferencesTest {
     fun `restrictedModeFlow initial value matches stored preference`() {
         every { sharedPreferences.getBoolean("restricted_mode", false) } returns true
         
-        val newAuthPrefs = AuthPreferencesImpl(context)
+        val newAuthPrefs = AuthPreferencesImpl(context, crashLogger)
         
         assertTrue(newAuthPrefs.restrictedModeFlow.value)
     }
@@ -314,7 +317,7 @@ class AuthPreferencesTest {
         every { sharedPreferences.getBoolean("restricted_mode", false) } returns false
         every { editor.putBoolean("restricted_mode", true) } returns editor
         
-        val newAuthPrefs = AuthPreferencesImpl(context)
+        val newAuthPrefs = AuthPreferencesImpl(context, crashLogger)
         assertFalse(newAuthPrefs.restrictedModeFlow.value)
         
         newAuthPrefs.setRestrictedMode(true)
@@ -327,7 +330,7 @@ class AuthPreferencesTest {
         every { sharedPreferences.getBoolean("restricted_mode", false) } returns true
         every { editor.putBoolean("restricted_mode", false) } returns editor
         
-        val newAuthPrefs = AuthPreferencesImpl(context)
+        val newAuthPrefs = AuthPreferencesImpl(context, crashLogger)
         assertTrue(newAuthPrefs.restrictedModeFlow.value)
         
         newAuthPrefs.setRestrictedMode(false)

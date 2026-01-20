@@ -52,8 +52,8 @@ class SyncPreferencesTest {
 
         val result = syncPreferences.getLastSyncTimestamp()
 
-        // Should return stored timestamp minus 1ms buffer for precision safety
-        assertEquals(Instant.ofEpochMilli(testMillis - 1), result)
+        // Should return stored timestamp as-is (buffer removed per M1 audit fix)
+        assertEquals(Instant.ofEpochMilli(testMillis), result)
     }
 
     @Test
@@ -85,8 +85,8 @@ class SyncPreferencesTest {
 
         val result = syncPreferences.getLastSyncTimestamp()
 
-        // Should return stored timestamp minus 1ms buffer
-        assertEquals(Instant.ofEpochMilli(oldMillis - 1), result)
+        // Should return stored timestamp as-is (buffer removed per M1 audit fix)
+        assertEquals(Instant.ofEpochMilli(oldMillis), result)
     }
 
     @Test

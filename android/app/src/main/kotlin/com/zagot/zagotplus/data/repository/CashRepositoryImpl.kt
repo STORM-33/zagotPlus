@@ -1,6 +1,8 @@
 package com.zagot.zagotplus.data.repository
 
 import android.util.Log
+import androidx.room.withTransaction
+import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
@@ -26,6 +28,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CashRepositoryImpl @Inject constructor(
+    private val database: ZagotDatabase,
     private val cashOperationDao: CashOperationDao,
     private val expenseCategoryDao: ExpenseCategoryDao,
     private val devicePreferences: DevicePreferences
@@ -207,6 +210,7 @@ class CashRepositoryImpl @Inject constructor(
         val now = Instant.now()
         val deviceId = devicePreferences.getDeviceId()
         val transferNote = notes?.let { "Переказ: $it" } ?: "Переказ"
+        val transferPairId = UUID.randomUUID().toString()
         
         // Withdrawal from source (marked as transfer)
         val withdrawalEntity = CashOperationEntity(
@@ -221,7 +225,8 @@ class CashRepositoryImpl @Inject constructor(
             deviceId = deviceId,
             createdAt = now,
             syncedAt = null,
-            isTransfer = true
+            isTransfer = true,
+            transferPairId = transferPairId
         )
         
         // Deposit to destination (marked as transfer)
@@ -237,11 +242,14 @@ class CashRepositoryImpl @Inject constructor(
             deviceId = deviceId,
             createdAt = now,
             syncedAt = null,
-            isTransfer = true
+            isTransfer = true,
+            transferPairId = transferPairId
         )
         
-        cashOperationDao.insert(withdrawalEntity)
-        cashOperationDao.insert(depositEntity)
+        database.withTransaction {
+            cashOperationDao.insert(withdrawalEntity)
+            cashOperationDao.insert(depositEntity)
+        }
     }
     
     override fun getDailyDeposits(locationId: UUID, date: LocalDate): Flow<BigDecimal> {

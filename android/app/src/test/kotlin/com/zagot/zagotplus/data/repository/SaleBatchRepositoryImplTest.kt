@@ -44,7 +44,7 @@ class SaleBatchRepositoryImplTest {
         saleBatchDao = mockk()
         transactionDao = mockk()
         syncManager = mockk(relaxed = true)
-        repository = SaleBatchRepositoryImpl(database, saleBatchDao, transactionDao, syncManager)
+        repository = SaleBatchRepositoryImpl(database, saleBatchDao, transactionDao, syncManager, mockk(relaxed = true))
     }
 
     private fun createBatchEntity(

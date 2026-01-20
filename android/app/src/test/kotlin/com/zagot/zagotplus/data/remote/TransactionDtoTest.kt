@@ -28,9 +28,9 @@ class TransactionDtoTest {
             type = "purchase",
             transferLocationId = null,
             productId = testProductId.toString(),
-            weightKg = 25.5,
-            pricePerKg = 50.0,
-            totalAmount = 1275.0,
+            weightKg = "25.5",
+            pricePerKg = "50.0",
+            totalAmount = "1275.0",
             notes = "Test purchase",
             deviceId = "device-abc",
             createdAt = testInstant.toString(),
@@ -69,7 +69,7 @@ class TransactionDtoTest {
             type = "transfer_out",
             transferLocationId = transferLocationId.toString(),
             productId = testProductId.toString(),
-            weightKg = 10.0,
+            weightKg = "10.0",
             pricePerKg = null,
             totalAmount = null,
             notes = null,
@@ -98,7 +98,7 @@ class TransactionDtoTest {
             type = "sale",
             transferLocationId = null,
             productId = null,
-            weightKg = 5.0,
+            weightKg = "5.0",
             pricePerKg = null,
             totalAmount = null,
             notes = null,
@@ -152,9 +152,9 @@ class TransactionDtoTest {
         assertEquals("sale", dto.type)
         assertNull(dto.transferLocationId)
         assertEquals(testProductId.toString(), dto.productId)
-        assertEquals(100.25, dto.weightKg, 0.001)
-        assertEquals(75.00, dto.pricePerKg!!, 0.001)
-        assertEquals(7518.75, dto.totalAmount!!, 0.001)
+        assertEquals("100.25", dto.weightKg)
+        assertEquals("75.00", dto.pricePerKg)
+        assertEquals("7518.75", dto.totalAmount)
         assertEquals("Wholesale sale", dto.notes)
         assertEquals("device-sale", dto.deviceId)
         assertEquals(testInstant.toString(), dto.createdAt)
@@ -246,9 +246,9 @@ class TransactionDtoTest {
                 type = type,
                 transferLocationId = if (type.startsWith("transfer")) testLocationId.toString() else null,
                 productId = testProductId.toString(),
-                weightKg = 10.0,
-                pricePerKg = 50.0,
-                totalAmount = 500.0,
+                weightKg = "10.0",
+                pricePerKg = "50.0",
+                totalAmount = "500.0",
                 notes = null,
                 deviceId = null,
                 createdAt = testInstant.toString(),
@@ -271,7 +271,7 @@ class TransactionDtoTest {
             type = "purchase",
             transferLocationId = null,
             productId = null,
-            weightKg = 0.0,
+            weightKg = "0.0",
             pricePerKg = null,
             totalAmount = null,
             notes = null,

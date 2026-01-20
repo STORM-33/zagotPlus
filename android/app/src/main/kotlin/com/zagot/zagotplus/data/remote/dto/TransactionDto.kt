@@ -33,13 +33,13 @@ data class TransactionDto(
     val productId: String?,
 
     @SerialName("weight_kg")
-    val weightKg: Double,
+    val weightKg: String,
 
     @SerialName("price_per_kg")
-    val pricePerKg: Double?,
+    val pricePerKg: String?,
 
     @SerialName("total_amount")
-    val totalAmount: Double?,
+    val totalAmount: String?,
 
     @SerialName("notes")
     val notes: String?,
@@ -74,9 +74,9 @@ data class TransactionDto(
         type = type,
         transferLocationId = transferLocationId?.let { UUID.fromString(it) },
         productId = productId?.let { UUID.fromString(it) },
-        weightKg = BigDecimal.valueOf(weightKg),
-        pricePerKg = pricePerKg?.let { BigDecimal.valueOf(it) },
-        totalAmount = totalAmount?.let { BigDecimal.valueOf(it) },
+        weightKg = BigDecimal(weightKg),
+        pricePerKg = pricePerKg?.let { BigDecimal(it) },
+        totalAmount = totalAmount?.let { BigDecimal(it) },
         notes = notes,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
@@ -96,9 +96,9 @@ data class TransactionDto(
             type = entity.type,
             transferLocationId = entity.transferLocationId?.toString(),
             productId = entity.productId?.toString(),
-            weightKg = entity.weightKg.toDouble(),
-            pricePerKg = entity.pricePerKg?.toDouble(),
-            totalAmount = entity.totalAmount?.toDouble(),
+            weightKg = entity.weightKg.toPlainString(),
+            pricePerKg = entity.pricePerKg?.toPlainString(),
+            totalAmount = entity.totalAmount?.toPlainString(),
             notes = entity.notes,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),

@@ -40,7 +40,9 @@ object DatabaseModule {
         ZagotDatabase.MIGRATION_7_8,
         ZagotDatabase.MIGRATION_8_9,
         ZagotDatabase.MIGRATION_9_10,
-        ZagotDatabase.MIGRATION_10_11
+        ZagotDatabase.MIGRATION_10_11,
+        ZagotDatabase.MIGRATION_11_12,
+        ZagotDatabase.MIGRATION_12_13
     )
 
     /**

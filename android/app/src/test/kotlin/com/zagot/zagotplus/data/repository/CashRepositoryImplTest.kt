@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.data.repository
 
+import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
@@ -24,6 +25,7 @@ import java.util.UUID
 
 class CashRepositoryImplTest {
 
+    private lateinit var database: ZagotDatabase
     private lateinit var cashOperationDao: CashOperationDao
     private lateinit var expenseCategoryDao: ExpenseCategoryDao
     private lateinit var devicePreferences: DevicePreferences
@@ -35,6 +37,7 @@ class CashRepositoryImplTest {
 
     @Before
     fun setup() {
+        database = mockk()
         cashOperationDao = mockk()
         expenseCategoryDao = mockk()
         devicePreferences = mockk()
@@ -42,7 +45,7 @@ class CashRepositoryImplTest {
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { expenseCategoryDao.getAllCategories() } returns flowOf(emptyList())
         
-        repository = CashRepositoryImpl(cashOperationDao, expenseCategoryDao, devicePreferences)
+        repository = CashRepositoryImpl(database, cashOperationDao, expenseCategoryDao, devicePreferences)
     }
 
     private fun createCategoryEntity(

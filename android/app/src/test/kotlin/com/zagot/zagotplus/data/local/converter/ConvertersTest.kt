@@ -64,9 +64,10 @@ class ConvertersTest {
         assertEquals(original, restored)
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun `toUUID throws on invalid UUID format`() {
-        converters.toUUID("not-a-valid-uuid")
+    @Test
+    fun `toUUID returns null on invalid UUID format`() {
+        val result = converters.toUUID("not-a-valid-uuid")
+        assertNull(result)
     }
 
     // ==================== Instant Conversion ====================
@@ -216,9 +217,10 @@ class ConvertersTest {
         assertEquals(BigDecimal("-123.45"), result)
     }
 
-    @Test(expected = NumberFormatException::class)
-    fun `toBigDecimal throws on invalid number format`() {
-        converters.toBigDecimal("not-a-number")
+    @Test
+    fun `toBigDecimal returns null on invalid number format`() {
+        val result = converters.toBigDecimal("not-a-number")
+        assertNull(result)
     }
 
     @Test

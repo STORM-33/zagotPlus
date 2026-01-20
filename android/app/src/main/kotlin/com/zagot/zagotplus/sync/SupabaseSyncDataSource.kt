@@ -31,6 +31,11 @@ class SupabaseSyncDataSource @Inject constructor(
         private const val TABLE_PRODUCTS = "products"
         private const val TABLE_EXPENSE_CATEGORIES = "expense_categories"
         private const val TABLE_CASH_OPERATIONS = "cash_operations"
+        
+        // TODO: Add pagination to pull operations to prevent memory exhaustion on large datasets
+        // Requires upgrade to supabase-kt version with .limit() and .order() support
+        // Target limit: 1000 records per pull operation
+        // See AUDIT.md H2 for details
     }
 
     override suspend fun pushTransactions(dtos: List<TransactionDto>) {

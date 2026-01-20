@@ -58,7 +58,7 @@ class SyncManager @Inject constructor(
     /**
      * Trigger immediate one-time sync (e.g., from "Sync Now" button).
      * Uses same constraints as periodic sync.
-     * Rate-limited to prevent spam (minimum 30 seconds between syncs),
+     * Rate-limited to prevent spam (minimum 5 seconds between syncs),
      * unless last sync failed - then immediate retry is allowed.
      * 
      * @return true if sync was enqueued, false if rate-limited

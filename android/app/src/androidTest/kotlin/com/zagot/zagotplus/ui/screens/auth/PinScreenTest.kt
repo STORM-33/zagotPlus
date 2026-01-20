@@ -7,7 +7,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.zagot.zagotplus.data.preferences.AuthPreferences
+import com.zagot.zagotplus.debug.CrashLogger
 import org.junit.Rule
 import org.junit.Test
 
@@ -246,7 +249,8 @@ class PinScreenTest {
             pinSet = isPinSet,
             lockedOut = isLockedOut
         )
-        return PinViewModel(mockPrefs)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return PinViewModel(mockPrefs, CrashLogger(context))
     }
     
     /**
@@ -259,6 +263,11 @@ class PinScreenTest {
         private var pin: String? = if (pinSet) "1234" else null
         private var failedAttempts = 0
         private var authenticated = false
+        private var adminPinSet = false
+        private var adminPin: String? = null
+        private var restrictedMode = false
+        private val _restrictedModeFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+        override val restrictedModeFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _restrictedModeFlow
         
         override fun isPinSet(): Boolean = pin != null
         override fun setPin(pin: String) { 
@@ -282,5 +291,18 @@ class PinScreenTest {
         override fun isAuthenticated(): Boolean = authenticated
         override fun isSessionValid(): Boolean = authenticated
         override fun getSessionRemainingMinutes(): Int = if (authenticated) 240 else 0
+        
+        override fun isAdminPinSet(): Boolean = adminPinSet
+        override fun setAdminPin(pin: String) {
+            adminPin = pin
+            adminPinSet = true
+        }
+        override fun verifyAdminPin(pin: String): Boolean = pin == adminPin
+        
+        override fun isRestrictedMode(): Boolean = restrictedMode
+        override fun setRestrictedMode(restricted: Boolean) {
+            restrictedMode = restricted
+            _restrictedModeFlow.value = restricted
+        }
     }
 }

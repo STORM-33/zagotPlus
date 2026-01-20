@@ -79,3 +79,23 @@ object CurrencyFormat {
  * Extension function to round BigDecimal to whole hryvnias.
  */
 fun BigDecimal.roundToWholeHryvnia(): BigDecimal = this.setScale(0, RoundingMode.HALF_UP)
+
+/**
+ * Rounds balance for UI display: values in range (-0.99, 0.99) are displayed as 0.
+ * This affects UI display only — internal calculations remain unchanged.
+ */
+fun BigDecimal.roundBalanceForDisplay(): BigDecimal {
+    val threshold = BigDecimal("0.99")
+    return if (this > threshold.negate() && this < threshold) {
+        BigDecimal.ZERO
+    } else {
+        this
+    }
+}
+
+/**
+ * Formats balance with UI rounding: if balance is in range (-0.99, 0.99), displays as 0.
+ */
+fun CurrencyFormat.formatBalanceRounded(amount: BigDecimal): String {
+    return formatCurrency(amount.roundBalanceForDisplay())
+}
