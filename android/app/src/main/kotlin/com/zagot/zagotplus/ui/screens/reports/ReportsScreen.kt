@@ -113,6 +113,7 @@ fun ReportsScreen(
         EarningsDetailDialog(
             salesItems = uiState.salesItems,
             totalEarnings = uiState.totalEarnings,
+            totalSpendings = uiState.totalSpendings,
             currencyFormat = currencyFormat,
             weightFormat = weightFormat,
             onDismiss = { showEarningsDialog = false }
@@ -388,10 +389,14 @@ private fun SpendingsDetailDialog(
 private fun EarningsDetailDialog(
     salesItems: List<SalesReportItem>,
     totalEarnings: BigDecimal,
+    totalSpendings: BigDecimal,
     currencyFormat: DecimalFormat,
     weightFormat: DecimalFormat,
     onDismiss: () -> Unit
 ) {
+    // Calculate net profit: Total earnings - Total spendings
+    val netProfit = totalEarnings.subtract(totalSpendings)
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Деталі прибутку") },
@@ -453,6 +458,28 @@ private fun EarningsDetailDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+                // Net profit (always shown, even if no sales)
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Чистий прибуток",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "₴${currencyFormat.format(netProfit)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (netProfit >= BigDecimal.ZERO) 
+                            MaterialTheme.colorScheme.primary 
+                        else 
+                            MaterialTheme.colorScheme.error
+                    )
                 }
             }
         },

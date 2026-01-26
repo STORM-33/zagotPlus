@@ -72,6 +72,7 @@ fun NavGraph(
     isOnline: Boolean,
     onSyncClick: () -> Unit,
     authPreferences: AuthPreferences,
+    selectedLocationName: String? = null,
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
@@ -108,6 +109,13 @@ fun NavGraph(
         currentDestination?.hierarchy?.any { it.route == destination.route } == true
     }?.title ?: Destination.Purchase.title
     
+    // In full mode, show location name; in restricted mode, show screen title
+    val headerTitle = if (!isRestrictedMode && selectedLocationName != null) {
+        selectedLocationName
+    } else {
+        currentTitle
+    }
+    
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -122,7 +130,7 @@ fun NavGraph(
                     },
                     navigationIcon = {
                         Text(
-                            text = currentTitle,
+                            text = headerTitle,
                             style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
                             modifier = Modifier.padding(start = 16.dp)
                         )

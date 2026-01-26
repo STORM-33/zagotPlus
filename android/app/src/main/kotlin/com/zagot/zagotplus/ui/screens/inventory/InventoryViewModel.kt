@@ -118,8 +118,9 @@ class InventoryViewModel @Inject constructor(
                 
                 state.products.mapNotNull { product ->
                     val weight = aggregatedInventory[product.id] ?: BigDecimal.ZERO
-                    // Only include products with non-zero weight
-                    if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
+                    // Hide products with zero or near-zero weight (handles rounding like -0.0)
+                    // Threshold 0.05 ensures anything displaying as "0.0" or "-0.0" is hidden
+                    if (weight.abs() < BigDecimal("0.05")) return@mapNotNull null
                     
                     val salePrice = product.defaultSellPrice
                     val avgPurchasePrice = avgPrices[product.id]
@@ -143,8 +144,9 @@ class InventoryViewModel @Inject constructor(
                 state.products.mapNotNull { product ->
                     val inventoryItem = inventoryMap[product.id]
                     val weight = inventoryItem?.totalWeightKg ?: BigDecimal.ZERO
-                    // Only include products with non-zero weight
-                    if (weight.compareTo(BigDecimal.ZERO) == 0) return@mapNotNull null
+                    // Hide products with zero or near-zero weight (handles rounding like -0.0)
+                    // Threshold 0.05 ensures anything displaying as "0.0" or "-0.0" is hidden
+                    if (weight.abs() < BigDecimal("0.05")) return@mapNotNull null
                     
                     val salePrice = product.defaultSellPrice
                     val avgPurchasePrice = avgPrices[product.id]
