@@ -32,12 +32,15 @@ data class TransactionDto(
     @SerialName("product_id")
     val productId: String?,
 
+    @Serializable(with = FlexibleDecimalSerializer::class)
     @SerialName("weight_kg")
     val weightKg: String,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("price_per_kg")
     val pricePerKg: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("total_amount")
     val totalAmount: String?,
 
@@ -82,7 +85,8 @@ data class TransactionDto(
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
         batchId = batchId?.let { UUID.fromString(it) },
-        saleBatchId = saleBatchId?.let { UUID.fromString(it) }
+        saleBatchId = saleBatchId?.let { UUID.fromString(it) },
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {

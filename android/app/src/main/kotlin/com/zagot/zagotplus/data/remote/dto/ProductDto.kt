@@ -21,9 +21,11 @@ data class ProductDto(
     @SerialName("name")
     val name: String,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("default_buy_price")
     val defaultBuyPrice: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("default_sell_price")
     val defaultSellPrice: String?,
 
@@ -34,7 +36,10 @@ data class ProductDto(
     val createdAt: String,
 
     @SerialName("image_uri")
-    val imageUri: String? = null
+    val imageUri: String? = null,
+
+    @SerialName("server_updated_at")
+    val serverUpdatedAt: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -48,7 +53,8 @@ data class ProductDto(
         isActive = isActive,
         createdAt = Instant.parse(createdAt),
         syncedAt = Instant.now(),
-        imageUri = imageUri
+        imageUri = imageUri,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {

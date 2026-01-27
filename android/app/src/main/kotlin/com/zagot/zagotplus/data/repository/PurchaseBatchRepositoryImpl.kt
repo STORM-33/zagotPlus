@@ -153,15 +153,22 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     override suspend fun markVoided(id: UUID) {
         val now = Instant.now().toEpochMilli()
         val deviceId = devicePreferences.getDeviceId()
-        purchaseBatchDao.markVoided(id, now, deviceId)
+        val rowsUpdated = purchaseBatchDao.markVoided(id, now, deviceId)
+        if (rowsUpdated == 0) {
+            throw IllegalArgumentException("Партію не знайдено: $id")
+        }
         syncManager.triggerManualSync()
     }
 
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
         transactionDao.getByBatchId(batchId).map { it.toDomain() }
 
-    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<PurchaseBatch> =
-        purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int, includeVoided: Boolean): List<PurchaseBatch> =
+        if (includeVoided) {
+            purchaseBatchDao.getAllPaginatedIncludingVoided(limit, offset).map { it.toDomain() }
+        } else {
+            purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+        }
 
     override suspend fun getTotalBatchCount(): Int =
         purchaseBatchDao.getActiveCount()
@@ -192,7 +199,10 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         
         database.withTransaction {
             // 1. Mark the original batch as voided (with audit trail)
-            purchaseBatchDao.markVoided(originalBatchId, now, deviceId)
+            val rowsVoided = purchaseBatchDao.markVoided(originalBatchId, now, deviceId)
+            if (rowsVoided == 0) {
+                throw IllegalStateException("Не вдалося анулювати оригінальну партію")
+            }
             
             // 2. Insert the new correction batch
             purchaseBatchDao.insert(batchWithCorrection.toEntity())

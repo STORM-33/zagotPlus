@@ -42,7 +42,8 @@ data class ExpenseCategoryDto(
         name = name,
         isActive = isActive,
         createdAt = Instant.parse(createdAt),
-        syncedAt = syncedAt?.let { Instant.parse(it) }
+        syncedAt = syncedAt?.let { Instant.parse(it) },
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {

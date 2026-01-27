@@ -25,9 +25,11 @@ data class PurchaseBatchDto(
     @SerialName("notes")
     val notes: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("total_weight_kg")
     val totalWeightKg: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("total_amount")
     val totalAmount: String?,
 
@@ -79,7 +81,8 @@ data class PurchaseBatchDto(
         correctsBatchId = correctsBatchId?.let { UUID.fromString(it) },
         correctionReason = correctionReason,
         voidedAt = voidedAt?.let { Instant.parse(it) },
-        voidedByDeviceId = voidedByDeviceId
+        voidedByDeviceId = voidedByDeviceId,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {

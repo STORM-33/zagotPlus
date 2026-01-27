@@ -78,8 +78,9 @@ interface SaleBatchRepository {
 
     /**
      * Get paginated batches ordered by creation date (newest first).
+     * @param includeVoided If true, includes voided batches (for "show deleted" filter)
      */
-    suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<SaleBatch>
+    suspend fun getAllBatchesPaginated(limit: Int, offset: Int, includeVoided: Boolean = false): List<SaleBatch>
 
     /**
      * Get total count of batches.

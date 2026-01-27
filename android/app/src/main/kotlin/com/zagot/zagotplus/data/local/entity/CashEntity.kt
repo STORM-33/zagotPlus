@@ -19,7 +19,8 @@ import java.util.UUID
     tableName = "expense_categories",
     indices = [
         Index(value = ["local_id"], unique = true),
-        Index(value = ["synced_at"])
+        Index(value = ["synced_at"]),
+        Index(value = ["server_updated_at"])
     ]
 )
 data class ExpenseCategoryEntity(
@@ -40,7 +41,10 @@ data class ExpenseCategoryEntity(
     val createdAt: Instant,
 
     @ColumnInfo(name = "synced_at")
-    val syncedAt: Instant? = null
+    val syncedAt: Instant? = null,
+
+    @ColumnInfo(name = "server_updated_at")
+    val serverUpdatedAt: Instant? = null
 )
 
 /**
@@ -123,7 +127,8 @@ data class CashHistoryProjection(
         Index(value = ["created_at"]),
         Index(value = ["type"]),
         Index(value = ["is_transfer"]),
-        Index(value = ["transfer_pair_id"])
+        Index(value = ["transfer_pair_id"]),
+        Index(value = ["server_updated_at"])
     ]
 )
 data class CashOperationEntity(
@@ -165,5 +170,8 @@ data class CashOperationEntity(
     val isTransfer: Boolean = false,
 
     @ColumnInfo(name = "transfer_pair_id")
-    val transferPairId: String? = null
+    val transferPairId: String? = null,
+
+    @ColumnInfo(name = "server_updated_at")
+    val serverUpdatedAt: Instant? = null
 )

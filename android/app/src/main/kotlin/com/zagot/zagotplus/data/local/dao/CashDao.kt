@@ -96,10 +96,13 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations WHERE location_id = :locationId)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.location_id = :locationId
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
@@ -113,13 +116,15 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations
-            WHERE location_id = :locationId
-              AND created_at >= :startOfDay
-              AND created_at < :endOfDay)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.location_id = :locationId
+              AND co.created_at >= :startOfDay
+              AND co.created_at < :endOfDay
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
@@ -164,10 +169,12 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.batch_id IS NULL OR pb.is_voided = 0)
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
@@ -180,11 +187,13 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment', 'purchase') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations
-            WHERE created_at >= :startOfDay AND created_at < :endOfDay)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.created_at >= :startOfDay AND co.created_at < :endOfDay
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id

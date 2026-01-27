@@ -25,6 +25,7 @@ data class CashOperationDto(
     @SerialName("type")
     val type: String,
 
+    @Serializable(with = FlexibleDecimalSerializer::class)
     @SerialName("amount")
     val amount: String,
 
@@ -71,7 +72,8 @@ data class CashOperationDto(
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
         isTransfer = isTransfer,
-        transferPairId = transferPairId
+        transferPairId = transferPairId,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {

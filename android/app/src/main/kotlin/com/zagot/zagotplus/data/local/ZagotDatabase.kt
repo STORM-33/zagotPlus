@@ -26,7 +26,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 13 (drop stale composite index on transactions)
+ * Version: 14 (add server_updated_at for server-wins conflict resolution)
  */
 @Database(
     entities = [
@@ -38,7 +38,7 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         ExpenseCategoryEntity::class,
         CashOperationEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -502,6 +502,41 @@ abstract class ZagotDatabase : RoomDatabase() {
         val MIGRATION_12_13 = object : Migration(12, 13) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DROP INDEX IF EXISTS index_transactions_location_product")
+            }
+        }
+
+        /**
+         * Migration from version 13 to 14: Add server_updated_at column to all syncable tables.
+         * This enables server-wins conflict resolution during sync.
+         * 
+         * When pushing records, we compare local server_updated_at with server's current value.
+         * If server has a newer timestamp, we skip the push and let pull retrieve the correct data.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add server_updated_at to sale_batches
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_server_updated_at ON sale_batches(server_updated_at)")
+                
+                // Add server_updated_at to purchase_batches
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_purchase_batches_server_updated_at ON purchase_batches(server_updated_at)")
+                
+                // Add server_updated_at to transactions
+                db.execSQL("ALTER TABLE transactions ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_server_updated_at ON transactions(server_updated_at)")
+                
+                // Add server_updated_at to cash_operations
+                db.execSQL("ALTER TABLE cash_operations ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_server_updated_at ON cash_operations(server_updated_at)")
+                
+                // Add server_updated_at to expense_categories
+                db.execSQL("ALTER TABLE expense_categories ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_expense_categories_server_updated_at ON expense_categories(server_updated_at)")
+                
+                // Add server_updated_at to products
+                db.execSQL("ALTER TABLE products ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_products_server_updated_at ON products(server_updated_at)")
             }
         }
     }
