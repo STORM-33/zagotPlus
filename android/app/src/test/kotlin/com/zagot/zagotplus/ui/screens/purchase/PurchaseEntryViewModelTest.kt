@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.purchase
 import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
@@ -39,6 +40,7 @@ class PurchaseEntryViewModelTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
+    private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var scalesService: ScalesService
@@ -52,12 +54,14 @@ class PurchaseEntryViewModelTest {
     fun setup() {
         productRepository = mockk()
         purchaseBatchRepository = mockk()
+        locationRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
         scalesService = mockk(relaxed = true)
         printerService = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
+        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { productOrderPreferences.getProductOrder() } returns emptyList()
@@ -78,6 +82,7 @@ class PurchaseEntryViewModelTest {
         return PurchaseEntryViewModel(
             productRepository = productRepository,
             purchaseBatchRepository = purchaseBatchRepository,
+            locationRepository = locationRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences,
             scalesService = scalesService,

@@ -2,6 +2,7 @@ package com.zagot.zagotplus.ui.screens.settings
 
 import android.content.ClipboardManager
 import android.content.Context
+import com.zagot.zagotplus.data.local.DatabaseExporter
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
@@ -38,6 +39,7 @@ class SettingsViewModelTest {
     private lateinit var locationRepository: LocationRepository
     private lateinit var transactionDao: TransactionDao
     private lateinit var clipboardManager: ClipboardManager
+    private lateinit var databaseExporter: DatabaseExporter
     private lateinit var viewModel: SettingsViewModel
 
     private val testDeviceId = "test-device-12345"
@@ -57,6 +59,7 @@ class SettingsViewModelTest {
         locationRepository = mockk()
         transactionDao = mockk()
         clipboardManager = mockk(relaxed = true)
+        databaseExporter = mockk(relaxed = true)
 
         every { syncStatusRepository.syncStatus } returns syncStatusFlow
         every { devicePreferences.getDeviceId() } returns testDeviceId
@@ -76,7 +79,8 @@ class SettingsViewModelTest {
             devicePreferences = devicePreferences,
             authPreferences = authPreferences,
             locationRepository = locationRepository,
-            transactionDao = transactionDao
+            transactionDao = transactionDao,
+            databaseExporter = databaseExporter
         )
     }
 

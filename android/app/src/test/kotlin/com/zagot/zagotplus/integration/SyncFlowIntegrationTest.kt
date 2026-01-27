@@ -295,8 +295,8 @@ class SyncFlowIntegrationTest {
     // This is a test infrastructure issue, not a production code bug.
     // These tests work correctly with instrumented tests on real Android devices.
 
-    @Ignore("Robolectric SQLite doesn't support Room @Upsert correctly")
     @Test
+    @Ignore("Room @Upsert fails in Robolectric - works on real Android devices")
     fun `full sync pushes all local data to remote`() = runTest {
         // Given: Populate all local repositories
         insertTestLocations()
@@ -414,8 +414,8 @@ class SyncFlowIntegrationTest {
         )
     }
 
-    @Ignore("Robolectric SQLite doesn't support Room @Upsert correctly")
     @Test
+    @Ignore("Room @Upsert fails in Robolectric - works on real Android devices")
     fun `sync achieves data consistency between local and remote`() = runTest {
         // Given: Set up local data
         insertTestLocations()
@@ -503,8 +503,8 @@ class SyncFlowIntegrationTest {
         )
     }
 
-    @Ignore("Robolectric SQLite doesn't support Room @Upsert correctly")
     @Test
+    @Ignore("Room @Upsert fails in Robolectric - works on real Android devices")
     fun `sync is idempotent - second sync does not duplicate data`() = runTest {
         // Given: Populate local data
         insertTestLocations()
@@ -581,8 +581,8 @@ class SyncFlowIntegrationTest {
         )
     }
 
-    @Ignore("Robolectric SQLite doesn't support Room @Upsert correctly")
     @Test
+    @Ignore("Room @Upsert fails in Robolectric - works on real Android devices")
     fun `sync handles mixed push and pull scenario`() = runTest {
         // Given: Local has some data, remote has other data
         insertTestLocations()

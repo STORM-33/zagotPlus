@@ -370,4 +370,26 @@ class SaleBatchRepositoryImplTest {
         assertEquals(batchId2, batch.correctsBatchId)
         assertEquals("Corrected data", batch.correctionReason)
     }
+
+    @Test
+    fun `markVoided validates update succeeded`() = runTest {
+        coEvery { saleBatchDao.markVoided(batchId1, any(), any()) } returns 1
+        
+        repository.markVoided(batchId1)
+        
+        coVerify { saleBatchDao.markVoided(batchId1, any(), any()) }
+        coVerify { syncManager.triggerManualSync() }
+    }
+
+    @Test
+    fun `markVoided throws when batch not found`() = runTest {
+        coEvery { saleBatchDao.markVoided(batchId1, any(), any()) } returns 0
+        
+        try {
+            repository.markVoided(batchId1)
+            fail("Expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message?.contains(batchId1.toString()) == true)
+        }
+    }
 }

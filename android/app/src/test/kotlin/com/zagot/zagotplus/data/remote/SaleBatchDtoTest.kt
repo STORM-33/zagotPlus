@@ -185,4 +185,128 @@ class SaleBatchDtoTest {
         assertEquals(BigDecimal.valueOf(0.0), entity.totalAmount)
         assertEquals(0, entity.itemCount)
     }
+
+    // ==================== Voiding Fields Tests ====================
+
+    @Test
+    fun `toEntity converts voiding fields correctly`() {
+        val voidedAt = Instant.parse("2024-01-16T14:30:00Z")
+        val correctsBatchId = UUID.fromString("770e8400-e29b-41d4-a716-446655440002")
+        
+        val dto = SaleBatchDto(
+            id = testId.toString(),
+            localId = "local-voided",
+            locationId = testLocationId.toString(),
+            notes = "Voided sale batch",
+            totalWeightKg = "100.0",
+            totalAmount = "5000.0",
+            itemCount = 5,
+            deviceId = "device-abc",
+            createdAt = testInstant.toString(),
+            syncedAt = testInstant.toString(),
+            isVoided = true,
+            correctsBatchId = correctsBatchId.toString(),
+            correctionReason = "Помилка при зважуванні",
+            voidedAt = voidedAt.toString(),
+            voidedByDeviceId = "device-xyz"
+        )
+
+        val entity = dto.toEntity()
+
+        assertTrue(entity.isVoided)
+        assertEquals(correctsBatchId, entity.correctsBatchId)
+        assertEquals("Помилка при зважуванні", entity.correctionReason)
+        assertEquals(voidedAt, entity.voidedAt)
+        assertEquals("device-xyz", entity.voidedByDeviceId)
+    }
+
+    @Test
+    fun `toEntity defaults voiding fields when not provided`() {
+        val dto = SaleBatchDto(
+            id = testId.toString(),
+            localId = "local-not-voided",
+            locationId = testLocationId.toString(),
+            notes = null,
+            totalWeightKg = "100.0",
+            totalAmount = "5000.0",
+            itemCount = 5,
+            deviceId = "device-abc",
+            createdAt = testInstant.toString(),
+            syncedAt = null
+            // voiding fields not specified - should default
+        )
+
+        val entity = dto.toEntity()
+
+        assertFalse(entity.isVoided)
+        assertNull(entity.correctsBatchId)
+        assertNull(entity.correctionReason)
+        assertNull(entity.voidedAt)
+        assertNull(entity.voidedByDeviceId)
+    }
+
+    @Test
+    fun `fromEntity converts voiding fields correctly`() {
+        val voidedAt = Instant.parse("2024-01-16T14:30:00Z")
+        val correctsBatchId = UUID.fromString("770e8400-e29b-41d4-a716-446655440002")
+        
+        val entity = SaleBatchEntity(
+            id = testId,
+            localId = "local-voided-entity",
+            locationId = testLocationId,
+            notes = "Voided sale entity",
+            totalWeightKg = BigDecimal("100.00"),
+            totalAmount = BigDecimal("5000.00"),
+            itemCount = 5,
+            deviceId = "device-abc",
+            createdAt = testInstant,
+            syncedAt = testInstant,
+            isVoided = true,
+            correctsBatchId = correctsBatchId,
+            correctionReason = "Невірна вага",
+            voidedAt = voidedAt,
+            voidedByDeviceId = "device-xyz"
+        )
+
+        val dto = SaleBatchDto.fromEntity(entity)
+
+        assertTrue(dto.isVoided)
+        assertEquals(correctsBatchId.toString(), dto.correctsBatchId)
+        assertEquals("Невірна вага", dto.correctionReason)
+        assertEquals(voidedAt.toString(), dto.voidedAt)
+        assertEquals("device-xyz", dto.voidedByDeviceId)
+    }
+
+    @Test
+    fun `roundtrip preserves voiding fields`() {
+        val voidedAt = Instant.parse("2024-01-16T14:30:00Z")
+        val correctsBatchId = UUID.fromString("770e8400-e29b-41d4-a716-446655440002")
+        
+        val originalEntity = SaleBatchEntity(
+            id = testId,
+            localId = "roundtrip-voided",
+            locationId = testLocationId,
+            notes = "Roundtrip voided sale",
+            totalWeightKg = BigDecimal("100.00"),
+            totalAmount = BigDecimal("5000.00"),
+            itemCount = 5,
+            deviceId = "device-abc",
+            createdAt = testInstant,
+            syncedAt = testInstant,
+            isVoided = true,
+            correctsBatchId = correctsBatchId,
+            correctionReason = "Помилка оператора",
+            voidedAt = voidedAt,
+            voidedByDeviceId = "device-xyz"
+        )
+
+        val dto = SaleBatchDto.fromEntity(originalEntity)
+        val convertedEntity = dto.toEntity()
+
+        assertEquals(originalEntity.isVoided, convertedEntity.isVoided)
+        assertEquals(originalEntity.correctsBatchId, convertedEntity.correctsBatchId)
+        assertEquals(originalEntity.correctionReason, convertedEntity.correctionReason)
+        assertEquals(originalEntity.voidedAt, convertedEntity.voidedAt)
+        assertEquals(originalEntity.voidedByDeviceId, convertedEntity.voidedByDeviceId)
+    }
 }

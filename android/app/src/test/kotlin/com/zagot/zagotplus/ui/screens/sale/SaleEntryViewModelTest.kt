@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.sale
 import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
@@ -31,6 +32,7 @@ class SaleEntryViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var saleBatchRepository: SaleBatchRepository
+    private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
     private lateinit var viewModel: SaleEntryViewModel
@@ -48,10 +50,12 @@ class SaleEntryViewModelTest {
         productRepository = mockk()
         transactionRepository = mockk()
         saleBatchRepository = mockk()
+        locationRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
+        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { transactionRepository.getInventoryByLocation(testLocation.id) } returns flowOf(listOf(testInventoryItem))
@@ -65,6 +69,7 @@ class SaleEntryViewModelTest {
             productRepository = productRepository,
             transactionRepository = transactionRepository,
             saleBatchRepository = saleBatchRepository,
+            locationRepository = locationRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences,
             savedStateHandle = SavedStateHandle()
@@ -512,5 +517,126 @@ class SaleEntryViewModelTest {
         assertEquals(testProduct, state.positions[0].product)
         assertEquals(BigDecimal("30.00"), state.positions[0].netWeight)
         assertEquals(BigDecimal("55.00"), state.positions[0].pricePerKg)
+    }
+
+    @Test
+    fun `finalize calls correctBatch when editingBatchId is set`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId, notes = "Original batch")
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } returns TestData.createSaleBatch()
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        // Load batch for editing
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        // Verify we're in editing mode
+        assertEquals(originalBatchId, viewModel.uiState.value.editingBatchId)
+        
+        // Set correction reason
+        viewModel.onCorrectionReasonChange("Fixed weight error")
+        
+        // Finalize
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Verify correctBatch was called (not createBatchWithTransactions)
+        coVerify { 
+            saleBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Fixed weight error"
+            ) 
+        }
+        coVerify(exactly = 0) { saleBatchRepository.createBatchWithTransactions(any(), any()) }
+        
+        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+    }
+
+    @Test
+    fun `finalize uses default correction reason when empty`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } returns TestData.createSaleBatch()
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        // Don't set correction reason - should use default
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Verify correctBatch was called with default reason
+        coVerify { 
+            saleBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Виправлення помилки"
+            ) 
+        }
+    }
+
+    @Test
+    fun `finalize handles correctBatch error`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } throws 
+            IllegalStateException("Не вдалося анулювати оригінальну партію")
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Should have error and stay in positions list
+        val state = viewModel.uiState.value
+        assertNotNull(state.error)
+        assertTrue(state.error!!.contains("анулювати"))
+        assertFalse(state.isSaving)
+        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 }
