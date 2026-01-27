@@ -630,10 +630,10 @@ private fun BatchEntryPanelWithNumpad(
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(12.dp)
     ) {
-        // ==================== TOP SECTION: Inputs & Instructions (25%) ====================
+        // ==================== TOP SECTION: Inputs (20%) ====================
         Column(
-            modifier = Modifier.weight(0.25f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.weight(0.20f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Header
             Text(
@@ -662,8 +662,8 @@ private fun BatchEntryPanelWithNumpad(
                         MaterialTheme.colorScheme.onSecondaryContainer
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(12.dp),
-                    maxLines = 2,
+                    modifier = Modifier.padding(10.dp),
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -683,7 +683,7 @@ private fun BatchEntryPanelWithNumpad(
                 )
 
                 InputDisplayBox(
-                    label = "Кількість тари",
+                    label = "Тара (шт)",
                     value = tareCount,
                     isActive = activeInputField == SaleInputField.TARE_COUNT,
                     onClick = { onFieldSelect(SaleInputField.TARE_COUNT) },
@@ -691,46 +691,29 @@ private fun BatchEntryPanelWithNumpad(
                     modifier = Modifier.weight(1f)
                 )
             }
-
-            // Hint card
-            if (selectedProduct != null && batches.isEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Text(
-                        text = "Введіть вагу та натисніть + щоб додати зважування",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Review button (shown when batches exist)
-        if (canProceed) {
-            Button(
-                onClick = onProceedToFinalize,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text("ПЕРЕГЛЯНУТИ І ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+        // Review button (always visible, disabled when no batches)
+        Button(
+            onClick = onProceedToFinalize,
+            enabled = canProceed,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
         }
 
-        // ==================== BOTTOM SECTION: Custom Numpad (75%) ====================
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // ==================== BOTTOM SECTION: Custom Numpad (60%) ====================
         CustomNumpad(
             onNumberClick = onKeypadInput,
             onDecimalClick = onKeypadDecimal,
@@ -741,7 +724,7 @@ private fun BatchEntryPanelWithNumpad(
             isEditMode = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.75f)
+                .weight(0.60f)
         )
     }
 }

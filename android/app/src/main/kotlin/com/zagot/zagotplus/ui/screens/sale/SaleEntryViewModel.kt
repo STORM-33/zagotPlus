@@ -906,10 +906,8 @@ class SaleEntryViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isInFinalizationMode = newMode,
-                activeInputField = newActiveField,
-                // When entering finalization mode, switch middle panel to positions
-                // When going back to batch entry, switch to weightings
-                showWeightingsInMiddlePanel = !newMode
+                activeInputField = newActiveField
+                // Keep weightings visible during finalization - they switch to positions only after adding position
             )
         }
     }

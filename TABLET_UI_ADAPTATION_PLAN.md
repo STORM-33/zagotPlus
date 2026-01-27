@@ -153,8 +153,8 @@ Updated `SaleEntryScreen.kt`:
 
 **Solution:** Middle panel becomes context-aware, switching between two modes:
 
-#### Mode 1: Weightings View (Batch Entry)
-- **When:** Product selected, batch entry mode active
+#### Mode 1: Weightings View (During Product Entry)
+- **When:** Product selected (both batch entry AND finalization modes)
 - **Shows:** Weightings list for current product
 - **Content:**
   - Product name header
@@ -162,9 +162,10 @@ Updated `SaleEntryScreen.kt`:
   - Scrollable batch list with numbered badges
   - Large, detailed batch items (weight + tare count + delete)
 - **Space:** Full 30% width dedicated to batches
+- **Why:** User needs to see weightings while setting tare and price!
 
-#### Mode 2: Positions View (Finalization/Default)
-- **When:** Finalization mode, or no product selected
+#### Mode 2: Positions View (Between Products)
+- **When:** No product selected, or after adding position
 - **Shows:** Positions list + Notes + Grand Total
 - **Content:**
   - Positions list with tap-to-edit
@@ -175,16 +176,27 @@ Updated `SaleEntryScreen.kt`:
 #### Automatic Switching Logic:
 ```
 Product selected     → Show Weightings
-Press "REVIEW"       → Show Positions
-Add Position         → Stay on Positions
+Press "REVIEW"       → Keep Weightings (user needs to see what they're pricing!)
+Add Position         → Switch to Positions
 Select new product   → Show Weightings
 ```
+
+#### Right Panel Optimization:
+- **Numpad height:** Reduced from 75% to 60%
+- **REVIEW button:** Always visible (52dp height)
+  - Enabled when batches exist
+  - Disabled (grayed out) when no batches
+  - Text: "ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ"
+- **Top section:** Compressed to 20% (removed hint card)
+- **Input labels:** Shortened ("Тара (шт)" instead of "Кількість тари")
 
 #### Benefits:
 - ✅ **3x more space** for weightings (30% vs ~10% of right panel)
 - ✅ **Better scalability** - handles 20+ batches without cramping
 - ✅ **Clearer focus** - one task at a time in middle panel
 - ✅ **Better UX** - display matches user's current context
+- ✅ **Always-visible button** - clear next action, no hunting for it
+- ✅ **Weightings stay visible** - user can review batches while setting price
 
 ### Comparison with Purchase Entry
 
