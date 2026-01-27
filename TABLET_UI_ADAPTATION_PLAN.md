@@ -145,6 +145,46 @@ Updated `SaleEntryScreen.kt`:
 | **Position editing** | Tap position in center panel → opens edit dialog with batch history |
 | **Numpad behavior** | Cycles through relevant fields based on current mode |
 | **Action button** | Changes from "+" (add batch) to "✓" (add position) between modes |
+| **Smart zones** | Middle panel switches context: Weightings (batch entry) ↔ Positions (finalization) |
+
+### Smart Zone Repurposing (Refinement)
+
+**Problem:** Weightings list was cramped in right panel (30% width), causing scrolling issues with 10+ batches.
+
+**Solution:** Middle panel becomes context-aware, switching between two modes:
+
+#### Mode 1: Weightings View (Batch Entry)
+- **When:** Product selected, batch entry mode active
+- **Shows:** Weightings list for current product
+- **Content:**
+  - Product name header
+  - Running total card (batch count + gross weight)
+  - Scrollable batch list with numbered badges
+  - Large, detailed batch items (weight + tare count + delete)
+- **Space:** Full 30% width dedicated to batches
+
+#### Mode 2: Positions View (Finalization/Default)
+- **When:** Finalization mode, or no product selected
+- **Shows:** Positions list + Notes + Grand Total
+- **Content:**
+  - Positions list with tap-to-edit
+  - Notes input field
+  - Grand total card (receipt style)
+- **Space:** Same 30% width for positions
+
+#### Automatic Switching Logic:
+```
+Product selected     → Show Weightings
+Press "REVIEW"       → Show Positions
+Add Position         → Stay on Positions
+Select new product   → Show Weightings
+```
+
+#### Benefits:
+- ✅ **3x more space** for weightings (30% vs ~10% of right panel)
+- ✅ **Better scalability** - handles 20+ batches without cramping
+- ✅ **Clearer focus** - one task at a time in middle panel
+- ✅ **Better UX** - display matches user's current context
 
 ### Comparison with Purchase Entry
 
@@ -155,6 +195,7 @@ Updated `SaleEntryScreen.kt`:
 | **Data entry modes** | One mode | Two modes (batch entry / finalization) |
 | **Repeatable entry** | One item per product | Multiple batches per product |
 | **Calculation display** | Item subtotal | Weight breakdown + total amount |
+| **Middle panel** | Static (always positions) | Dynamic (weightings ↔ positions) |
 
 ### Phase 7: Final Testing
 
