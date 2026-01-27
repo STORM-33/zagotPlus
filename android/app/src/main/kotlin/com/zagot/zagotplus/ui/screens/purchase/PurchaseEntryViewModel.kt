@@ -6,10 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
@@ -76,7 +78,11 @@ data class PurchaseEntryUiState(
     val showExitConfirmation: Boolean = false, // Show confirmation dialog before exit
     // Editing mode: if set, we're correcting an existing batch
     val editingBatchId: UUID? = null,
-    val correctionReason: String = ""
+    val correctionReason: String = "",
+    // Location selection for edit mode
+    val availableLocations: List<Location> = emptyList(),
+    val selectedLocationId: UUID? = null, // null = use device preference
+    val originalLocationId: UUID? = null  // the original batch location (for display)
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -121,6 +127,7 @@ data class PurchaseEntryUiState(
 class PurchaseEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val purchaseBatchRepository: PurchaseBatchRepository,
+    private val locationRepository: LocationRepository,
     private val devicePreferences: DevicePreferences,
     private val productOrderPreferences: ProductOrderPreferences,
     private val scalesService: ScalesService,
@@ -185,6 +192,10 @@ class PurchaseEntryViewModel @Inject constructor(
 
     private fun loadProductsAndBatch() {
         viewModelScope.launch {
+            // Load locations for edit mode dropdown
+            val locations = locationRepository.getAllLocations().first()
+            _uiState.update { it.copy(availableLocations = locations) }
+            
             productRepository.getActiveProducts().collect { products ->
                 val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
                 _uiState.update { 
@@ -361,7 +372,8 @@ class PurchaseEntryViewModel @Inject constructor(
             try {
                 val now = Instant.now()
                 val deviceId = devicePreferences.getDeviceId()
-                val locationId = devicePreferences.getSelectedLocationId()
+                // Use selected location if available (edit mode), otherwise use device preference
+                val locationId = state.selectedLocationId ?: devicePreferences.getSelectedLocationId()
                 val batchId = UUID.randomUUID()
                 val batchLocalId = UUID.randomUUID().toString()
 
@@ -440,6 +452,13 @@ class PurchaseEntryViewModel @Inject constructor(
     }
 
     /**
+     * Select a location for the batch (used in edit mode).
+     */
+    fun selectLocation(locationId: UUID?) {
+        _uiState.update { it.copy(selectedLocationId = locationId) }
+    }
+
+    /**
      * Exit from summary screen - navigates back to the list.
      */
     fun exitFromSummary() {
@@ -498,6 +517,9 @@ class PurchaseEntryViewModel @Inject constructor(
                         positions = positions,
                         notes = batch.notes ?: "",
                         products = allProducts.ifEmpty { it.products },
+                        // Preserve original location for edit mode
+                        selectedLocationId = batch.locationId,
+                        originalLocationId = batch.locationId,
                         screenState = if (positions.isNotEmpty()) 
                             PurchaseEntryScreenState.POSITIONS_LIST 
                         else 

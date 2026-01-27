@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
 import com.zagot.zagotplus.domain.model.InventoryItem
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
@@ -110,7 +112,11 @@ data class SaleEntryUiState(
     val showExitConfirmation: Boolean = false, // Show confirmation dialog before exit
     // Editing mode: if set, we're correcting an existing batch
     val editingBatchId: UUID? = null,
-    val correctionReason: String = ""
+    val correctionReason: String = "",
+    // Location selection for edit mode
+    val availableLocations: List<Location> = emptyList(),
+    val selectedLocationId: UUID? = null, // null = use device preference
+    val originalLocationId: UUID? = null  // the original batch location (for display)
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -172,6 +178,7 @@ class SaleEntryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val transactionRepository: TransactionRepository,
     private val saleBatchRepository: SaleBatchRepository,
+    private val locationRepository: LocationRepository,
     private val devicePreferences: DevicePreferences,
     private val productOrderPreferences: ProductOrderPreferences,
     savedStateHandle: SavedStateHandle
@@ -197,6 +204,9 @@ class SaleEntryViewModel @Inject constructor(
     private fun loadData() {
         viewModelScope.launch {
             try {
+                // Load locations for edit mode dropdown
+                val locations = locationRepository.getAllLocations().first()
+                
                 val products = productRepository.getActiveProducts().first()
                 val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
                 val locationId = devicePreferences.getSelectedLocationId()
@@ -210,6 +220,7 @@ class SaleEntryViewModel @Inject constructor(
                     it.copy(
                         products = orderedProducts,
                         inventory = inventory,
+                        availableLocations = locations,
                         isLoading = editingBatchIdArg != null // Keep loading if we need to load a batch
                     )
                 }
@@ -503,7 +514,9 @@ class SaleEntryViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
-                val locationId = devicePreferences.getSelectedLocationId()
+                // Use selected location if available (edit mode), otherwise use device preference
+                val locationId = _uiState.value.selectedLocationId 
+                    ?: devicePreferences.getSelectedLocationId()
                     ?: throw IllegalStateException("Локація не обрана")
 
                 val now = Instant.now()
@@ -584,6 +597,13 @@ class SaleEntryViewModel @Inject constructor(
     }
 
     /**
+     * Select a location for the batch (used in edit mode).
+     */
+    fun selectLocation(locationId: UUID?) {
+        _uiState.update { it.copy(selectedLocationId = locationId) }
+    }
+
+    /**
      * Exit from summary screen - navigates back to the list.
      */
     fun exitFromSummary() {
@@ -649,6 +669,9 @@ class SaleEntryViewModel @Inject constructor(
                         positions = positions,
                         notes = batch.notes ?: "",
                         products = allProducts.ifEmpty { it.products },
+                        // Preserve original location for edit mode
+                        selectedLocationId = batch.locationId,
+                        originalLocationId = batch.locationId,
                         screenState = if (positions.isNotEmpty()) 
                             SaleEntryScreenState.POSITIONS_LIST 
                         else 

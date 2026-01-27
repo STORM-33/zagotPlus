@@ -52,7 +52,9 @@ data class InventoryUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val lastSyncTime: Instant? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** When true, shows all products including those with 0 weight */
+    val showAllProducts: Boolean = false
 )
 
 data class InventoryDisplayItem(
@@ -118,9 +120,9 @@ class InventoryViewModel @Inject constructor(
                 
                 state.products.mapNotNull { product ->
                     val weight = aggregatedInventory[product.id] ?: BigDecimal.ZERO
-                    // Hide products with zero or near-zero weight (handles rounding like -0.0)
+                    // Hide products with zero or near-zero weight unless showAllProducts is enabled
                     // Threshold 0.05 ensures anything displaying as "0.0" or "-0.0" is hidden
-                    if (weight.abs() < BigDecimal("0.05")) return@mapNotNull null
+                    if (!state.showAllProducts && weight.abs() <= BigDecimal("0.05")) return@mapNotNull null
                     
                     val salePrice = product.defaultSellPrice
                     val avgPurchasePrice = avgPrices[product.id]
@@ -144,9 +146,9 @@ class InventoryViewModel @Inject constructor(
                 state.products.mapNotNull { product ->
                     val inventoryItem = inventoryMap[product.id]
                     val weight = inventoryItem?.totalWeightKg ?: BigDecimal.ZERO
-                    // Hide products with zero or near-zero weight (handles rounding like -0.0)
+                    // Hide products with zero or near-zero weight unless showAllProducts is enabled
                     // Threshold 0.05 ensures anything displaying as "0.0" or "-0.0" is hidden
-                    if (weight.abs() < BigDecimal("0.05")) return@mapNotNull null
+                    if (!state.showAllProducts && weight.abs() <= BigDecimal("0.05")) return@mapNotNull null
                     
                     val salePrice = product.defaultSellPrice
                     val avgPurchasePrice = avgPrices[product.id]
@@ -353,6 +355,13 @@ class InventoryViewModel @Inject constructor(
 
     fun triggerSync() {
         syncManager.triggerManualSync()
+    }
+    
+    /**
+     * Toggle showing all products including those with 0 weight.
+     */
+    fun toggleShowAllProducts() {
+        _uiState.update { it.copy(showAllProducts = !it.showAllProducts) }
     }
 
     fun dismissError() {

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
@@ -90,6 +91,20 @@ fun SettingsScreen(
         if (uiState.copySuccess) {
             snackbarHostState.showSnackbar("ID скопійовано")
             viewModel.dismissCopySuccess()
+        }
+    }
+
+    LaunchedEffect(uiState.exportSuccess) {
+        if (uiState.exportSuccess) {
+            snackbarHostState.showSnackbar("Базу даних експортовано")
+            viewModel.dismissExportSuccess()
+        }
+    }
+
+    LaunchedEffect(uiState.exportError) {
+        uiState.exportError?.let { error ->
+            snackbarHostState.showSnackbar("Помилка: $error")
+            viewModel.dismissExportError()
         }
     }
     
@@ -410,6 +425,42 @@ fun SettingsScreen(
                         contentDescription = "Перейти до товарів",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                // Export database button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !uiState.isExporting) {
+                            viewModel.exportDatabase()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Експорт бази даних",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Зберегти дані у текстовий файл",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (uiState.isExporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Download,
+                            contentDescription = "Експортувати",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 

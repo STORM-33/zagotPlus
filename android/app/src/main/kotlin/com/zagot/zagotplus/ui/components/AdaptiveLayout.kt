@@ -1,6 +1,11 @@
 package com.zagot.zagotplus.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -171,5 +176,157 @@ fun adaptiveCardElevation(): Dp {
         ScreenSize.COMPACT -> 1.dp
         ScreenSize.MEDIUM -> 2.dp
         ScreenSize.EXPANDED -> 4.dp
+    }
+}
+
+/**
+ * Adaptive button height for kiosk use.
+ * Larger buttons on tablets for easier touch targeting.
+ */
+@Composable
+fun adaptiveButtonHeight(): Dp {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> 56.dp      // Standard phone button
+        ScreenSize.MEDIUM -> 72.dp       // Larger for small tablets
+        ScreenSize.EXPANDED -> 80.dp     // Extra large for kiosk
+    }
+}
+
+/**
+ * Adaptive primary button height (main action buttons).
+ * Even larger for critical actions like "Add Position" or "Finalize".
+ */
+@Composable
+fun adaptivePrimaryButtonHeight(): Dp {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> 64.dp      // Phone primary button
+        ScreenSize.MEDIUM -> 80.dp       // Tablet primary
+        ScreenSize.EXPANDED -> 96.dp     // Kiosk primary - very prominent
+    }
+}
+
+/**
+ * Adaptive text field minimum height.
+ * Taller fields on tablets for easier input.
+ */
+@Composable
+fun adaptiveTextFieldMinHeight(): Dp {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> 56.dp
+        ScreenSize.MEDIUM -> 64.dp
+        ScreenSize.EXPANDED -> 72.dp
+    }
+}
+
+/**
+ * Typography scale for highlighted text (totals, prices).
+ * Larger display text on tablets for visibility.
+ */
+@Composable
+fun adaptiveDisplayScale(): Float {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> 1.0f
+        ScreenSize.MEDIUM -> 1.15f
+        ScreenSize.EXPANDED -> 1.3f
+    }
+}
+
+/**
+ * Two-column layout for tablets, single column for phones.
+ * Used for input/output split (e.g., weight entry + total display).
+ *
+ * On phones: Content stacks vertically (leftContent then rightContent)
+ * On tablets: Content splits into two columns side-by-side
+ *
+ * @param modifier Modifier for the container
+ * @param leftWeight Weight of left column (0.0-1.0), right gets remainder
+ * @param spacing Horizontal spacing between columns on tablets
+ * @param verticalAlignment Vertical alignment of columns on tablets
+ * @param leftContent Content for left column (or top on phones)
+ * @param rightContent Content for right column (or bottom on phones)
+ */
+@Composable
+fun AdaptiveTwoColumn(
+    modifier: Modifier = Modifier,
+    leftWeight: Float = 0.55f,
+    spacing: Dp = 24.dp,
+    verticalAlignment: Alignment.Vertical = Alignment.Top,
+    leftContent: @Composable ColumnScope.() -> Unit,
+    rightContent: @Composable ColumnScope.() -> Unit
+) {
+    if (isTablet()) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalAlignment = verticalAlignment
+        ) {
+            Column(
+                modifier = Modifier.weight(leftWeight)
+            ) {
+                leftContent()
+            }
+            Column(
+                modifier = Modifier.weight(1f - leftWeight)
+            ) {
+                rightContent()
+            }
+        }
+    } else {
+        Column(modifier = modifier.fillMaxWidth()) {
+            leftContent()
+            rightContent()
+        }
+    }
+}
+
+/**
+ * Master-detail layout for tablets: scrollable list on left, fixed panel on right.
+ * Falls back to stacked layout on phones where detail appears below master.
+ *
+ * On phones: masterContent fills available space, detailContent at bottom
+ * On tablets: masterContent on left (scrollable), detailContent fixed on right
+ *
+ * @param modifier Modifier for the container
+ * @param masterWeight Weight of master (list) area (0.0-1.0)
+ * @param spacing Horizontal spacing between panels on tablets
+ * @param masterContent The scrollable list content
+ * @param detailContent The fixed detail/action panel content
+ */
+@Composable
+fun AdaptiveMasterDetail(
+    modifier: Modifier = Modifier,
+    masterWeight: Float = 0.6f,
+    spacing: Dp = 24.dp,
+    masterContent: @Composable ColumnScope.() -> Unit,
+    detailContent: @Composable ColumnScope.() -> Unit
+) {
+    if (isTablet()) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(masterWeight)
+                    .fillMaxHeight()
+            ) {
+                masterContent()
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f - masterWeight)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                detailContent()
+            }
+        }
+    } else {
+        Column(modifier = modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                masterContent()
+            }
+            detailContent()
+        }
     }
 }

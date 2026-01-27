@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.products
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -225,7 +226,13 @@ private fun ProductCard(
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             }
-        )
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (product.isActive) MaterialTheme.colorScheme.outlineVariant
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Box {
             Row(

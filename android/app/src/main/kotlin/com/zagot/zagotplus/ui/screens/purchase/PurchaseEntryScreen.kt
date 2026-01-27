@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,7 +44,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,13 +84,24 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.PriceType
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
 import com.zagot.zagotplus.ui.components.StepIndicator
+import com.zagot.zagotplus.ui.components.AdaptiveMasterDetail
+import com.zagot.zagotplus.ui.components.AdaptiveTwoColumn
+import com.zagot.zagotplus.ui.components.adaptiveButtonHeight
+import com.zagot.zagotplus.ui.components.adaptiveDisplayScale
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
+import com.zagot.zagotplus.ui.components.adaptivePadding
+import com.zagot.zagotplus.ui.components.adaptivePrimaryButtonHeight
+import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -266,6 +281,9 @@ fun PurchaseEntryScreen(
                                 totalAmount = uiState.totalAmount,
                                 canFinalize = uiState.canFinalize,
                                 isEditing = isEditing,
+                                availableLocations = uiState.availableLocations,
+                                selectedLocationId = uiState.selectedLocationId,
+                                onLocationChange = viewModel::selectLocation,
                                 onNotesChange = viewModel::onNotesChange,
                                 onRemovePosition = viewModel::removePosition,
                                 onEditPosition = viewModel::startEditPosition,
@@ -386,16 +404,21 @@ private fun WeightEntry(
         else -> "Вага (кг)"
     }
 
-    Column(
-        modifier = modifier
-            .padding(16.dp)
-            .imePadding(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Weight input - long press to toggle manual mode when scales connected
+    // Adaptive values for tablet/kiosk display
+    val contentPadding = adaptivePadding()
+    val primaryButtonHeight = adaptivePrimaryButtonHeight()
+    val displayScale = adaptiveDisplayScale()
+    val isTabletDevice = isTablet()
+    val horizontalPadding = adaptiveHorizontalPadding()
+
+    // Track price focus state
+    var priceHasBeenFocused by remember { mutableStateOf(false) }
+
+    // Weight input composable - reused in both layouts
+    @Composable
+    fun WeightInputField(fieldModifier: Modifier = Modifier) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = fieldModifier
                 .then(
                     if (isScaleConnected) {
                         Modifier.combinedClickable(
@@ -410,7 +433,8 @@ private fun WeightEntry(
             OutlinedTextField(
                 value = weight,
                 onValueChange = { if (isManualMode || !isScaleConnected) onWeightChange(it) },
-                label = { Text(weightLabel) },
+                label = { Text(weightLabel, style = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium) },
+                textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal,
                     imeAction = ImeAction.Next
@@ -424,23 +448,23 @@ private fun WeightEntry(
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
             )
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Price input with color coding - clears on focus for easy entry
-        var priceHasBeenFocused by remember { mutableStateOf(false) }
+    // Price input composable - reused in both layouts
+    @Composable
+    fun PriceInputField(fieldModifier: Modifier = Modifier) {
         OutlinedTextField(
             value = price,
             onValueChange = onPriceChange,
-            label = { Text("Ціна за кг (₴)") },
+            label = { Text("Ціна за кг (₴)", style = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium) },
+            textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Decimal,
                 imeAction = ImeAction.Done
             ),
             singleLine = true,
             colors = priceFieldColors,
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = fieldModifier
                 .onFocusChanged { focusState ->
                     if (focusState.isFocused && !priceHasBeenFocused) {
                         priceHasBeenFocused = true
@@ -448,56 +472,105 @@ private fun WeightEntry(
                     }
                 }
         )
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Calculated total
+    // Sum card composable - reused in both layouts
+    @Composable
+    fun SumCard(cardModifier: Modifier = Modifier) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = cardModifier,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            )
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            ),
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(if (isTabletDevice) 28.dp else 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Сума:",
-                    style = MaterialTheme.typography.titleLarge
+                    text = "Сума",
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
                 Text(
                     text = total?.let { "₴${it.toPlainString()}" } ?: "₴0.00",
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = if (isTabletDevice) MaterialTheme.typography.displayMedium else MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Add position button - LARGER touch target
+    // Add button composable - reused in both layouts
+    @Composable
+    fun AddPositionButton(buttonModifier: Modifier = Modifier) {
         Button(
             onClick = onAddPosition,
             enabled = canAdd,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
+            modifier = buttonModifier.height(primaryButtonHeight)
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Додати")
-            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.Filled.Add, contentDescription = "Додати", modifier = if (isTabletDevice) Modifier.size(28.dp) else Modifier)
+            Spacer(modifier = Modifier.width(if (isTabletDevice) 12.dp else 8.dp))
             Text(
-                text = "Додати позицію",
-                style = MaterialTheme.typography.titleMedium
+                text = "ДОДАТИ ПОЗИЦІЮ",
+                style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
             )
+        }
+    }
+
+    if (isTabletDevice) {
+        // Tablet: Two-column layout - inputs on left, sum + button on right
+        Row(
+            modifier = modifier
+                .padding(horizontal = horizontalPadding, vertical = contentPadding)
+                .imePadding(),
+            horizontalArrangement = Arrangement.spacedBy(32.dp)
+        ) {
+            // Left column: Input fields (55%)
+            Column(
+                modifier = Modifier.weight(0.55f),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                WeightInputField(Modifier.fillMaxWidth())
+                PriceInputField(Modifier.fillMaxWidth())
+            }
+
+            // Right column: Sum card + Add button (45%)
+            Column(
+                modifier = Modifier.weight(0.45f),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                SumCard(Modifier.fillMaxWidth())
+                AddPositionButton(Modifier.fillMaxWidth())
+            }
+        }
+    } else {
+        // Phone: Single column layout
+        Column(
+            modifier = modifier
+                .padding(horizontal = horizontalPadding, vertical = contentPadding)
+                .imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            WeightInputField(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+            PriceInputField(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(24.dp))
+            SumCard(Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(24.dp))
+            AddPositionButton(Modifier.fillMaxWidth())
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PositionsList(
     positions: List<PurchasePosition>,
@@ -506,6 +579,9 @@ private fun PositionsList(
     totalAmount: BigDecimal,
     canFinalize: Boolean,
     isEditing: Boolean = false,
+    availableLocations: List<Location> = emptyList(),
+    selectedLocationId: UUID? = null,
+    onLocationChange: (UUID?) -> Unit = {},
     onNotesChange: (String) -> Unit,
     onRemovePosition: (String) -> Unit,
     onEditPosition: (PurchasePosition) -> Unit,
@@ -514,14 +590,21 @@ private fun PositionsList(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        // Positions list
+    // Adaptive values for tablet/kiosk display
+    val horizontalPadding = adaptiveHorizontalPadding()
+    val itemSpacing = adaptiveItemSpacing()
+    val buttonHeight = adaptiveButtonHeight()
+    val primaryButtonHeight = adaptivePrimaryButtonHeight()
+    val displayScale = adaptiveDisplayScale()
+    val isTabletDevice = isTablet()
+
+    // Position items composable - reused in both layouts
+    @Composable
+    fun PositionsListContent(listModifier: Modifier = Modifier, showAddButton: Boolean = false) {
         LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = listModifier,
+            contentPadding = PaddingValues(vertical = if (isTabletDevice) 20.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(itemSpacing)
         ) {
             items(positions, key = { it.id }) { position ->
                 PositionItem(
@@ -531,111 +614,248 @@ private fun PositionsList(
                 )
             }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Notes field
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = onNotesChange,
-                    label = { Text("Примітки") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+            if (showAddButton) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onAddAnother,
+                        modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Додати")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Додати ще товар",
+                            style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Notes field composable
+    @Composable
+    fun NotesField(fieldModifier: Modifier = Modifier) {
+        OutlinedTextField(
+            value = notes,
+            onValueChange = onNotesChange,
+            label = { Text("Примітки") },
+            textStyle = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+            modifier = fieldModifier,
+            minLines = if (isTabletDevice) 3 else 2,
+            maxLines = if (isTabletDevice) 5 else 4,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+        )
+    }
+
+    // Totals display composable
+    @Composable
+    fun TotalsDisplay(totalsModifier: Modifier = Modifier) {
+        Card(
+            modifier = totalsModifier,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 24.dp else 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Всього",
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${totalWeight.toPlainString()} кг",
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "₴${totalAmount.toPlainString()}",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontSize = MaterialTheme.typography.headlineLarge.fontSize * displayScale
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
+    }
 
-        // Footer with add button, totals and actions
+    // Action buttons composable
+    @Composable
+    fun ActionButtons(buttonsModifier: Modifier = Modifier) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp)
+            modifier = buttonsModifier,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Add another product button - moved above totals
             Button(
-                onClick = onAddAnother,
+                onClick = onFinalize,
+                enabled = canFinalize,
+                modifier = Modifier.fillMaxWidth().height(primaryButtonHeight)
+            ) {
+                Text(
+                    text = if (isEditing) "РЕДАГУВАТИ" else "РОЗРАХУВАТИ",
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                )
+            }
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+            ) {
+                Text("Скасувати", style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+
+    if (isTabletDevice) {
+        // Tablet: 60/40 split - List on left, Checkout on right
+        Row(
+            modifier = modifier
+                .padding(horizontal = horizontalPadding)
+                .imePadding(),
+            horizontalArrangement = Arrangement.spacedBy(32.dp)
+        ) {
+            // Left column: Positions list + Add button (60%)
+            Column(modifier = Modifier.weight(0.6f)) {
+                PositionsListContent(
+                    listModifier = Modifier.weight(1f).fillMaxWidth(),
+                    showAddButton = true
+                )
+            }
+
+            // Right column: Checkout panel (40%)
+            Column(
+                modifier = Modifier
+                    .weight(0.4f)
+                    .padding(vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Location selector (only in edit mode)
+                if (isEditing && availableLocations.isNotEmpty()) {
+                    LocationSelector(
+                        selectedLocationId = selectedLocationId,
+                        locations = availableLocations,
+                        onLocationChange = onLocationChange,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                NotesField(Modifier.fillMaxWidth())
+                TotalsDisplay(Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.weight(1f))
+                ActionButtons(Modifier.fillMaxWidth())
+            }
+        }
+    } else {
+        // Phone: Single column layout
+        Column(modifier = modifier.imePadding()) {
+            // Positions list
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(itemSpacing)
+            ) {
+                items(positions, key = { it.id }) { position ->
+                    PositionItem(
+                        position = position,
+                        onRemove = { onRemovePosition(position.id) },
+                        onLongClick = { onEditPosition(position) }
+                    )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Location selector (only in edit mode)
+                    if (isEditing && availableLocations.isNotEmpty()) {
+                        LocationSelector(
+                            selectedLocationId = selectedLocationId,
+                            locations = availableLocations,
+                            onLocationChange = onLocationChange,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    NotesField(Modifier.fillMaxWidth())
+                }
+            }
+
+            // Footer with add button, totals and actions
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = horizontalPadding, vertical = 16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Додати")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Додати ще товар",
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Totals
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Всього:",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "${totalWeight.toPlainString()} кг",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "₴${totalAmount.toPlainString()}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Action buttons - LARGER touch targets
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) {
-                    Text(
-                        text = "Скасувати",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+                // Add another product button
                 Button(
-                    onClick = onFinalize,
-                    enabled = canFinalize,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                    onClick = onAddAnother,
+                    modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Додати")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Додати ще товар", style = MaterialTheme.typography.labelLarge)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Totals
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (isEditing) "РЕДАГУВАТИ" else "Розрахувати",
-                        style = MaterialTheme.typography.labelLarge
+                        text = "Всього:",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${totalWeight.toPlainString()} кг",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "₴${totalAmount.toPlainString()}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f).height(buttonHeight),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Скасувати", style = MaterialTheme.typography.labelLarge)
+                    }
+                    Button(
+                        onClick = onFinalize,
+                        enabled = canFinalize,
+                        modifier = Modifier.weight(1f).height(buttonHeight)
+                    ) {
+                        Text(if (isEditing) "РЕДАГУВАТИ" else "Розрахувати", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
@@ -658,8 +878,10 @@ private fun PositionItem(
                 onLongClick = onLongClick
             ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column {
             Row(
@@ -674,7 +896,7 @@ private fun PositionItem(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surface),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                     contentAlignment = Alignment.Center
                 ) {
                     if (position.product.imageUri != null) {
@@ -822,4 +1044,49 @@ private fun EditPositionDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LocationSelector(
+    selectedLocationId: UUID?,
+    locations: List<Location>,
+    onLocationChange: (UUID?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    val selectedLocation = locations.find { it.id == selectedLocationId }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selectedLocation?.name ?: "Не обрано",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Локація") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            locations.forEach { location ->
+                DropdownMenuItem(
+                    text = { Text(location.name) },
+                    onClick = {
+                        onLocationChange(location.id)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }

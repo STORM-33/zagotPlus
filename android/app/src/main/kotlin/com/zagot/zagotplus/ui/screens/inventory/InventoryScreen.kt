@@ -37,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -87,6 +88,7 @@ fun InventoryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayItems by viewModel.displayItems.collectAsStateWithLifecycle()
     val currencyFormat = remember { DecimalFormat("#,##0") }
+    val priceFormat = remember { DecimalFormat("#,##0.00") }
     val weightFormat = remember { DecimalFormat("#,##0.0") }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     
@@ -175,6 +177,28 @@ fun InventoryScreen(
                     }
                 }
             }
+            
+            // Toggle row for showing all products (only visible when not in restricted mode)
+            if (!isRestrictedMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Показати всі товари",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.showAllProducts,
+                        onCheckedChange = { viewModel.toggleShowAllProducts() }
+                    )
+                }
+            }
 
             // Content
             Box(
@@ -214,6 +238,7 @@ fun InventoryScreen(
                                     InventoryItemCard(
                                         item = item,
                                         currencyFormat = currencyFormat,
+                                        priceFormat = priceFormat,
                                         weightFormat = weightFormat,
                                         isSelected = isSelected,
                                         showContextMenuOption = !isTotalView,
@@ -260,7 +285,7 @@ fun InventoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
@@ -388,6 +413,7 @@ private fun MoveProductDialog(
 private fun InventoryItemCard(
     item: InventoryDisplayItem,
     currencyFormat: DecimalFormat,
+    priceFormat: DecimalFormat,
     weightFormat: DecimalFormat,
     isSelected: Boolean = false,
     showContextMenuOption: Boolean = false,
@@ -405,13 +431,13 @@ private fun InventoryItemCard(
     val containerColor = when {
         isSelected -> MaterialTheme.colorScheme.primaryContainer
         isNegative -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        else -> MaterialTheme.colorScheme.surface
     }
-    
+
     val contentColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
         isNegative -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurface
     }
 
     Box {
@@ -425,9 +451,12 @@ private fun InventoryItemCard(
                     } else null
                 ),
             colors = CardDefaults.cardColors(containerColor = containerColor),
-            border = if (isSelected) {
-                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-            } else null
+            border = when {
+                isSelected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                isNegative -> BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            },
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -444,7 +473,7 @@ private fun InventoryItemCard(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surface),
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                         contentAlignment = Alignment.Center
                     ) {
                         if (item.productImageUri != null) {
@@ -467,7 +496,8 @@ private fun InventoryItemCard(
                     Text(
                         text = item.productName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = contentColor,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
                     
@@ -491,31 +521,62 @@ private fun InventoryItemCard(
                     }
                 }
                 
-                // Projected profit display - hide in restricted mode
+                // Price info display - hide in restricted mode
                 if (!isRestrictedMode) {
-                    item.projectedProfit?.let { profit ->
-                        val profitColor = if (profit >= BigDecimal.ZERO) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
+                    val hasAnyPriceInfo = item.avgPurchasePrice != null || item.salePrice != null || item.projectedProfit != null
+                    if (hasAnyPriceInfo) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = "Очікуваний прибуток:",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = contentColor.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = "₴${currencyFormat.format(profit)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = profitColor
-                            )
+                            // Avg buying price
+                            Column(horizontalAlignment = Alignment.Start) {
+                                Text(
+                                    text = "Закуп.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = contentColor.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = item.avgPurchasePrice?.let { "₴${priceFormat.format(it)}" } ?: "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                            // Current sell price
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "Продаж",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = contentColor.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = item.salePrice?.let { "₴${priceFormat.format(it)}" } ?: "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                            // Expected profit
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Прибуток",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = contentColor.copy(alpha = 0.6f)
+                                )
+                                val profitColor = item.projectedProfit?.let { profit ->
+                                    if (profit >= BigDecimal.ZERO) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.error
+                                } ?: contentColor
+                                Text(
+                                    text = item.projectedProfit?.let { "₴${currencyFormat.format(it)}" } ?: "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = profitColor
+                                )
+                            }
                         }
                     }
                 }
@@ -748,9 +809,10 @@ private fun InventorySummaryPanel(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
     ) {
         Column(
             modifier = Modifier
@@ -762,13 +824,13 @@ private fun InventorySummaryPanel(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            
+
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
             )
-            
+
             // Total weight - always show
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -776,16 +838,16 @@ private fun InventorySummaryPanel(
                 Text(
                     text = "Загальна вага",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
                 Text(
                     text = "${weightFormat.format(summary.totalWeight)} кг",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
-            
+
             // Product value - hide in restricted mode
             if (!isRestrictedMode) {
                 Column(
@@ -794,20 +856,20 @@ private fun InventorySummaryPanel(
                     Text(
                         text = "Вартість товару",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
                     Text(
                         text = "₴${currencyFormat.format(summary.totalInvested)}",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
-                
+
                 HorizontalDivider(
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
                 )
-                
+
                 // Expected profit - hide in restricted mode
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -815,7 +877,7 @@ private fun InventorySummaryPanel(
                     Text(
                         text = "Очікуваний прибуток",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
                     Text(
                         text = "₴${currencyFormat.format(summary.totalExpectedProfit)}",
