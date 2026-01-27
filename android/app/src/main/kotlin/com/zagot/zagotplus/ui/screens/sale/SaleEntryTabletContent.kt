@@ -630,9 +630,9 @@ private fun BatchEntryPanelWithNumpad(
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(12.dp)
     ) {
-        // ==================== TOP SECTION: Inputs (25%) ====================
+        // ==================== TOP SECTION: Inputs + Button ====================
         Column(
-            modifier = Modifier.weight(0.25f),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Header
@@ -689,27 +689,25 @@ private fun BatchEntryPanelWithNumpad(
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            // Review button (glued to inputs, always visible, disabled when no batches)
+            Button(
+                onClick = onProceedToFinalize,
+                enabled = canProceed,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
-        // Review button (always visible, disabled when no batches)
-        Button(
-            onClick = onProceedToFinalize,
-            enabled = canProceed,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
-        ) {
-            Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ==================== BOTTOM SECTION: Custom Numpad (55%) ====================
+        // ==================== BOTTOM SECTION: Custom Numpad ====================
         CustomNumpad(
             onNumberClick = onKeypadInput,
             onDecimalClick = onKeypadDecimal,
@@ -718,9 +716,7 @@ private fun BatchEntryPanelWithNumpad(
             onActionClick = onAddBatch,
             actionEnabled = canAddBatch,
             isEditMode = false,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.55f)
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
