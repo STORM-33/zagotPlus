@@ -104,19 +104,32 @@ fun SaleEntryTabletContent(
                 .fillMaxHeight()
         )
 
-        // CENTER COLUMN: Positions List + Notes + Grand Total (30%)
-        PositionsPanel(
-            positions = uiState.positions,
-            notes = uiState.notes,
-            totalWeight = uiState.totalWeight,
-            totalAmount = uiState.totalAmount,
-            onNotesChange = onNotesChange,
-            onPositionClick = onSelectPosition,
-            onRemovePosition = onRemovePosition,
-            modifier = Modifier
-                .weight(0.3f)
-                .fillMaxHeight()
-        )
+        // CENTER COLUMN: Context-Aware Panel (30%)
+        // Shows either Weightings (during batch entry) or Positions (during finalization)
+        if (uiState.showWeightingsInMiddlePanel && uiState.selectedProduct != null) {
+            WeightingsPanel(
+                productName = uiState.selectedProduct.name,
+                batches = uiState.currentBatches,
+                grossWeight = uiState.currentGrossWeight,
+                onRemoveBatch = onRemoveBatch,
+                modifier = Modifier
+                    .weight(0.3f)
+                    .fillMaxHeight()
+            )
+        } else {
+            PositionsPanel(
+                positions = uiState.positions,
+                notes = uiState.notes,
+                totalWeight = uiState.totalWeight,
+                totalAmount = uiState.totalAmount,
+                onNotesChange = onNotesChange,
+                onPositionClick = onSelectPosition,
+                onRemovePosition = onRemovePosition,
+                modifier = Modifier
+                    .weight(0.3f)
+                    .fillMaxHeight()
+            )
+        }
 
         // RIGHT COLUMN: Data Entry Panel with Numpad (30%)
         if (uiState.isInFinalizationMode) {
@@ -209,7 +222,195 @@ private fun ProductGridPanel(
 }
 
 /**
- * Center panel: Positions list with notes field and grand total.
+ * Center panel (Mode 1): Weightings list for current product.
+ * Shown when product is selected and in batch entry mode.
+ */
+@Composable
+private fun WeightingsPanel(
+    productName: String,
+    batches: List<SaleWeighingBatch>,
+    grossWeight: BigDecimal,
+    onRemoveBatch: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(16.dp)
+    ) {
+        // Header with product name
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Зважування",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = productName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Running total card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            ),
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${batches.size} зважувань:",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "${decimalFormat.format(grossWeight)} кг",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Batches list (scrollable, fills remaining space)
+        if (batches.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Введіть вагу і натисніть +",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(batches.size) { index ->
+                    val batch = batches[index]
+                    WeightingBatchItem(
+                        batchNumber = index + 1,
+                        batch = batch,
+                        onRemove = { onRemoveBatch(batch.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Weighting batch item in the middle panel.
+ * Larger and more detailed than the compact version.
+ */
+@Composable
+private fun WeightingBatchItem(
+    batchNumber: Int,
+    batch: SaleWeighingBatch,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Batch number badge
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "#$batchNumber",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "${decimalFormat.format(batch.grossWeightKg)} кг",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${batch.tareCount} шт тари",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Видалити",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Center panel (Mode 2): Positions list with notes field and grand total.
+ * Shown when in finalization mode or when no product is selected.
  */
 @Composable
 private fun PositionsPanel(
@@ -399,7 +600,7 @@ private fun TabletPositionItem(
 
 /**
  * Right panel (Batch Entry Mode): Add multiple batches before finalization.
- * Shows weight + tare count inputs, batches list, and action buttons.
+ * Shows weight + tare count inputs and action button. Batches list is in middle panel.
  */
 @Composable
 private fun BatchEntryPanelWithNumpad(
@@ -421,7 +622,6 @@ private fun BatchEntryPanelWithNumpad(
     onProceedToFinalize: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val inputsEnabled = selectedProduct != null
 
     Column(
@@ -430,14 +630,14 @@ private fun BatchEntryPanelWithNumpad(
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(12.dp)
     ) {
-        // ==================== TOP SECTION: Inputs & Batches (35%) ====================
+        // ==================== TOP SECTION: Inputs & Instructions (25%) ====================
         Column(
-            modifier = Modifier.weight(0.35f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.weight(0.25f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Header
             Text(
-                text = "Зважування",
+                text = "Введення ваги",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -462,8 +662,8 @@ private fun BatchEntryPanelWithNumpad(
                         MaterialTheme.colorScheme.onSecondaryContainer
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(10.dp),
-                    maxLines = 1,
+                    modifier = Modifier.padding(12.dp),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -492,75 +692,45 @@ private fun BatchEntryPanelWithNumpad(
                 )
             }
 
-            // Running total of batches
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            // Hint card
+            if (selectedProduct != null && batches.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Text(
+                        text = "Введіть вагу та натисніть + щоб додати зважування",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Review button (shown when batches exist)
+        if (canProceed) {
+            Button(
+                onClick = onProceedToFinalize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${batches.size} зважувань:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${decimalFormat.format(grossWeight)} кг",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Text("ПЕРЕГЛЯНУТИ І ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-
-            // Batches list (scrollable)
-            if (batches.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier.weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(batches, key = { it.id }) { batch ->
-                        BatchItem(batch = batch, onRemove = { onRemoveBatch(batch.id) })
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Action buttons (Add Batch / Review)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (canProceed) {
-                OutlinedButton(
-                    onClick = onProceedToFinalize,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("ПЕРЕГЛЯНУТИ", style = MaterialTheme.typography.labelLarge)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ==================== BOTTOM SECTION: Custom Numpad (65%) ====================
+        // ==================== BOTTOM SECTION: Custom Numpad (75%) ====================
         CustomNumpad(
             onNumberClick = onKeypadInput,
             onDecimalClick = onKeypadDecimal,
@@ -571,53 +741,8 @@ private fun BatchEntryPanelWithNumpad(
             isEditMode = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.65f)
+                .weight(0.75f)
         )
-    }
-}
-
-/**
- * Compact batch item in the batches list.
- */
-@Composable
-private fun BatchItem(
-    batch: SaleWeighingBatch,
-    onRemove: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${decimalFormat.format(batch.grossWeightKg)} кг (${batch.tareCount} шт)",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium
-            )
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Видалити",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
     }
 }
 

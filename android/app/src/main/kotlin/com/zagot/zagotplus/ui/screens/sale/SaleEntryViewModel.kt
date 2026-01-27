@@ -131,7 +131,8 @@ data class SaleEntryUiState(
 
     // Tablet-specific numpad state
     val activeInputField: SaleInputField = SaleInputField.WEIGHT,
-    val isInFinalizationMode: Boolean = false // false = batch entry mode, true = finalization mode
+    val isInFinalizationMode: Boolean = false, // false = batch entry mode, true = finalization mode
+    val showWeightingsInMiddlePanel: Boolean = false // true = show weightings for current product, false = show positions list
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -295,6 +296,7 @@ class SaleEntryViewModel @Inject constructor(
                 currentWeight = "",
                 currentTareCount = "",
                 tareWeightPerUnit = "0.1",
+                showWeightingsInMiddlePanel = true, // Show weightings when product selected
                 screenState = if (it.screenState == SaleEntryScreenState.UNIFIED_ENTRY)
                     SaleEntryScreenState.UNIFIED_ENTRY
                 else
@@ -418,6 +420,7 @@ class SaleEntryViewModel @Inject constructor(
                 currentTareCount = "",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
+                showWeightingsInMiddlePanel = false, // Stay on positions view after adding
                 screenState = if (it.screenState == SaleEntryScreenState.UNIFIED_ENTRY)
                     SaleEntryScreenState.UNIFIED_ENTRY
                 else
@@ -903,7 +906,10 @@ class SaleEntryViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isInFinalizationMode = newMode,
-                activeInputField = newActiveField
+                activeInputField = newActiveField,
+                // When entering finalization mode, switch middle panel to positions
+                // When going back to batch entry, switch to weightings
+                showWeightingsInMiddlePanel = !newMode
             )
         }
     }
@@ -916,6 +922,7 @@ class SaleEntryViewModel @Inject constructor(
             it.copy(
                 isInFinalizationMode = false,
                 activeInputField = SaleInputField.WEIGHT
+                // Note: showWeightingsInMiddlePanel is managed by selectProduct and addPosition
             )
         }
     }
