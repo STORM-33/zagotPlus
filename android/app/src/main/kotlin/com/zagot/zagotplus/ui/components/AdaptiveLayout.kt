@@ -357,3 +357,60 @@ fun AdaptiveMasterDetail(
         }
     }
 }
+
+/**
+ * Three-column layout for tablet kiosk mode.
+ * Used for entry screens that need product grid, positions list, and data entry panel simultaneously.
+ *
+ * On phones: This component should NOT be used (caller should render wizard flow instead)
+ * On tablets: Displays three columns side-by-side
+ *
+ * @param modifier Modifier for the container
+ * @param leftWeight Weight of left column (product grid)
+ * @param centerWeight Weight of center column (positions list)
+ * @param rightWeight Weight of right column (data entry panel)
+ * @param spacing Horizontal spacing between columns
+ * @param leftContent Content for left column (product grid)
+ * @param centerContent Content for center column (positions list + notes)
+ * @param rightContent Content for right column (data entry panel)
+ */
+@Composable
+fun AdaptiveThreeColumn(
+    modifier: Modifier = Modifier,
+    leftWeight: Float = 0.4f,
+    centerWeight: Float = 0.3f,
+    rightWeight: Float = 0.3f,
+    spacing: Dp = 16.dp,
+    leftContent: @Composable ColumnScope.() -> Unit,
+    centerContent: @Composable ColumnScope.() -> Unit,
+    rightContent: @Composable ColumnScope.() -> Unit
+) {
+    require(isTablet()) { "AdaptiveThreeColumn should only be used on tablets" }
+    
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(leftWeight)
+                .fillMaxHeight()
+        ) {
+            leftContent()
+        }
+        Column(
+            modifier = Modifier
+                .weight(centerWeight)
+                .fillMaxHeight()
+        ) {
+            centerContent()
+        }
+        Column(
+            modifier = Modifier
+                .weight(rightWeight)
+                .fillMaxHeight()
+        ) {
+            rightContent()
+        }
+    }
+}

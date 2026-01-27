@@ -118,8 +118,13 @@ fun SaleEntryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val haptic = LocalHapticFeedback.current
+    val isTabletDevice = isTablet()
 
-    // Batch for editing is now loaded via SavedStateHandle in ViewModel - no LaunchedEffect needed
+    // Set tablet mode in ViewModel once at composition start
+    LaunchedEffect(isTabletDevice) {
+        viewModel.setTabletMode(isTabletDevice)
+    }
 
     LaunchedEffect(uiState.navigateBack) {
         if (uiState.navigateBack) {
@@ -141,6 +146,7 @@ fun SaleEntryScreen(
             SaleEntryScreenState.WEIGHING -> viewModel.backToGrid()
             SaleEntryScreenState.POSITION_REVIEW -> viewModel.backToWeighing()
             SaleEntryScreenState.POSITIONS_LIST -> viewModel.cancel()
+            SaleEntryScreenState.UNIFIED_ENTRY -> viewModel.cancel()  // Tablet: same as PRODUCT_GRID
             SaleEntryScreenState.SUMMARY -> viewModel.dismissSummary()
         }
     }
@@ -158,6 +164,7 @@ fun SaleEntryScreen(
         SaleEntryScreenState.WEIGHING -> uiState.selectedProduct?.name ?: "Зважування"
         SaleEntryScreenState.POSITION_REVIEW -> "Перевірка позиції"
         SaleEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
+        SaleEntryScreenState.UNIFIED_ENTRY -> if (isEditing) "Редагування" else "Новий продаж"  // Tablet
         SaleEntryScreenState.SUMMARY -> if (isEditing) "Виправлення" else "Підсумок"
     }
 
@@ -168,6 +175,7 @@ fun SaleEntryScreen(
         SaleEntryScreenState.WEIGHING -> 2
         SaleEntryScreenState.POSITION_REVIEW -> 2  // Part of weighing step
         SaleEntryScreenState.POSITIONS_LIST -> 3
+        SaleEntryScreenState.UNIFIED_ENTRY -> 1  // Tablet: no step indicator shown anyway
         SaleEntryScreenState.SUMMARY -> 3  // Summary uses same step as positions (no separate confirmation)
     }
 
@@ -192,11 +200,51 @@ fun SaleEntryScreen(
                                     SaleEntryScreenState.WEIGHING -> viewModel.backToGrid()
                                     SaleEntryScreenState.POSITION_REVIEW -> viewModel.backToWeighing()
                                     SaleEntryScreenState.POSITIONS_LIST -> viewModel.addAnotherProduct()
+                                    SaleEntryScreenState.UNIFIED_ENTRY -> viewModel.cancel()  // Tablet
                                     SaleEntryScreenState.SUMMARY -> viewModel.dismissSummary()
                                 }
                             }
                         ) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                    },
+                    actions = {
+                        // Tablet mode: show Cancel and Finalize buttons in top bar
+                        if (uiState.screenState == SaleEntryScreenState.UNIFIED_ENTRY) {
+                            OutlinedButton(
+                                onClick = { viewModel.cancel() },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.error),
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .height(52.dp)
+                                    .widthIn(min = 140.dp),
+                                contentPadding = PaddingValues(horizontal = 24.dp)
+                            ) {
+                                Text(
+                                    "Скасувати",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.finalize()
+                                },
+                                enabled = uiState.canFinalize,
+                                modifier = Modifier
+                                    .padding(end = 16.dp)
+                                    .height(52.dp)
+                                    .widthIn(min = 180.dp),
+                                contentPadding = PaddingValues(horizontal = 32.dp)
+                            ) {
+                                Text(
+                                    if (isEditing) "РЕДАГУВАТИ" else "ПРОДАТИ",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                         }
                     }
                 )
@@ -209,8 +257,9 @@ fun SaleEntryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Step indicator (show for all states except SUMMARY)
-            if (uiState.screenState != SaleEntryScreenState.SUMMARY) {
+            // Step indicator (show for phone wizard states only, not on tablet or summary)
+            if (uiState.screenState != SaleEntryScreenState.SUMMARY &&
+                uiState.screenState != SaleEntryScreenState.UNIFIED_ENTRY) {
                 StepIndicator(
                     currentStep = currentStep,
                     totalSteps = stepLabels.size,
@@ -259,6 +308,27 @@ fun SaleEntryScreen(
                             label = "screenStateTransition"
                         ) { state ->
                         when (state) {
+                            SaleEntryScreenState.UNIFIED_ENTRY -> {
+                                // Tablet: three-column unified layout
+                                SaleEntryTabletContent(
+                                    uiState = uiState,
+                                    onProductSelect = viewModel::selectProduct,
+                                    onProductOrderChanged = viewModel::onProductOrderChanged,
+                                    onKeypadInput = viewModel::onKeypadInput,
+                                    onKeypadDecimal = viewModel::onKeypadDecimal,
+                                    onKeypadBackspace = viewModel::onKeypadBackspace,
+                                    onNextInputField = viewModel::onNextInputField,
+                                    onSelectInputFieldAndClear = viewModel::selectInputFieldAndClear,
+                                    onAddBatch = viewModel::addBatch,
+                                    onRemoveBatch = viewModel::removeBatch,
+                                    onToggleFinalizationMode = viewModel::toggleFinalizationMode,
+                                    onAddPosition = viewModel::addPositionAndContinue,
+                                    onSelectPosition = viewModel::startEditPosition,
+                                    onRemovePosition = viewModel::removePosition,
+                                    onNotesChange = viewModel::onNotesChange,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                             SaleEntryScreenState.PRODUCT_GRID -> {
                                 SaleProductGrid(
                                     products = uiState.products,

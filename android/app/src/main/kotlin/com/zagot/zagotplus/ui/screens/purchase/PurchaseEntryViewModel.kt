@@ -45,13 +45,19 @@ data class PurchasePosition(
 )
 
 /**
+ * Tracks which input field is active for numpad input in tablet mode.
+ */
+enum class InputField { WEIGHT, PRICE }
+
+/**
  * Screen state for the purchase entry flow.
  */
 enum class PurchaseEntryScreenState {
-    PRODUCT_GRID,    // Selecting product from grid
-    WEIGHT_ENTRY,    // Entering weight/price for selected product
-    POSITIONS_LIST,  // Viewing/editing positions before finalizing
-    SUMMARY          // Showing summary overlay before saving
+    PRODUCT_GRID,    // Phone: Selecting product from grid
+    WEIGHT_ENTRY,    // Phone: Entering weight/price for selected product
+    POSITIONS_LIST,  // Phone: Viewing/editing positions before finalizing
+    UNIFIED_ENTRY,   // Tablet: All-in-one kiosk layout
+    SUMMARY          // Both: Showing summary overlay before saving
 }
 
 /**
@@ -60,6 +66,10 @@ enum class PurchaseEntryScreenState {
 data class PurchaseEntryUiState(
     val products: List<Product> = emptyList(),
     val selectedProduct: Product? = null,
+    // Tablet mode: product shown in data entry panel (separate from phone's selectedProduct)
+    val dataEntryProduct: Product? = null,
+    // True when using tablet kiosk mode (set by screen based on isTablet())
+    val isTabletMode: Boolean = false,
     val currentWeight: String = "",
     val currentPrice: String = "",
     val positions: List<PurchasePosition> = emptyList(),
@@ -82,7 +92,11 @@ data class PurchaseEntryUiState(
     // Location selection for edit mode
     val availableLocations: List<Location> = emptyList(),
     val selectedLocationId: UUID? = null, // null = use device preference
-    val originalLocationId: UUID? = null  // the original batch location (for display)
+    val originalLocationId: UUID? = null,  // the original batch location (for display)
+    // Tablet numpad: which field is receiving input
+    val activeInputField: InputField = InputField.WEIGHT,
+    // Tablet inline edit: position being edited (null = add mode)
+    val tabletEditingPositionId: String? = null
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -108,8 +122,12 @@ data class PurchaseEntryUiState(
             } else null
         }
 
+    // On tablet: uses dataEntryProduct, on phone: uses selectedProduct
+    val activeProduct: Product?
+        get() = if (isTabletMode) dataEntryProduct else selectedProduct
+
     val canAddPosition: Boolean
-        get() = selectedProduct != null &&
+        get() = activeProduct != null &&
                 effectiveWeight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
                 currentPrice.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true
 
@@ -121,6 +139,10 @@ data class PurchaseEntryUiState(
 
     val totalAmount: BigDecimal
         get() = positions.fold(BigDecimal.ZERO) { acc, pos -> acc.add(pos.totalAmount) }
+
+    // Tablet: true when editing an existing position inline (vs adding new)
+    val isTabletEditMode: Boolean
+        get() = isTabletMode && tabletEditingPositionId != null
 }
 
 @HiltViewModel
@@ -221,14 +243,53 @@ class PurchaseEntryViewModel @Inject constructor(
         _uiState.update { it.copy(products = orderedProducts) }
     }
 
+    /**
+     * Select a product. On phone, navigates to weight entry. On tablet, only populates data entry panel.
+     */
     fun selectProduct(product: Product) {
+        val state = _uiState.value
+        if (state.isTabletMode) {
+            // Tablet: populate data entry panel without navigation
+            selectProductForEntry(product)
+        } else {
+            // Phone: navigate to weight entry screen
+            _uiState.update {
+                it.copy(
+                    selectedProduct = product,
+                    currentWeight = "",
+                    currentPrice = product.defaultBuyPrice?.toPlainString() ?: "",
+                    isManualWeightMode = false, // Reset to auto mode on new product
+                    screenState = PurchaseEntryScreenState.WEIGHT_ENTRY
+                )
+            }
+        }
+    }
+
+    /**
+     * Tablet only: select product for data entry panel without navigating.
+     */
+    fun selectProductForEntry(product: Product) {
         _uiState.update {
             it.copy(
-                selectedProduct = product,
+                dataEntryProduct = product,
                 currentWeight = "",
                 currentPrice = product.defaultBuyPrice?.toPlainString() ?: "",
-                isManualWeightMode = false, // Reset to auto mode on new product
-                screenState = PurchaseEntryScreenState.WEIGHT_ENTRY
+                isManualWeightMode = false
+            )
+        }
+    }
+
+    /**
+     * Set tablet mode (called from screen when device is detected as tablet).
+     */
+    fun setTabletMode(isTablet: Boolean) {
+        _uiState.update { 
+            it.copy(
+                isTabletMode = isTablet,
+                screenState = if (isTablet && it.screenState != PurchaseEntryScreenState.SUMMARY) 
+                    PurchaseEntryScreenState.UNIFIED_ENTRY 
+                else 
+                    it.screenState
             )
         }
     }
@@ -275,15 +336,170 @@ class PurchaseEntryViewModel @Inject constructor(
         _uiState.update { it.copy(notes = notes) }
     }
 
+    // ==================== Tablet Numpad Input Methods ====================
+
+    /**
+     * Select which field receives numpad input.
+     */
+    fun selectInputField(field: InputField) {
+        _uiState.update { it.copy(activeInputField = field) }
+    }
+
+    /**
+     * Select field and clear its current value (auto-clear on tap, like mobile flow).
+     */
+    fun selectInputFieldAndClear(field: InputField) {
+        _uiState.update { state ->
+            when (field) {
+                InputField.WEIGHT -> state.copy(activeInputField = field, currentWeight = "")
+                InputField.PRICE -> state.copy(activeInputField = field, currentPrice = "")
+            }
+        }
+    }
+
+    /**
+     * Switch to the next input field (WEIGHT -> PRICE -> WEIGHT).
+     */
+    fun onNextInputField() {
+        _uiState.update { state ->
+            val nextField = when (state.activeInputField) {
+                InputField.WEIGHT -> InputField.PRICE
+                InputField.PRICE -> InputField.WEIGHT
+            }
+            state.copy(activeInputField = nextField)
+        }
+    }
+
+    /**
+     * Handle numpad digit input - append to the active field.
+     */
+    fun onKeypadInput(char: Char) {
+        if (!char.isDigit()) return
+        
+        _uiState.update { state ->
+            when (state.activeInputField) {
+                InputField.WEIGHT -> {
+                    val newWeight = appendDigit(state.currentWeight, char)
+                    state.copy(currentWeight = newWeight)
+                }
+                InputField.PRICE -> {
+                    val newPrice = appendDigit(state.currentPrice, char)
+                    state.copy(currentPrice = newPrice)
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle decimal point input.
+     */
+    fun onKeypadDecimal() {
+        _uiState.update { state ->
+            when (state.activeInputField) {
+                InputField.WEIGHT -> {
+                    val newWeight = appendDecimal(state.currentWeight)
+                    state.copy(currentWeight = newWeight)
+                }
+                InputField.PRICE -> {
+                    val newPrice = appendDecimal(state.currentPrice)
+                    state.copy(currentPrice = newPrice)
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle backspace - remove last character from active field.
+     */
+    fun onKeypadBackspace() {
+        _uiState.update { state ->
+            when (state.activeInputField) {
+                InputField.WEIGHT -> {
+                    val newWeight = state.currentWeight.dropLast(1)
+                    state.copy(currentWeight = newWeight)
+                }
+                InputField.PRICE -> {
+                    val newPrice = state.currentPrice.dropLast(1)
+                    state.copy(currentPrice = newPrice)
+                }
+            }
+        }
+    }
+
+    /**
+     * Append a digit to a decimal string, respecting input constraints.
+     * - Max 2 decimal places
+     * - Max total length of 10 characters
+     */
+    private fun appendDigit(current: String, digit: Char): String {
+        // Limit total length
+        if (current.length >= 10) return current
+        
+        // Check decimal places
+        val decimalIndex = current.indexOf('.')
+        if (decimalIndex != -1) {
+            val decimalPlaces = current.length - decimalIndex - 1
+            if (decimalPlaces >= 2) return current // Max 2 decimal places
+        }
+        
+        // Avoid leading zeros (except for "0." pattern)
+        if (current == "0" && digit != '.') {
+            return digit.toString()
+        }
+        
+        return current + digit
+    }
+
+    /**
+     * Append a decimal point if valid.
+     */
+    private fun appendDecimal(current: String): String {
+        // Only one decimal allowed
+        if (current.contains('.')) return current
+        
+        // Add leading zero if empty
+        if (current.isEmpty()) return "0."
+        
+        return "$current."
+    }
+
     fun addPosition() {
         val state = _uiState.value
-        val product = state.selectedProduct ?: return
+        // Use dataEntryProduct on tablet, selectedProduct on phone
+        val product = state.activeProduct ?: return
         val weight = state.effectiveWeight.toBigDecimalOrNull() ?: return
         val price = state.currentPrice.toBigDecimalOrNull() ?: return
 
         if (weight <= BigDecimal.ZERO || price <= BigDecimal.ZERO) return
 
         val total = weight.multiply(price).setScale(2, java.math.RoundingMode.HALF_UP)
+
+        // Tablet edit mode: update existing position instead of adding new
+        if (state.isTabletEditMode && state.tabletEditingPositionId != null) {
+            _uiState.update {
+                val updatedPositions = it.positions.map { pos ->
+                    if (pos.id == state.tabletEditingPositionId) {
+                        pos.copy(
+                            product = product,
+                            weightKg = weight,
+                            pricePerKg = price,
+                            totalAmount = total
+                        )
+                    } else pos
+                }
+                it.copy(
+                    positions = updatedPositions,
+                    dataEntryProduct = null,
+                    currentWeight = "",
+                    currentPrice = "",
+                    tabletEditingPositionId = null, // Exit edit mode
+                    activeInputField = InputField.WEIGHT
+                )
+            }
+            return
+        }
+
+        // Normal add mode
         val position = PurchasePosition(
             product = product,
             weightKg = weight,
@@ -295,9 +511,59 @@ class PurchaseEntryViewModel @Inject constructor(
             it.copy(
                 positions = it.positions + position,
                 selectedProduct = null,
+                dataEntryProduct = null,
                 currentWeight = "",
                 currentPrice = "",
-                screenState = PurchaseEntryScreenState.POSITIONS_LIST
+                tabletEditingPositionId = null,
+                // On tablet: stay in unified entry. On phone: go to positions list
+                screenState = if (it.isTabletMode) 
+                    PurchaseEntryScreenState.UNIFIED_ENTRY 
+                else 
+                    PurchaseEntryScreenState.POSITIONS_LIST
+            )
+        }
+    }
+
+    /**
+     * Tablet mode: Select a position for inline editing.
+     * If already selected, deselect it.
+     * Populates input fields with position data.
+     */
+    fun selectTabletPosition(position: PurchasePosition) {
+        _uiState.update { state ->
+            if (state.tabletEditingPositionId == position.id) {
+                // Deselect - clear inputs
+                state.copy(
+                    tabletEditingPositionId = null,
+                    dataEntryProduct = null,
+                    currentWeight = "",
+                    currentPrice = "",
+                    activeInputField = InputField.WEIGHT
+                )
+            } else {
+                // Select - fill inputs with position data
+                state.copy(
+                    tabletEditingPositionId = position.id,
+                    dataEntryProduct = position.product,
+                    currentWeight = position.weightKg.toPlainString(),
+                    currentPrice = position.pricePerKg.toPlainString(),
+                    activeInputField = InputField.WEIGHT
+                )
+            }
+        }
+    }
+
+    /**
+     * Tablet mode: Cancel editing and deselect position.
+     */
+    fun cancelTabletPositionEdit() {
+        _uiState.update { state ->
+            state.copy(
+                tabletEditingPositionId = null,
+                dataEntryProduct = null,
+                currentWeight = "",
+                currentPrice = "",
+                activeInputField = InputField.WEIGHT
             )
         }
     }
@@ -307,10 +573,14 @@ class PurchaseEntryViewModel @Inject constructor(
             val newPositions = state.positions.filter { it.id != positionId }
             state.copy(
                 positions = newPositions,
-                screenState = if (newPositions.isEmpty()) 
-                    PurchaseEntryScreenState.PRODUCT_GRID 
-                else 
+                // On tablet: always stay in unified entry. On phone: go to grid if no positions
+                screenState = if (state.isTabletMode) {
+                    PurchaseEntryScreenState.UNIFIED_ENTRY
+                } else if (newPositions.isEmpty()) {
+                    PurchaseEntryScreenState.PRODUCT_GRID
+                } else {
                     state.screenState
+                }
             )
         }
     }

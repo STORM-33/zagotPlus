@@ -116,8 +116,12 @@ fun PurchaseEntryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val haptic = LocalHapticFeedback.current
+    val isTabletDevice = isTablet()
 
-    // Batch for editing is now loaded via SavedStateHandle in ViewModel - no LaunchedEffect needed
+    // Set tablet mode in ViewModel once at composition start
+    LaunchedEffect(isTabletDevice) {
+        viewModel.setTabletMode(isTabletDevice)
+    }
 
     // Handle navigation
     LaunchedEffect(uiState.navigateBack) {
@@ -133,6 +137,7 @@ fun PurchaseEntryScreen(
             PurchaseEntryScreenState.PRODUCT_GRID -> viewModel.cancel()
             PurchaseEntryScreenState.WEIGHT_ENTRY -> viewModel.backToGrid()
             PurchaseEntryScreenState.POSITIONS_LIST -> viewModel.cancel()
+            PurchaseEntryScreenState.UNIFIED_ENTRY -> viewModel.cancel()  // Tablet: same as PRODUCT_GRID
             PurchaseEntryScreenState.SUMMARY -> viewModel.dismissSummary()
         }
     }
@@ -150,6 +155,7 @@ fun PurchaseEntryScreen(
         PurchaseEntryScreenState.PRODUCT_GRID -> if (isEditing) "Редагування" else "Оберіть товар"
         PurchaseEntryScreenState.WEIGHT_ENTRY -> uiState.selectedProduct?.name ?: "Введіть дані"
         PurchaseEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
+        PurchaseEntryScreenState.UNIFIED_ENTRY -> if (isEditing) "Редагування" else "Нова закупка"  // Tablet
         PurchaseEntryScreenState.SUMMARY -> if (isEditing) "Виправлення" else "Підсумок"
     }
 
@@ -159,11 +165,13 @@ fun PurchaseEntryScreen(
         PurchaseEntryScreenState.PRODUCT_GRID -> 1
         PurchaseEntryScreenState.WEIGHT_ENTRY -> 2
         PurchaseEntryScreenState.POSITIONS_LIST -> 3
+        PurchaseEntryScreenState.UNIFIED_ENTRY -> 1  // Tablet: no step indicator shown anyway
         PurchaseEntryScreenState.SUMMARY -> 3  // Summary uses same step as positions (no separate confirmation)
     }
 
     val showBackToGrid = uiState.screenState != PurchaseEntryScreenState.PRODUCT_GRID && 
-                         uiState.screenState != PurchaseEntryScreenState.SUMMARY
+                         uiState.screenState != PurchaseEntryScreenState.SUMMARY &&
+                         uiState.screenState != PurchaseEntryScreenState.UNIFIED_ENTRY  // Tablet has all in one
     val showTopBar = uiState.screenState != PurchaseEntryScreenState.SUMMARY
 
     Scaffold(
@@ -183,6 +191,45 @@ fun PurchaseEntryScreen(
                         ) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
                         }
+                    },
+                    actions = {
+                        // Tablet mode: show Cancel and Finalize buttons in top bar
+                        if (uiState.screenState == PurchaseEntryScreenState.UNIFIED_ENTRY) {
+                            OutlinedButton(
+                                onClick = { viewModel.cancel() },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.error),
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .height(52.dp)
+                                    .widthIn(min = 140.dp),
+                                contentPadding = PaddingValues(horizontal = 24.dp)
+                            ) {
+                                Text(
+                                    "Скасувати",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.finalize()
+                                },
+                                enabled = uiState.canFinalize,
+                                modifier = Modifier
+                                    .padding(end = 16.dp)
+                                    .height(52.dp)
+                                    .widthIn(min = 180.dp),
+                                contentPadding = PaddingValues(horizontal = 32.dp)
+                            ) {
+                                Text(
+                                    if (isEditing) "РЕДАГУВАТИ" else "РОЗРАХУВАТИ",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
                     }
                 )
             }
@@ -194,8 +241,9 @@ fun PurchaseEntryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Step indicator (show for all states except SUMMARY)
-            if (uiState.screenState != PurchaseEntryScreenState.SUMMARY) {
+            // Step indicator (show for phone wizard states only, not on tablet or summary)
+            if (uiState.screenState != PurchaseEntryScreenState.SUMMARY && 
+                uiState.screenState != PurchaseEntryScreenState.UNIFIED_ENTRY) {
                 StepIndicator(
                     currentStep = currentStep,
                     totalSteps = stepLabels.size,
@@ -299,6 +347,27 @@ fun PurchaseEntryScreen(
                                     viewModel.finalize()
                                 },
                                 onCancel = viewModel::cancel,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        PurchaseEntryScreenState.UNIFIED_ENTRY -> {
+                            // Tablet three-column kiosk layout with custom numpad
+                            PurchaseEntryTabletContent(
+                                uiState = uiState,
+                                onProductSelect = viewModel::selectProductForEntry,
+                                onProductOrderChanged = viewModel::onProductOrderChanged,
+                                onKeypadInput = viewModel::onKeypadInput,
+                                onKeypadDecimal = viewModel::onKeypadDecimal,
+                                onKeypadBackspace = viewModel::onKeypadBackspace,
+                                onNextInputField = viewModel::onNextInputField,
+                                onSelectInputFieldAndClear = viewModel::selectInputFieldAndClear,
+                                onAddPosition = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.addPosition()
+                                },
+                                onSelectTabletPosition = viewModel::selectTabletPosition,
+                                onRemovePosition = viewModel::removePosition,
+                                onNotesChange = viewModel::onNotesChange,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

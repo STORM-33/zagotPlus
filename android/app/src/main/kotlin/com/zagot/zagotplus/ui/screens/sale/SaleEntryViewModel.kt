@@ -65,6 +65,16 @@ data class SalePosition(
 }
 
 /**
+ * Input field enum for tablet numpad focus tracking.
+ */
+enum class SaleInputField {
+    WEIGHT,           // Batch weight input (kg)
+    TARE_COUNT,       // Batch tare count input (number of sacks/bags)
+    TARE_WEIGHT_UNIT, // Tare weight per unit (kg per sack/bag)
+    PRICE             // Price per kg
+}
+
+/**
  * Screen state for the sale entry flow.
  */
 enum class SaleEntryScreenState {
@@ -72,7 +82,8 @@ enum class SaleEntryScreenState {
     WEIGHING,        // Adding weight batches with tare count for current product
     POSITION_REVIEW, // Review current position before adding to list
     POSITIONS_LIST,  // Viewing all positions, can add more products
-    SUMMARY          // Final confirmation before saving
+    SUMMARY,         // Final confirmation before saving
+    UNIFIED_ENTRY    // Tablet: unified three-column layout
 }
 
 /**
@@ -116,7 +127,11 @@ data class SaleEntryUiState(
     // Location selection for edit mode
     val availableLocations: List<Location> = emptyList(),
     val selectedLocationId: UUID? = null, // null = use device preference
-    val originalLocationId: UUID? = null  // the original batch location (for display)
+    val originalLocationId: UUID? = null,  // the original batch location (for display)
+
+    // Tablet-specific numpad state
+    val activeInputField: SaleInputField = SaleInputField.WEIGHT,
+    val isInFinalizationMode: Boolean = false // false = batch entry mode, true = finalization mode
 ) {
     val hasUnsavedData: Boolean
         get() = positions.isNotEmpty() || 
@@ -201,12 +216,21 @@ class SaleEntryViewModel @Inject constructor(
         loadData()
     }
 
+    /**
+     * Set tablet mode - switches to unified layout for tablets.
+     */
+    fun setTabletMode(isTablet: Boolean) {
+        if (isTablet && _uiState.value.screenState == SaleEntryScreenState.PRODUCT_GRID) {
+            _uiState.update { it.copy(screenState = SaleEntryScreenState.UNIFIED_ENTRY) }
+        }
+    }
+
     private fun loadData() {
         viewModelScope.launch {
             try {
                 // Load locations for edit mode dropdown
                 val locations = locationRepository.getAllLocations().first()
-                
+
                 val products = productRepository.getActiveProducts().first()
                 val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
                 val locationId = devicePreferences.getSelectedLocationId()
@@ -215,7 +239,7 @@ class SaleEntryViewModel @Inject constructor(
                 } else {
                     emptyList()
                 }
-                
+
                 _uiState.update {
                     it.copy(
                         products = orderedProducts,
@@ -224,7 +248,7 @@ class SaleEntryViewModel @Inject constructor(
                         isLoading = editingBatchIdArg != null // Keep loading if we need to load a batch
                     )
                 }
-                
+
                 // Load batch for editing if batchId was provided
                 if (editingBatchIdArg != null && _uiState.value.editingBatchId == null) {
                     loadBatchForEditingInternal(editingBatchIdArg)
@@ -271,9 +295,13 @@ class SaleEntryViewModel @Inject constructor(
                 currentWeight = "",
                 currentTareCount = "",
                 tareWeightPerUnit = "0.1",
-                screenState = SaleEntryScreenState.WEIGHING
+                screenState = if (it.screenState == SaleEntryScreenState.UNIFIED_ENTRY)
+                    SaleEntryScreenState.UNIFIED_ENTRY
+                else
+                    SaleEntryScreenState.WEIGHING
             )
         }
+        resetTabletState()
     }
 
     fun onWeightChange(weight: String) {
@@ -390,9 +418,13 @@ class SaleEntryViewModel @Inject constructor(
                 currentTareCount = "",
                 tareWeightPerUnit = "0.1",
                 pricePerKg = "",
-                screenState = SaleEntryScreenState.POSITIONS_LIST
+                screenState = if (it.screenState == SaleEntryScreenState.UNIFIED_ENTRY)
+                    SaleEntryScreenState.UNIFIED_ENTRY
+                else
+                    SaleEntryScreenState.POSITIONS_LIST
             )
         }
+        resetTabletState()
     }
 
     fun removePosition(positionId: String) {
@@ -736,5 +768,155 @@ class SaleEntryViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    // ==================== TABLET NUMPAD METHODS ====================
+
+    /**
+     * Handle numpad character input (digits).
+     */
+    fun onKeypadInput(char: Char) {
+        val state = _uiState.value
+        when (state.activeInputField) {
+            SaleInputField.WEIGHT -> {
+                val newValue = state.currentWeight + char
+                if (DECIMAL_PATTERN.matches(newValue)) {
+                    _uiState.update { it.copy(currentWeight = newValue) }
+                }
+            }
+            SaleInputField.TARE_COUNT -> {
+                val newValue = state.currentTareCount + char
+                if (INTEGER_PATTERN.matches(newValue)) {
+                    _uiState.update { it.copy(currentTareCount = newValue) }
+                }
+            }
+            SaleInputField.TARE_WEIGHT_UNIT -> {
+                val newValue = state.tareWeightPerUnit + char
+                if (DECIMAL_PATTERN.matches(newValue)) {
+                    _uiState.update { it.copy(tareWeightPerUnit = newValue) }
+                }
+            }
+            SaleInputField.PRICE -> {
+                val newValue = state.pricePerKg + char
+                if (DECIMAL_PATTERN.matches(newValue)) {
+                    _uiState.update { it.copy(pricePerKg = newValue) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle decimal point input.
+     */
+    fun onKeypadDecimal() {
+        val state = _uiState.value
+        when (state.activeInputField) {
+            SaleInputField.WEIGHT -> {
+                if (!state.currentWeight.contains('.')) {
+                    val newValue = if (state.currentWeight.isEmpty()) "0." else state.currentWeight + "."
+                    _uiState.update { it.copy(currentWeight = newValue) }
+                }
+            }
+            SaleInputField.TARE_COUNT -> {
+                // Tare count is integer, no decimal
+            }
+            SaleInputField.TARE_WEIGHT_UNIT -> {
+                if (!state.tareWeightPerUnit.contains('.')) {
+                    val newValue = if (state.tareWeightPerUnit.isEmpty()) "0." else state.tareWeightPerUnit + "."
+                    _uiState.update { it.copy(tareWeightPerUnit = newValue) }
+                }
+            }
+            SaleInputField.PRICE -> {
+                if (!state.pricePerKg.contains('.')) {
+                    val newValue = if (state.pricePerKg.isEmpty()) "0." else state.pricePerKg + "."
+                    _uiState.update { it.copy(pricePerKg = newValue) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle backspace (delete last character).
+     */
+    fun onKeypadBackspace() {
+        val state = _uiState.value
+        when (state.activeInputField) {
+            SaleInputField.WEIGHT -> {
+                _uiState.update { it.copy(currentWeight = state.currentWeight.dropLast(1)) }
+            }
+            SaleInputField.TARE_COUNT -> {
+                _uiState.update { it.copy(currentTareCount = state.currentTareCount.dropLast(1)) }
+            }
+            SaleInputField.TARE_WEIGHT_UNIT -> {
+                _uiState.update { it.copy(tareWeightPerUnit = state.tareWeightPerUnit.dropLast(1)) }
+            }
+            SaleInputField.PRICE -> {
+                _uiState.update { it.copy(pricePerKg = state.pricePerKg.dropLast(1)) }
+            }
+        }
+    }
+
+    /**
+     * Cycle to next input field (TAB behavior).
+     */
+    fun onNextInputField() {
+        val state = _uiState.value
+        val nextField = when (state.activeInputField) {
+            SaleInputField.WEIGHT -> SaleInputField.TARE_COUNT
+            SaleInputField.TARE_COUNT -> if (state.isInFinalizationMode)
+                SaleInputField.TARE_WEIGHT_UNIT
+            else
+                SaleInputField.WEIGHT
+            SaleInputField.TARE_WEIGHT_UNIT -> SaleInputField.PRICE
+            SaleInputField.PRICE -> SaleInputField.TARE_WEIGHT_UNIT
+        }
+        _uiState.update { it.copy(activeInputField = nextField) }
+    }
+
+    /**
+     * Select an input field and clear its current value (tap-to-clear UX).
+     */
+    fun selectInputFieldAndClear(field: SaleInputField) {
+        val state = _uiState.value
+        val newState = when (field) {
+            SaleInputField.WEIGHT -> state.copy(activeInputField = field, currentWeight = "")
+            SaleInputField.TARE_COUNT -> state.copy(activeInputField = field, currentTareCount = "")
+            SaleInputField.TARE_WEIGHT_UNIT -> state.copy(activeInputField = field, tareWeightPerUnit = "")
+            SaleInputField.PRICE -> state.copy(activeInputField = field, pricePerKg = "")
+        }
+        _uiState.update { newState }
+    }
+
+    /**
+     * Toggle between batch entry mode and finalization mode.
+     */
+    fun toggleFinalizationMode() {
+        val state = _uiState.value
+        if (state.currentBatches.isEmpty() && !state.isInFinalizationMode) {
+            // Can't proceed to finalization without batches
+            return
+        }
+
+        val newMode = !state.isInFinalizationMode
+        val newActiveField = if (newMode) SaleInputField.TARE_WEIGHT_UNIT else SaleInputField.WEIGHT
+
+        _uiState.update {
+            it.copy(
+                isInFinalizationMode = newMode,
+                activeInputField = newActiveField
+            )
+        }
+    }
+
+    /**
+     * Reset tablet state when product changes or position is added.
+     */
+    fun resetTabletState() {
+        _uiState.update {
+            it.copy(
+                isInFinalizationMode = false,
+                activeInputField = SaleInputField.WEIGHT
+            )
+        }
     }
 }
