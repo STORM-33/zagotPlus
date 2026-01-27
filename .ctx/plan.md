@@ -1,356 +1,249 @@
-# Plan: Production Readiness Audit
+# Plan: Tablet UI Adaptation
 
-Created: 2026-01-19
-Status: complete
+Created: 2026-01-27
+Status: in_progress
 
-## Overview
-Comprehensive audit of Zagot+ Android app before production deployment (2 days). Focus on identifying bugs, security issues, data integrity risks, and test coverage gaps.
+## Problem
+Current screens use single-column layouts even on tablets. Adaptive helpers exist for **sizing** (button height, padding, text scale) but layouts don't utilize the increased **horizontal space** tablets provide.
+
+## Target User
+- Elderly worker at kiosk
+- Needs prominent, easy-to-tap elements
+- Purchase flow is most critical
+- Phone UI should remain unchanged
+
+## Design Approach
+**Phone (< 600dp)**: Keep current vertical stacked layouts
+**Tablet (>= 600dp)**: Use two-column layouts where content naturally splits into input/output or list/actions
+
+---
 
 ## Progress
-- Total sessions: 7
-- Completed: 7
-- Blocked: 0
-- Remaining: 0
-
-## Codebase Summary
-- **Production Code:** 138 files (~27,110 LOC)
-- **Test Code:** 66 files (~20,917 LOC)
-- **Test Coverage:** 100% ViewModels, 100% Repositories, 100% DAOs
-- **Architecture:** Clean Architecture (data/domain/ui), MVVM, Hilt DI
+- Total sessions: 5
+- Completed: 0
+- In Progress: 0
+- Remaining: 5
 
 ## Phases
 
-### Phase 1: Critical Path Audit
-Status: complete
-Audit the most critical paths: data persistence, sync, and financial calculations.
+### Phase 1: Layout Infrastructure
+Status: pending
 
-Sessions:
-| # | Session | Complexity | Status | Depends On |
-|---|---------|------------|--------|------------|
-| 1 | audit-data-layer | high | completed | none |
-| 2 | audit-sync-system | high | completed | none |
+| # | Session | Complexity | Status |
+|---|---------|------------|--------|
+| 1 | add-two-column-helpers | low | pending |
 
-### Phase 2: Business Logic Audit
-Status: complete
-Audit domain models, business rules, and financial calculations.
+### Phase 2: Purchase Flow (CRITICAL)
+Status: pending
 
-Sessions:
-| # | Session | Complexity | Status | Depends On |
-|---|---------|------------|--------|------------|
-| 3 | audit-domain-and-business-logic | medium | completed | phase-1 |
-| 4 | audit-ui-and-viewmodels | high | completed | phase-1 |
+| # | Session | Complexity | Status |
+|---|---------|------------|--------|
+| 2 | tablet-purchase-entry | high | pending |
 
-### Phase 3: Infrastructure Audit
-Status: complete
-Audit database migrations, build config, and security settings.
+### Phase 3: Sale Flow
+Status: pending
 
-Sessions:
-| # | Session | Complexity | Status | Depends On |
-|---|---------|------------|--------|------------|
-| 5 | audit-migrations-and-schema | medium | completed | none |
-| 6 | audit-build-and-dependencies | medium | completed | none |
+| # | Session | Complexity | Status |
+|---|---------|------------|--------|
+| 3 | tablet-sale-entry | high | pending |
 
-### Phase 4: Test Coverage Verification
-Status: complete
-Run all tests and identify gaps in coverage.
+### Phase 4: Other Screens
+Status: pending
 
-Sessions:
-| # | Session | Complexity | Status | Depends On |
-|---|---------|------------|--------|------------|
-| 7 | verify-test-coverage | high | completed | phase-1, phase-2 |
+| # | Session | Complexity | Status |
+|---|---------|------------|--------|
+| 4 | tablet-inventory | medium | pending |
+| 5 | tablet-history | low | pending |
 
 ---
 
 ## Session Details
 
-### 1. audit-data-layer
-**Complexity:** high
-**Estimated Files:** 40
+### 1. add-two-column-helpers
+**Complexity:** low
+**File:** `ui/components/AdaptiveLayout.kt`
 
-Audit all data layer components:
+Add composables for tablet two-column layouts:
 
-**Room Database (8 files):**
-- `ZagotDatabase.kt` - Schema version, migrations, initialization
-- `Converters.kt` - Type converters (dates, enums, JSON)
-- DAOs: `CashDao`, `LocationDao`, `ProductDao`, `PurchaseBatchDao`, `SaleBatchDao`, `TransactionDao`
-- `TransactionQueryBuilder.kt` - Dynamic query construction
-
-**Entities (6 files):**
-- `CashEntity.kt` - Cash operations structure
-- `LocationEntity.kt` - Location tracking
-- `ProductEntity.kt` - Product catalog
-- `PurchaseBatchEntity.kt` - Purchase batches
-- `SaleBatchEntity.kt` - Sale batches
-- `TransactionEntity.kt` - All transactions
-
-**DTOs (7 files):**
-- Verify Supabase DTO mappings match schema
-- Check nullable vs non-null field alignment
-- Verify serialization annotations
-
-**Repositories (7 files):**
-- Verify offline-first behavior
-- Check error handling
-- Validate data transformations
-
-**Preferences (4 files):**
-- `AuthPreferences.kt` - PIN storage, lockout
-- `DevicePreferences.kt` - Device ID persistence
-- `SyncPreferences.kt` - Last sync timestamps
-- `ProductOrderPreferences.kt` - UI preferences
-
-**Checklist:**
-- [ ] Room schema version is correct
-- [ ] All migrations are idempotent and tested
-- [ ] Type converters handle edge cases (null, empty)
-- [ ] DAOs handle concurrent access
-- [ ] DTOs match Supabase schema exactly
-- [ ] Repository error handling is comprehensive
-- [ ] Preferences handle corruption gracefully
-
----
-
-### 2. audit-sync-system
-**Complexity:** high
-**Estimated Files:** 10
-
-Audit sync infrastructure:
-
-**Sync Core (6 files):**
-- `SyncService.kt` - Push/pull logic
-- `SyncManager.kt` - WorkManager scheduling
-- `SyncWorker.kt` - Background execution
-- `SyncDataSource.kt` - Interface
-- `SupabaseSyncDataSource.kt` - Supabase implementation
-- `SyncPreferences.kt` - Timestamps tracking
-
-**Sync State (4 files):**
-- `SyncResult.kt` - Success/Partial/Failure states
-- `SyncStatus.kt` - Current sync state
-- `SyncStatusRepository.kt` - Status observation
-
-**Checklist:**
-- [ ] Conflict resolution is deterministic
-- [ ] Partial sync failures don't corrupt data
-- [ ] Network errors are handled gracefully
-- [ ] Duplicate records are prevented (local_id UNIQUE)
-- [ ] Sync doesn't run during critical operations
-- [ ] Background sync respects battery/network
-- [ ] Timestamps use consistent timezone (UTC)
-- [ ] Large batch sync doesn't OOM
-
----
-
-### 3. audit-domain-and-business-logic
-**Complexity:** medium
-**Estimated Files:** 15
-
-Audit domain layer and business rules:
-
-**Domain Models (8 files):**
-- `Transaction.kt` - Transaction types, validation
-- `PurchaseBatch.kt` - Batch calculations
-- `SaleBatch.kt` - Sale aggregation
-- `InventoryItem.kt` - Computed inventory
-- `CashModels.kt` - Cash flow tracking
-- `Location.kt` - Location model
-- `Product.kt` - Product model
-- `TransactionFilter.kt` - Filtering logic
-
-**Repository Interfaces (6 files):**
-- Verify interface contracts are complete
-- Check method signatures match implementations
-
-**Validation (1 file):**
-- `InputValidation.kt` - User input validation
-
-**Business Rules to Verify:**
-- [ ] Inventory is computed correctly (sum of transactions)
-- [ ] Negative inventory is flagged but allowed
-- [ ] Transfer creates linked transactions atomically
-- [ ] Purchase batches aggregate correctly
-- [ ] Sale batches compute totals correctly
-- [ ] Price calculations are precise (no floating point errors)
-- [ ] Weight handling uses appropriate precision
-- [ ] Void operations create proper reversals
-
----
-
-### 4. audit-ui-and-viewmodels
-**Complexity:** high
-**Estimated Files:** 46
-
-Audit UI layer:
-
-**ViewModels (13 files):**
-- `PinViewModel.kt` - Auth flow, lockout
-- `CashViewModel.kt` - Cash operations
-- `PurchaseViewModel.kt` - Purchase batches
-- `PurchaseEntryViewModel.kt` - Entry flow, scales/printer
-- `SaleViewModel.kt` - Sale batches
-- `SaleEntryViewModel.kt` - Sale entry flow
-- `InventoryViewModel.kt` - Inventory computation
-- `HistoryViewModel.kt` - Transaction history
-- `ReportsViewModel.kt` - Daily reports
-- `ProductsViewModel.kt` - Product CRUD
-- `TransferViewModel.kt` - Transfers
-- `SettingsViewModel.kt` - App settings
-- `LocationSelectionViewModel.kt` - Location picker
-
-**Screens (13 screens):**
-- Verify UI state handling
-- Check loading/error states
-- Validate user input sanitization
-
-**Components (14 files):**
-- `CurrencyFormat.kt` - Money formatting (Ukrainian hryvnia)
-- `DateRangePicker.kt` - Date handling
-- `AdaptiveLayout.kt` - Screen size adaptation
-- Other UI components
-
-**Navigation (2 files):**
-- `NavGraph.kt` - Navigation routes
-- `Destinations.kt` - Route definitions
-
-**Checklist:**
-- [ ] All ViewModels handle errors gracefully
-- [ ] Loading states are shown during operations
-- [ ] UI doesn't block on long operations
-- [ ] Input validation prevents invalid data
-- [ ] Currency formatting is consistent
-- [ ] Date/time displays use correct locale
-- [ ] Navigation handles back stack correctly
-- [ ] No hardcoded strings (all in resources)
-
----
-
-### 5. audit-migrations-and-schema
-**Complexity:** medium
-**Estimated Files:** 17 SQL + schema
-
-Audit database schema and migrations:
-
-**Initial Schema:**
-- `20260111000000_initial_schema.sql` - Core tables
-
-**Feature Migrations (16 files):**
-- Purchase batches, product images, product sync
-- Cash operations, sale batches
-- Batch corrections, adjustment types
-- Location renaming, transfer flags
-- Voided batch filtering, RLS policies
-
-**Checklist:**
-- [ ] Migrations are in correct order
-- [ ] Each migration is idempotent (IF NOT EXISTS)
-- [ ] Indexes exist for common queries
-- [ ] Foreign keys have proper ON DELETE behavior
-- [ ] RLS policies are correct and tested
-- [ ] Constraints prevent invalid data
-- [ ] Views compute correctly
-- [ ] Triggers don't cause infinite loops
-
----
-
-### 6. audit-build-and-dependencies
-**Complexity:** medium
-**Estimated Files:** 3
-
-Audit build configuration:
-
-**Gradle Files:**
-- `build.gradle.kts` - App configuration
-- `libs.versions.toml` - Dependency versions
-
-**Checklist:**
-- [ ] All dependencies are up-to-date (no known vulnerabilities)
-- [ ] ProGuard rules are configured (isMinifyEnabled = false noted!)
-- [ ] Signing config is ready for release
-- [ ] Version code/name are set
-- [ ] targetSdk is current (34)
-- [ ] minSdk is appropriate (26)
-- [ ] Test configurations are correct
-- [ ] No debug code in release build
-
-**Security Concerns:**
-- [ ] Supabase credentials not in source control
-- [ ] BuildConfig doesn't leak secrets
-- [ ] INTERNET permission is declared
-- [ ] No unnecessary permissions
-
----
-
-### 7. verify-test-coverage
-**Complexity:** high
-**Estimated Files:** 66 test files
-
-Run and verify test coverage:
-
-**Test Categories:**
-- Unit Tests (52 files)
-- Integration Tests (11 files)
-- Instrumentation Tests (3 files)
-
-**Actions:**
-1. Run full test suite: `./gradlew test`
-2. Run instrumentation tests: `./gradlew connectedAndroidTest`
-3. Identify uncovered critical paths
-4. Verify integration tests cover business flows
-
-**Coverage Goals:**
-- [ ] All tests pass
-- [ ] Critical flows have integration tests
-- [ ] Edge cases are covered (empty, null, overflow)
-- [ ] Error conditions are tested
-- [ ] Concurrent access is tested
-
-**Known Gaps to Address:**
-- Instrumentation test coverage: only 2/13 screens
-- Hardware layer tests (mocks exist but verify coverage)
-
----
-
-## Audit Output Format
-
-For each session, produce:
-
-1. **FINDINGS.md** - Categorized issues:
-   - 🔴 CRITICAL: Must fix before release
-   - 🟠 HIGH: Should fix, workaround exists
-   - 🟡 MEDIUM: Fix after release
-   - ⚪ LOW: Nice to have
-
-2. **Issues by File** - Specific file:line references
-
-3. **Recommendations** - Prioritized fix list
-
----
-
-## Risk Areas (Pre-identified)
-
-Based on codebase analysis:
-
-1. **ProGuard disabled** (`isMinifyEnabled = false`) - APK not obfuscated
-2. **Instrumentation coverage** - Only 15% of screens
-3. **Hardware layer** - Mock-only implementations
-4. **Release signing** - Using debug signing config
-
----
-
-## Dependencies Graph
-```
-audit-data-layer ─┐
-                  ├─→ audit-domain-and-business-logic ─┐
-audit-sync-system ┘                                   │
-                                                      ├─→ verify-test-coverage
-audit-ui-and-viewmodels ──────────────────────────────┘
-
-audit-migrations-and-schema (independent)
-audit-build-and-dependencies (independent)
+```kotlin
+/**
+ * Two-column layout for tablets, single column for phones.
+ * Used for input/output split (e.g., weight entry + total display).
+ */
+@Composable
+fun AdaptiveTwoColumn(
+    modifier: Modifier = Modifier,
+    leftWeight: Float = 0.55f,
+    spacing: Dp = 24.dp,
+    leftContent: @Composable ColumnScope.() -> Unit,
+    rightContent: @Composable ColumnScope.() -> Unit
+) {
+    if (isTablet()) {
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(spacing)) {
+            Column(Modifier.weight(leftWeight)) { leftContent() }
+            Column(Modifier.weight(1f - leftWeight)) { rightContent() }
+        }
+    } else {
+        Column(modifier) {
+            leftContent()
+            rightContent()
+        }
+    }
+}
 ```
 
-## Notes
-- Hardware integration is Phase B (post-hardware arrival), not blocking release
-- App will be used in real business environment in 2 days
-- Focus on data integrity and financial calculations
-- Ukrainian locale and hryvnia currency formatting critical
+---
+
+### 2. tablet-purchase-entry
+**Complexity:** high
+**File:** `ui/screens/purchase/PurchaseEntryScreen.kt`
+
+#### 2a. WeightEntry - Two-Column on Tablet
+
+**Phone (current):**
+```
+[Weight Input    ]
+[Price Input     ]
+[  Total Card    ]
+[ ADD POSITION   ]
+```
+
+**Tablet (new):**
+```
++---------------------+-----------------+
+| [Weight Input     ] |                 |
+| [Price Input      ] |   TOTAL CARD    |
+|                     |   1,234.00      |
+|                     |                 |
+|                     | [ADD POSITION]  |
++---------------------+-----------------+
+```
+
+- Left panel (55%): Weight + Price inputs (stacked)
+- Right panel (45%): Total card + Add button (centered, prominent)
+- Total text should be VERY large on tablets (use displayLarge)
+- Add button should fill right panel width
+
+#### 2b. PositionsList - Master-Detail on Tablet
+
+**Phone (current):**
+```
+[Position 1]
+[Position 2]
+[Notes field]
+---footer---
+[Totals]
+[Cancel] [Finalize]
+```
+
+**Tablet (new):**
+```
++------------------------+----------------------+
+| [Position 1          ] | [Notes field       ] |
+| [Position 2          ] | [Location dropdown ] |
+| [Position 3          ] |                      |
+|                        | -------------------- |
+| [+ Dodaty sche tovar]  | Vsogo:    12.5 kg    |
+|                        |           $1,234     |
+|                        |                      |
+|                        | [Skasuvaty]          |
+|                        | [ROZRAKHUVATY]       |
++------------------------+----------------------+
+```
+
+- Left panel (60%): Scrollable positions list + Add button at bottom
+- Right panel (40%): Notes + Location + Totals + Action buttons (stacked vertically)
+- Action buttons full-width, stacked for larger touch targets
+
+---
+
+### 3. tablet-sale-entry
+**Complexity:** high
+**File:** `ui/screens/sale/SaleEntryScreen.kt`
+
+#### 3a. WeighingScreen - Two-Column on Tablet
+
+```
++---------------------+---------------------+
+|   PRODUCT NAME      | Zvazhyvannya:       |
+|   25.50 kg (brutto) | [Batch 1: 10.2 kg]  |
+|                     | [Batch 2: 15.3 kg]  |
+| [Weight Input     ] |                     |
+| [Tare Count Input ] |                     |
+| [DODATY ZVAZHYV]    |     [DALI ->]       |
++---------------------+---------------------+
+```
+
+- Left: Product card + inputs + add batch button
+- Right: Batches list + proceed button (at bottom right)
+
+#### 3b. PositionReviewScreen - Two-Column on Tablet
+
+```
++---------------------+---------------------+
+| PRODUCT NAME        |                     |
+| +------------------+|    SUMA:            |
+| | Brutto: 25.5 kg ||    $1,234           |
+| | Tara: -2.0 kg   ||                     |
+| | Netto: 23.5 kg  ||                     |
+| +------------------+|                     |
+| [Tare Weight Input] |                     |
+| [Price Input      ] | [DODATY POZYCIYU]   |
++---------------------+---------------------+
+```
+
+#### 3c. PositionsListScreen - Same as Purchase PositionsList
+
+---
+
+### 4. tablet-inventory
+**Complexity:** medium
+**File:** `ui/screens/inventory/InventoryScreen.kt`
+
+Two-Panel Layout on Tablet:
+
+```
++------------------------+----------------------+
+| [Product 1: 50kg     ] |                      |
+| [Product 2: 30kg     ] |    SUMMARY PANEL     |
+| [Product 3: 25kg     ] |    Total: 105 kg     |
+| [Product 4: 0kg !!   ] |    Value: $12,345    |
+|                        |    Profit: $2,345    |
++------------------------+----------------------+
+```
+
+- Inventory list on left (scrollable)
+- Summary panel fixed on right
+- Summary panel content centered, prominent typography
+
+---
+
+### 5. tablet-history
+**Complexity:** low
+**File:** `ui/screens/history/HistoryScreen.kt`
+
+Optional improvements:
+- Consider showing expanded batch details inline on tablets
+- Two-column: list on left, selected batch details on right
+- Lower priority - current expandable cards work fine
+
+---
+
+## Files to Modify
+
+1. `ui/components/AdaptiveLayout.kt` - Add two-column composables
+2. `ui/screens/purchase/PurchaseEntryScreen.kt` - WeightEntry + PositionsList
+3. `ui/screens/sale/SaleEntryScreen.kt` - All sub-screens
+4. `ui/screens/inventory/InventoryScreen.kt` - Two-panel layout
+5. `ui/screens/history/HistoryScreen.kt` - Optional
+
+---
+
+## Key Principles
+
+1. **Phone layouts unchanged** - `isTablet()` check gates all changes
+2. **Larger touch targets on tablets** - Use existing `adaptiveButtonHeight()` and `adaptivePrimaryButtonHeight()`
+3. **Prominent totals/actions** - Right panel should have bold, centered content
+4. **Natural content split** - Input/output, list/actions, data/summary
+5. **Consistent patterns** - Same two-column approach across all entry screens
+6. **Elderly-friendly** - Large text, clear labels, obvious buttons
