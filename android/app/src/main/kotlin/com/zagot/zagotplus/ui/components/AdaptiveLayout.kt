@@ -232,6 +232,33 @@ fun adaptiveDisplayScale(): Float {
 }
 
 /**
+ * Maximum button width on tablets to prevent overly stretched buttons.
+ * Returns null for compact screens (full width is fine).
+ * Used for action buttons like "Add Position", "Calculate", etc.
+ */
+@Composable
+fun adaptiveMaxButtonWidth(): Dp? {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> null
+        ScreenSize.MEDIUM -> 320.dp
+        ScreenSize.EXPANDED -> 360.dp
+    }
+}
+
+/**
+ * Maximum input field width on tablets to keep inputs focused.
+ * Returns null for compact screens (full width is fine).
+ */
+@Composable
+fun adaptiveMaxInputWidth(): Dp? {
+    return when (rememberScreenSize()) {
+        ScreenSize.COMPACT -> null
+        ScreenSize.MEDIUM -> 400.dp
+        ScreenSize.EXPANDED -> 480.dp
+    }
+}
+
+/**
  * Two-column layout for tablets, single column for phones.
  * Used for input/output split (e.g., weight entry + total display).
  *

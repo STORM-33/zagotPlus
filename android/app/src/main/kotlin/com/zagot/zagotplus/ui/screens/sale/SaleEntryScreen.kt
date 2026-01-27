@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -100,6 +102,8 @@ import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
 import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import com.zagot.zagotplus.ui.components.adaptivePadding
 import com.zagot.zagotplus.ui.components.adaptivePrimaryButtonHeight
+import com.zagot.zagotplus.ui.components.adaptiveMaxButtonWidth
+import com.zagot.zagotplus.ui.components.adaptiveMaxInputWidth
 import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
 import java.text.DecimalFormat
@@ -451,6 +455,8 @@ private fun WeighingScreen(
     val primaryButtonHeight = adaptivePrimaryButtonHeight()
     val displayScale = adaptiveDisplayScale()
     val isTabletDevice = isTablet()
+    val maxButtonWidth = adaptiveMaxButtonWidth()
+    val maxInputWidth = adaptiveMaxInputWidth()
 
     // Auto-focus weight field
     val focusRequester = remember { FocusRequester() }
@@ -470,36 +476,51 @@ private fun WeighingScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 16.dp else 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = productName,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 6.dp else 4.dp))
                 Text(
                     text = "${decimalFormat.format(grossWeight)} кг",
-                    style = MaterialTheme.typography.displayMedium.copy(
+                    style = if (isTabletDevice) MaterialTheme.typography.displayMedium.copy(
                         fontSize = MaterialTheme.typography.displayMedium.fontSize * displayScale
-                    ),
+                    ) else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "${batches.size} зважувань (брутто)",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 
-    // Input fields composable - reused in both layouts  
+    // Input fields composable - reused in both layouts
     @Composable
     fun InputFields(fieldModifier: Modifier = Modifier) {
-        Column(modifier = fieldModifier) {
+        // Constrain input and button widths on tablet
+        val inputModifier = if (isTabletDevice && maxInputWidth != null) {
+            Modifier.widthIn(max = maxInputWidth)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+        val btnModifier = if (isTabletDevice && maxButtonWidth != null) {
+            Modifier.widthIn(max = maxButtonWidth)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Column(
+            modifier = fieldModifier,
+            horizontalAlignment = if (isTabletDevice) Alignment.CenterHorizontally else Alignment.Start
+        ) {
             // Weight input
             OutlinedTextField(
                 value = currentWeight,
@@ -508,7 +529,7 @@ private fun WeighingScreen(
                 textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                modifier = inputModifier.fillMaxWidth().focusRequester(focusRequester)
             )
 
             Spacer(modifier = Modifier.height(if (isTabletDevice) 20.dp else 16.dp))
@@ -521,16 +542,16 @@ private fun WeighingScreen(
                 textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = inputModifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(if (isTabletDevice) 20.dp else 16.dp))
 
-            // Add batch button
+            // Add batch button - constrained width
             Button(
                 onClick = onAddBatch,
                 enabled = canAddBatch,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight)
+                modifier = btnModifier.fillMaxWidth().height(buttonHeight)
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Додати")
                 Spacer(modifier = Modifier.width(8.dp))
@@ -565,15 +586,26 @@ private fun WeighingScreen(
     @Composable
     fun ProceedButton(buttonModifier: Modifier = Modifier) {
         if (canProceed) {
-            Button(
-                onClick = onProceed,
-                modifier = buttonModifier.height(primaryButtonHeight),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            // Constrain button width on tablet
+            val constrainedModifier = if (isTabletDevice && maxButtonWidth != null) {
+                buttonModifier.widthIn(max = maxButtonWidth)
+            } else {
+                buttonModifier
+            }
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "ДАЛІ →",
-                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
-                )
+                Button(
+                    onClick = onProceed,
+                    modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text(
+                        "ДАЛІ →",
+                        style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
@@ -611,9 +643,9 @@ private fun WeighingScreen(
                 .imePadding()
         ) {
             RunningTotalCard(Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             InputFields(Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             // Batches list
             if (batches.isNotEmpty()) {
@@ -703,7 +735,7 @@ private fun PositionReviewScreen(
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val currencyFormat = remember { DecimalFormat("#,##0") }
-    var isWeighingHistoryExpanded by remember { mutableStateOf(false) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
     var editingBatch by remember { mutableStateOf<SaleWeighingBatch?>(null) }
 
     // Adaptive values for tablet/kiosk display
@@ -711,6 +743,8 @@ private fun PositionReviewScreen(
     val primaryButtonHeight = adaptivePrimaryButtonHeight()
     val displayScale = adaptiveDisplayScale()
     val isTabletDevice = isTablet()
+    val maxButtonWidth = adaptiveMaxButtonWidth()
+    val maxInputWidth = adaptiveMaxInputWidth()
 
     // Track price focus state
     var priceHasBeenFocused by remember { mutableStateOf(false) }
@@ -719,40 +753,50 @@ private fun PositionReviewScreen(
     @Composable
     fun WeightSummaryCard(cardModifier: Modifier = Modifier) {
         Card(
-            modifier = cardModifier.clickable { isWeighingHistoryExpanded = !isWeighingHistoryExpanded },
+            modifier = cardModifier,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 20.dp else 16.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 16.dp else 10.dp)) {
+                // Weighing summary row with history button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "Брутто (${batches.size} зважувань):",
-                        style = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${decimalFormat.format(grossWeight)} кг",
-                            fontWeight = FontWeight.Medium,
-                            style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showHistoryDialog = true }
+                            .padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = "Історія зважувань",
+                            modifier = Modifier.size(if (isTabletDevice) 24.dp else 18.dp),
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isWeighingHistoryExpanded) "▲" else "▼",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                            "${batches.size} зв. • ${decimalFormat.format(grossWeight)} кг",
+                            style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
+                    Text(
+                        "брутто",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 8.dp else 4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(
                         "Тара ($totalTareCount шт):",
-                        style = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
+                        style = if (isTabletDevice) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodySmall
                     )
                     Text(
                         "-${decimalFormat.format(totalTareWeight)} кг",
@@ -760,9 +804,9 @@ private fun PositionReviewScreen(
                         style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
                     )
                 }
-                Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 8.dp else 4.dp))
                 HorizontalDivider()
-                Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 8.dp else 4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(
                         "Нетто:",
@@ -773,41 +817,8 @@ private fun PositionReviewScreen(
                         "${decimalFormat.format(netWeight)} кг",
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                        style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall
                     )
-                }
-            }
-        }
-    }
-
-    // Weighing history card composable - reused in both layouts
-    @Composable
-    fun WeighingHistoryCard() {
-        if (isWeighingHistoryExpanded && batches.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(if (isTabletDevice) 16.dp else 12.dp)) {
-                    Text(
-                        text = "Історія зважувань",
-                        style = if (isTabletDevice) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
-                    batches.forEachIndexed { index, batch ->
-                        ReviewBatchItem(
-                            index = index + 1,
-                            batch = batch,
-                            onClick = { editingBatch = batch }
-                        )
-                        if (index < batches.lastIndex) {
-                            Spacer(modifier = Modifier.height(if (isTabletDevice) 8.dp else 6.dp))
-                        }
-                    }
                 }
             }
         }
@@ -816,7 +827,17 @@ private fun PositionReviewScreen(
     // Input fields composable - reused in both layouts
     @Composable
     fun InputFields(fieldModifier: Modifier = Modifier) {
-        Column(modifier = fieldModifier) {
+        // Constrain input widths on tablet
+        val inputModifier = if (isTabletDevice && maxInputWidth != null) {
+            Modifier.widthIn(max = maxInputWidth)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Column(
+            modifier = fieldModifier,
+            horizontalAlignment = if (isTabletDevice) Alignment.CenterHorizontally else Alignment.Start
+        ) {
             // Tare weight per unit input
             OutlinedTextField(
                 value = tareWeightPerUnit,
@@ -825,7 +846,7 @@ private fun PositionReviewScreen(
                 textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = inputModifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(if (isTabletDevice) 20.dp else 16.dp))
@@ -838,7 +859,7 @@ private fun PositionReviewScreen(
                 textStyle = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                 singleLine = true,
-                modifier = Modifier
+                modifier = inputModifier
                     .fillMaxWidth()
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused && !priceHasBeenFocused) {
@@ -882,19 +903,19 @@ private fun PositionReviewScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 24.dp else 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(if (isTabletDevice) 20.dp else 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     "Сума:",
-                    style = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge
+                    style = if (isTabletDevice) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium
                 )
                 Text(
                     text = totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴0",
-                    style = MaterialTheme.typography.headlineMedium.copy(
+                    style = if (isTabletDevice) MaterialTheme.typography.headlineMedium.copy(
                         fontSize = MaterialTheme.typography.headlineMedium.fontSize * displayScale
-                    ),
+                    ) else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -905,15 +926,26 @@ private fun PositionReviewScreen(
     // Add position button composable - reused in both layouts
     @Composable
     fun AddPositionButton(buttonModifier: Modifier = Modifier) {
-        Button(
-            onClick = onAddPosition,
-            enabled = canAdd,
-            modifier = buttonModifier.height(primaryButtonHeight)
+        // Constrain button width on tablet
+        val constrainedModifier = if (isTabletDevice && maxButtonWidth != null) {
+            buttonModifier.widthIn(max = maxButtonWidth)
+        } else {
+            buttonModifier
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                "ДОДАТИ ПОЗИЦІЮ",
-                style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
-            )
+            Button(
+                onClick = onAddPosition,
+                enabled = canAdd,
+                modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight)
+            ) {
+                Text(
+                    "ДОДАТИ ПОЗИЦІЮ",
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                )
+            }
         }
     }
 
@@ -937,7 +969,6 @@ private fun PositionReviewScreen(
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 WeightSummaryCard(Modifier.fillMaxWidth())
-                WeighingHistoryCard()
                 Spacer(modifier = Modifier.height(20.dp))
                 InputFields(Modifier.fillMaxWidth())
             }
@@ -967,17 +998,29 @@ private fun PositionReviewScreen(
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             WeightSummaryCard(Modifier.fillMaxWidth())
-            WeighingHistoryCard()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             InputFields(Modifier.fillMaxWidth())
             InventoryWarningCard()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             TotalAmountCard(Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.weight(1f))
             AddPositionButton(Modifier.fillMaxWidth())
         }
+    }
+
+    // Weighing history dialog
+    if (showHistoryDialog && batches.isNotEmpty()) {
+        WeighingHistoryDialog(
+            batches = batches,
+            grossWeight = grossWeight,
+            onDismiss = { showHistoryDialog = false },
+            onEditBatch = { batch ->
+                showHistoryDialog = false
+                editingBatch = batch
+            }
+        )
     }
 
     // Edit weighing dialog
@@ -999,45 +1042,85 @@ private fun PositionReviewScreen(
 }
 
 @Composable
-private fun ReviewBatchItem(
-    index: Int,
-    batch: SaleWeighingBatch,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun WeighingHistoryDialog(
+    batches: List<SaleWeighingBatch>,
+    grossWeight: BigDecimal,
+    onDismiss: () -> Unit,
+    onEditBatch: (SaleWeighingBatch) -> Unit
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "#$index",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.width(28.dp)
-            )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
             Column {
                 Text(
-                    text = "${decimalFormat.format(batch.grossWeightKg)} кг",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    text = "Історія зважувань",
+                    style = MaterialTheme.typography.titleLarge
                 )
                 Text(
-                    text = "${batch.tareCount} шт",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    text = "${batches.size} зважувань • ${decimalFormat.format(grossWeight)} кг брутто",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(batches.size) { index ->
+                    val batch = batches[index]
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onEditBatch(batch) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "#${index + 1}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.width(36.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "${decimalFormat.format(batch.grossWeightKg)} кг",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${batch.tareCount} шт тари",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "редагувати",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрити")
+            }
         }
-    }
+    )
 }
 
 @Composable
@@ -1135,6 +1218,7 @@ private fun PositionsListScreen(
     val primaryButtonHeight = adaptivePrimaryButtonHeight()
     val displayScale = adaptiveDisplayScale()
     val isTabletDevice = isTablet()
+    val maxButtonWidth = adaptiveMaxButtonWidth()
 
     // Positions list composable - reused in both layouts
     @Composable
@@ -1155,17 +1239,28 @@ private fun PositionsListScreen(
             if (showAddButton) {
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onAddAnother,
-                        modifier = Modifier.fillMaxWidth().height(buttonHeight),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    // Constrained button width on tablet - left-aligned
+                    val addButtonModifier = if (isTabletDevice && maxButtonWidth != null) {
+                        Modifier.widthIn(max = maxButtonWidth)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (isTabletDevice) Alignment.CenterStart else Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Додати ще")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Додати ще товар",
-                            style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
-                        )
+                        Button(
+                            onClick = onAddAnother,
+                            modifier = addButtonModifier.height(buttonHeight),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Додати ще")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Додати ще товар",
+                                style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                 }
             }
@@ -1225,14 +1320,22 @@ private fun PositionsListScreen(
     // Action buttons composable
     @Composable
     fun ActionButtons(buttonsModifier: Modifier = Modifier) {
+        // Constrain button widths on tablet
+        val buttonWidthModifier = if (isTabletDevice && maxButtonWidth != null) {
+            Modifier.widthIn(max = maxButtonWidth)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
         Column(
             modifier = buttonsModifier,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
                 onClick = onFinalize,
                 enabled = canFinalize,
-                modifier = Modifier.fillMaxWidth().height(primaryButtonHeight)
+                modifier = buttonWidthModifier.fillMaxWidth().height(primaryButtonHeight)
             ) {
                 Text(
                     text = if (isEditing) "РЕДАГУВАТИ" else "ПРОДАТИ",
@@ -1241,7 +1344,7 @@ private fun PositionsListScreen(
             }
             OutlinedButton(
                 onClick = onCancel,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                modifier = buttonWidthModifier.fillMaxWidth().height(buttonHeight),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
             ) {
@@ -1251,12 +1354,12 @@ private fun PositionsListScreen(
     }
 
     if (isTabletDevice) {
-        // Tablet: 60/40 split - List on left, Checkout on right
+        // Tablet: 60/40 split - List on left, Receipt sidebar on right
         Row(
             modifier = modifier
                 .padding(horizontal = horizontalPadding)
                 .imePadding(),
-            horizontalArrangement = Arrangement.spacedBy(32.dp)
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // Left column: Positions list + Add button (60%)
             Column(modifier = Modifier.weight(0.6f)) {
@@ -1266,13 +1369,26 @@ private fun PositionsListScreen(
                 )
             }
 
-            // Right column: Checkout panel (40%)
+            // Right column: Receipt-style checkout sidebar (40%)
             Column(
                 modifier = Modifier
                     .weight(0.4f)
-                    .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Receipt header
+                Text(
+                    text = "Чек",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                 // Location selector (only in edit mode)
                 if (isEditing && availableLocations.isNotEmpty()) {
                     LocationSelector(
@@ -1284,8 +1400,14 @@ private fun PositionsListScreen(
                 }
 
                 NotesField(Modifier.fillMaxWidth())
-                TotalsDisplay(Modifier.fillMaxWidth())
+
                 Spacer(modifier = Modifier.weight(1f))
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                TotalsDisplay(Modifier.fillMaxWidth())
+
+                // Action buttons anchored at bottom
                 ActionButtons(Modifier.fillMaxWidth())
             }
         }
@@ -1482,6 +1604,7 @@ private fun EditSalePositionDialog(
     var tareWeight by remember(position) { mutableStateOf(position.tareWeightPerUnit.toPlainString()) }
     var price by remember(position) { mutableStateOf(position.pricePerKg.toPlainString()) }
     var editingBatch by remember { mutableStateOf<SaleWeighingBatch?>(null) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
     val parsedTareWeight = tareWeight.toBigDecimalOrNull()
     val parsedPrice = price.toBigDecimalOrNull()
@@ -1489,7 +1612,7 @@ private fun EditSalePositionDialog(
                   parsedPrice != null && parsedPrice > BigDecimal.ZERO
 
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    
+
     // Calculate preview values
     val previewTotalTareWeight = if (parsedTareWeight != null) {
         parsedTareWeight.multiply(BigDecimal(position.totalTareCount))
@@ -1511,54 +1634,48 @@ private fun EditSalePositionDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Weighing history section
-                Text(
-                    text = "Зважування (${position.batches.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
+                // Weighing history summary with button
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showHistoryDialog = true },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        position.batches.forEachIndexed { index, batch ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { editingBatch = batch }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = "Історія зважувань",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
                                 Text(
-                                    text = "#${index + 1}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    text = "${position.batches.size} зв. • ${decimalFormat.format(position.grossWeight)} кг",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = "${decimalFormat.format(batch.grossWeightKg)} кг",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Text(
-                                    text = "${batch.tareCount} шт",
+                                    text = "брутто",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (index < position.batches.lastIndex) {
-                                HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
-                            }
                         }
+                        Text(
+                            text = "деталі →",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
-                
-                Text(
-                    text = "Брутто: ${decimalFormat.format(position.grossWeight)} кг",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
 
                 OutlinedTextField(
                     value = tareWeight,
@@ -1626,7 +1743,20 @@ private fun EditSalePositionDialog(
             }
         }
     )
-    
+
+    // Weighing history dialog
+    if (showHistoryDialog) {
+        WeighingHistoryDialog(
+            batches = position.batches,
+            grossWeight = position.grossWeight,
+            onDismiss = { showHistoryDialog = false },
+            onEditBatch = { batch ->
+                showHistoryDialog = false
+                editingBatch = batch
+            }
+        )
+    }
+
     // Nested dialog for editing individual batch
     editingBatch?.let { batch ->
         EditWeighingDialog(

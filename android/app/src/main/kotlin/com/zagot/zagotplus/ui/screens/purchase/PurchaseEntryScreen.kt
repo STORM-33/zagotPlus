@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -99,6 +100,8 @@ import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
 import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import com.zagot.zagotplus.ui.components.adaptivePadding
 import com.zagot.zagotplus.ui.components.adaptivePrimaryButtonHeight
+import com.zagot.zagotplus.ui.components.adaptiveMaxButtonWidth
+import com.zagot.zagotplus.ui.components.adaptiveMaxInputWidth
 import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
 import java.util.UUID
@@ -410,6 +413,8 @@ private fun WeightEntry(
     val displayScale = adaptiveDisplayScale()
     val isTabletDevice = isTablet()
     val horizontalPadding = adaptiveHorizontalPadding()
+    val maxButtonWidth = adaptiveMaxButtonWidth()
+    val maxInputWidth = adaptiveMaxInputWidth()
 
     // Track price focus state
     var priceHasBeenFocused by remember { mutableStateOf(false) }
@@ -488,18 +493,18 @@ private fun WeightEntry(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(if (isTabletDevice) 28.dp else 20.dp),
+                    .padding(if (isTabletDevice) 20.dp else 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = "Сума",
-                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                    style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(if (isTabletDevice) 12.dp else 8.dp))
+                Spacer(modifier = Modifier.height(if (isTabletDevice) 8.dp else 4.dp))
                 Text(
                     text = total?.let { "₴${it.toPlainString()}" } ?: "₴0.00",
-                    style = if (isTabletDevice) MaterialTheme.typography.displayMedium else MaterialTheme.typography.headlineMedium,
+                    style = if (isTabletDevice) MaterialTheme.typography.displayMedium else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -532,23 +537,26 @@ private fun WeightEntry(
                 .imePadding(),
             horizontalArrangement = Arrangement.spacedBy(32.dp)
         ) {
-            // Left column: Input fields (55%)
+            // Left column: Input fields (55%) - constrained width for focused input
             Column(
                 modifier = Modifier.weight(0.55f),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                WeightInputField(Modifier.fillMaxWidth())
-                PriceInputField(Modifier.fillMaxWidth())
+                val inputModifier = maxInputWidth?.let { Modifier.widthIn(max = it) } ?: Modifier.fillMaxWidth()
+                WeightInputField(inputModifier.fillMaxWidth())
+                PriceInputField(inputModifier.fillMaxWidth())
             }
 
-            // Right column: Sum card + Add button (45%)
+            // Right column: Sum card + Add button (45%) - constrained button width
             Column(
                 modifier = Modifier.weight(0.45f),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 SumCard(Modifier.fillMaxWidth())
-                AddPositionButton(Modifier.fillMaxWidth())
+                val buttonModifier = maxButtonWidth?.let { Modifier.widthIn(max = it) } ?: Modifier
+                AddPositionButton(buttonModifier.fillMaxWidth())
             }
         }
     } else {
@@ -562,9 +570,9 @@ private fun WeightEntry(
             WeightInputField(Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(16.dp))
             PriceInputField(Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             SumCard(Modifier.fillMaxWidth())
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             AddPositionButton(Modifier.fillMaxWidth())
         }
     }
@@ -597,6 +605,7 @@ private fun PositionsList(
     val primaryButtonHeight = adaptivePrimaryButtonHeight()
     val displayScale = adaptiveDisplayScale()
     val isTabletDevice = isTablet()
+    val maxButtonWidth = adaptiveMaxButtonWidth()
 
     // Position items composable - reused in both layouts
     @Composable
@@ -617,17 +626,28 @@ private fun PositionsList(
             if (showAddButton) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = onAddAnother,
-                        modifier = Modifier.fillMaxWidth().height(buttonHeight),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    // Constrained button width on tablet - centered
+                    val addButtonModifier = if (isTabletDevice && maxButtonWidth != null) {
+                        Modifier.widthIn(max = maxButtonWidth)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (isTabletDevice) Alignment.CenterStart else Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Додати")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Додати ще товар",
-                            style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelLarge
-                        )
+                        Button(
+                            onClick = onAddAnother,
+                            modifier = addButtonModifier.height(buttonHeight),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Додати")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Додати ще товар",
+                                style = if (isTabletDevice) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
                 }
             }
@@ -687,14 +707,22 @@ private fun PositionsList(
     // Action buttons composable
     @Composable
     fun ActionButtons(buttonsModifier: Modifier = Modifier) {
+        // Constrain button widths on tablet
+        val buttonWidthModifier = if (isTabletDevice && maxButtonWidth != null) {
+            Modifier.widthIn(max = maxButtonWidth)
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
         Column(
             modifier = buttonsModifier,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
                 onClick = onFinalize,
                 enabled = canFinalize,
-                modifier = Modifier.fillMaxWidth().height(primaryButtonHeight)
+                modifier = buttonWidthModifier.fillMaxWidth().height(primaryButtonHeight)
             ) {
                 Text(
                     text = if (isEditing) "РЕДАГУВАТИ" else "РОЗРАХУВАТИ",
@@ -703,7 +731,7 @@ private fun PositionsList(
             }
             OutlinedButton(
                 onClick = onCancel,
-                modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                modifier = buttonWidthModifier.fillMaxWidth().height(buttonHeight),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
             ) {
@@ -713,12 +741,12 @@ private fun PositionsList(
     }
 
     if (isTabletDevice) {
-        // Tablet: 60/40 split - List on left, Checkout on right
+        // Tablet: 60/40 split - List on left, Receipt sidebar on right
         Row(
             modifier = modifier
                 .padding(horizontal = horizontalPadding)
                 .imePadding(),
-            horizontalArrangement = Arrangement.spacedBy(32.dp)
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // Left column: Positions list + Add button (60%)
             Column(modifier = Modifier.weight(0.6f)) {
@@ -728,13 +756,26 @@ private fun PositionsList(
                 )
             }
 
-            // Right column: Checkout panel (40%)
+            // Right column: Receipt-style checkout sidebar (40%)
             Column(
                 modifier = Modifier
                     .weight(0.4f)
-                    .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Receipt header
+                Text(
+                    text = "Чек",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                 // Location selector (only in edit mode)
                 if (isEditing && availableLocations.isNotEmpty()) {
                     LocationSelector(
@@ -744,10 +785,16 @@ private fun PositionsList(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                
+
                 NotesField(Modifier.fillMaxWidth())
-                TotalsDisplay(Modifier.fillMaxWidth())
+
                 Spacer(modifier = Modifier.weight(1f))
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                TotalsDisplay(Modifier.fillMaxWidth())
+
+                // Action buttons anchored at bottom
                 ActionButtons(Modifier.fillMaxWidth())
             }
         }
