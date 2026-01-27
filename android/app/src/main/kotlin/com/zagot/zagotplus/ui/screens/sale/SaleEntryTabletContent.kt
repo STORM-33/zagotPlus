@@ -630,10 +630,10 @@ private fun BatchEntryPanelWithNumpad(
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(12.dp)
     ) {
-        // ==================== TOP SECTION: Inputs (20%) ====================
+        // ==================== TOP SECTION: Inputs (25%) ====================
         Column(
-            modifier = Modifier.weight(0.20f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.weight(0.25f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Header
             Text(
@@ -642,9 +642,7 @@ private fun BatchEntryPanelWithNumpad(
                 fontWeight = FontWeight.Bold
             )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Product name card
+            // Product name card (compact)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -656,13 +654,13 @@ private fun BatchEntryPanelWithNumpad(
             ) {
                 Text(
                     text = selectedProduct?.name ?: "Оберіть товар зліва",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (selectedProduct != null) FontWeight.Bold else FontWeight.Normal,
                     color = if (selectedProduct != null)
                         MaterialTheme.colorScheme.onSecondaryContainer
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(10.dp),
+                    modifier = Modifier.padding(8.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -701,19 +699,17 @@ private fun BatchEntryPanelWithNumpad(
             enabled = canProceed,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
+                .height(48.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary
             )
         ) {
-            Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ==================== BOTTOM SECTION: Custom Numpad (60%) ====================
+        // ==================== BOTTOM SECTION: Custom Numpad (55%) ====================
         CustomNumpad(
             onNumberClick = onKeypadInput,
             onDecimalClick = onKeypadDecimal,
@@ -724,7 +720,7 @@ private fun BatchEntryPanelWithNumpad(
             isEditMode = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.60f)
+                .weight(0.55f)
         )
     }
 }
