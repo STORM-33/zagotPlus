@@ -10,6 +10,8 @@ import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +38,39 @@ class SupabaseSyncDataSource @Inject constructor(
         // Requires upgrade to supabase-kt version with .limit() and .order() support
         // Target limit: 1000 records per pull operation
         // See AUDIT.md H2 for details
+    }
+
+    /**
+     * DTO for fetching server timestamps.
+     * Used internally for conflict detection.
+     */
+    @Serializable
+    private data class TimestampRecord(
+        @SerialName("local_id") val localId: String,
+        @SerialName("server_updated_at") val serverUpdatedAt: String?
+    )
+
+    /**
+     * Fetch server_updated_at timestamps for records in the given table.
+     * 
+     * @param table The Supabase table name
+     * @param localIds List of local_ids to look up
+     * @return Map of local_id to server_updated_at (only includes records with non-null timestamps)
+     */
+    private suspend fun getTimestamps(table: String, localIds: List<String>): Map<String, String> {
+        if (localIds.isEmpty()) return emptyMap()
+        
+        val results = supabaseClient.postgrest[table]
+            .select(Columns.list("local_id", "server_updated_at")) {
+                filter {
+                    isIn("local_id", localIds)
+                }
+            }
+            .decodeList<TimestampRecord>()
+        
+        return results
+            .filter { it.serverUpdatedAt != null }
+            .associate { it.localId to it.serverUpdatedAt!! }
     }
 
     override suspend fun pushTransactions(dtos: List<TransactionDto>) {
@@ -137,4 +172,24 @@ class SupabaseSyncDataSource @Inject constructor(
             .select(Columns.ALL)
             .decodeList()
     }
+
+    // ============= Server Timestamp Fetch Methods =============
+
+    override suspend fun getSaleBatchTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_SALE_BATCHES, localIds)
+
+    override suspend fun getPurchaseBatchTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_PURCHASE_BATCHES, localIds)
+
+    override suspend fun getTransactionTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_TRANSACTIONS, localIds)
+
+    override suspend fun getCashOperationTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_CASH_OPERATIONS, localIds)
+
+    override suspend fun getExpenseCategoryTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_EXPENSE_CATEGORIES, localIds)
+
+    override suspend fun getProductTimestamps(localIds: List<String>): Map<String, String> =
+        getTimestamps(TABLE_PRODUCTS, localIds)
 }

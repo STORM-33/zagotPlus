@@ -164,4 +164,70 @@ interface SyncDataSource {
      * @throws Exception on network error
      */
     suspend fun pullProducts(): List<ProductDto>
+
+    // ============= Server Timestamp Fetch Methods =============
+    // Used for server-wins conflict resolution during push.
+    // Each method fetches server_updated_at timestamps for a list of local_ids.
+    // Returns a map of local_id -> server_updated_at (ISO 8601 string).
+    // Records not found on server are not included in the result.
+
+    /**
+     * Fetch server timestamps for sale batches by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getSaleBatchTimestamps(localIds: List<String>): Map<String, String>
+
+    /**
+     * Fetch server timestamps for purchase batches by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getPurchaseBatchTimestamps(localIds: List<String>): Map<String, String>
+
+    /**
+     * Fetch server timestamps for transactions by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getTransactionTimestamps(localIds: List<String>): Map<String, String>
+
+    /**
+     * Fetch server timestamps for cash operations by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getCashOperationTimestamps(localIds: List<String>): Map<String, String>
+
+    /**
+     * Fetch server timestamps for expense categories by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getExpenseCategoryTimestamps(localIds: List<String>): Map<String, String>
+
+    /**
+     * Fetch server timestamps for products by their local_ids.
+     * Used to detect conflicts before pushing.
+     * 
+     * @param localIds List of local_ids to check
+     * @return Map of local_id to server_updated_at timestamp string
+     * @throws Exception on network error
+     */
+    suspend fun getProductTimestamps(localIds: List<String>): Map<String, String>
 }

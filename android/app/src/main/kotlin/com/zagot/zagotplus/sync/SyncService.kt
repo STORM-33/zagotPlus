@@ -10,6 +10,12 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.data.local.entity.CashOperationEntity
+import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
+import com.zagot.zagotplus.data.local.entity.ProductEntity
+import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
+import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
+import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import com.zagot.zagotplus.data.remote.dto.CashOperationDto
 import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import com.zagot.zagotplus.data.remote.dto.ProductDto
@@ -275,6 +281,12 @@ class SyncService @Inject constructor(
         
         // Step 2: Insert all records in a single database transaction
         // Room will only notify Flow observers once when transaction commits
+        //
+        // IMPORTANT: Use upsertAll for batches instead of insertAll!
+        // insertAll uses OnConflictStrategy.REPLACE which does DELETE + INSERT.
+        // This triggers FK ON DELETE SET_NULL on transactions, breaking the
+        // sale_batch_id/batch_id references and corrupting inventory calculations.
+        // upsertAll does INSERT or UPDATE, preserving FK relationships.
         database.withTransaction {
             if (remoteCategories.isNotEmpty()) {
                 val entities = remoteCategories.map { it.toEntity() }
@@ -284,14 +296,14 @@ class SyncService @Inject constructor(
             
             if (remoteBatches.isNotEmpty()) {
                 val entities = remoteBatches.map { it.toEntity() }
-                purchaseBatchDao.insertAll(entities)
-                Log.d(TAG, "Inserted ${entities.size} batches")
+                purchaseBatchDao.upsertAll(entities)
+                Log.d(TAG, "Upserted ${entities.size} batches")
             }
             
             if (remoteSaleBatches.isNotEmpty()) {
                 val entities = remoteSaleBatches.map { it.toEntity() }
-                saleBatchDao.insertAll(entities)
-                Log.d(TAG, "Inserted ${entities.size} sale batches")
+                saleBatchDao.upsertAll(entities)
+                Log.d(TAG, "Upserted ${entities.size} sale batches")
             }
             
             if (remoteTransactions.isNotEmpty()) {
@@ -350,6 +362,12 @@ class SyncService @Inject constructor(
      * Push all unsynced local transactions to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
+     *
      * ## Atomicity & Crash Safety
      * 
      * All pending items are pushed in a single batch request. If the request succeeds,
@@ -370,18 +388,72 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending transactions")
+        Log.d(TAG, "Checking ${pending.size} pending transactions for conflicts")
 
-        val dtos = pending.map { TransactionDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getTransactionTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<TransactionEntity>()
+        val toSkip = mutableListOf<TransactionEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                // - Without truncation, .884906 > .884 would cause false "server is newer"
+                //   and skip legitimate local updates
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    // Log.d(TAG, "Skipping transaction ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} transactions (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                transactionDao.markAsSynced(entity.localId, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending transactions skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending transactions")
+
+        val dtos = toPush.map { TransactionDto.fromEntity(it) }
         syncDataSource.pushTransactions(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             transactionDao.markAsSynced(entity.localId, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
@@ -425,6 +497,12 @@ class SyncService @Inject constructor(
      * Push all unsynced local batches to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
+     *
      * @throws Exception if network or critical error occurs
      */
     private suspend fun pushPendingBatches(): PushResult {
@@ -434,23 +512,83 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending batches")
+        Log.d(TAG, "Checking ${pending.size} pending batches for conflicts")
 
-        val dtos = pending.map { PurchaseBatchDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getPurchaseBatchTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<PurchaseBatchEntity>()
+        val toSkip = mutableListOf<PurchaseBatchEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                // - Without truncation, .884906 > .884 would cause false "server is newer"
+                //   and skip legitimate local updates like voiding
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    Log.d(TAG, "Skipping batch ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} batches (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                purchaseBatchDao.markSynced(entity.id, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending batches skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending batches")
+
+        val dtos = toPush.map { PurchaseBatchDto.fromEntity(it) }
         syncDataSource.pushBatches(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             purchaseBatchDao.markSynced(entity.id, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
      * Push all unsynced local products to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
      *
      * @throws Exception if network or critical error occurs
      */
@@ -461,18 +599,70 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending products")
+        Log.d(TAG, "Checking ${pending.size} pending products for conflicts")
 
-        val dtos = pending.map { ProductDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getProductTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<ProductEntity>()
+        val toSkip = mutableListOf<ProductEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    Log.d(TAG, "Skipping product ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} products (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                productDao.markSynced(entity.id, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending products skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending products")
+
+        val dtos = toPush.map { ProductDto.fromEntity(it) }
         syncDataSource.pushProducts(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             productDao.markSynced(entity.id, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
@@ -503,9 +693,11 @@ class SyncService @Inject constructor(
         remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
 
         // Convert all DTOs to entities and upsert
-        // Room's OnConflictStrategy.REPLACE handles both insert and update
+        // IMPORTANT: Use upsertAll instead of insertAll!
+        // insertAll uses REPLACE which triggers FK ON DELETE SET_NULL,
+        // breaking transaction.batch_id references.
         val entities = remoteDtos.map { it.toEntity() }
-        purchaseBatchDao.insertAll(entities)
+        purchaseBatchDao.upsertAll(entities)
         Log.d(TAG, "Upserted ${entities.size} batches")
 
         return entities.size
@@ -514,6 +706,12 @@ class SyncService @Inject constructor(
     /**
      * Push all unsynced local sale batches to Supabase.
      * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
      *
      * @throws Exception if network or critical error occurs
      */
@@ -524,18 +722,70 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending sale batches")
+        Log.d(TAG, "Checking ${pending.size} pending sale batches for conflicts")
 
-        val dtos = pending.map { SaleBatchDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getSaleBatchTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<SaleBatchEntity>()
+        val toSkip = mutableListOf<SaleBatchEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    Log.d(TAG, "Skipping sale batch ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} sale batches (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                saleBatchDao.markSynced(entity.id, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending sale batches skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending sale batches")
+
+        val dtos = toPush.map { SaleBatchDto.fromEntity(it) }
         syncDataSource.pushSaleBatches(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             saleBatchDao.markSynced(entity.id, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
@@ -566,9 +816,11 @@ class SyncService @Inject constructor(
         remoteDtos.forEach { timestampTracker.update(it.serverUpdatedAt) }
 
         // Convert all DTOs to entities and upsert
-        // Room's OnConflictStrategy.REPLACE handles both insert and update
+        // IMPORTANT: Use upsertAll instead of insertAll!
+        // insertAll uses REPLACE which triggers FK ON DELETE SET_NULL,
+        // breaking transaction.sale_batch_id references.
         val entities = remoteDtos.map { it.toEntity() }
-        saleBatchDao.insertAll(entities)
+        saleBatchDao.upsertAll(entities)
         Log.d(TAG, "Upserted ${entities.size} sale batches")
 
         return entities.size
@@ -630,6 +882,12 @@ class SyncService @Inject constructor(
      * Push all unsynced local expense categories to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
      *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
+     *
      * @throws Exception if network or critical error occurs
      */
     private suspend fun pushPendingExpenseCategories(): PushResult {
@@ -639,23 +897,81 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending expense categories")
+        Log.d(TAG, "Checking ${pending.size} pending expense categories for conflicts")
 
-        val dtos = pending.map { ExpenseCategoryDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getExpenseCategoryTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<ExpenseCategoryEntity>()
+        val toSkip = mutableListOf<ExpenseCategoryEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    Log.d(TAG, "Skipping expense category ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} expense categories (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                expenseCategoryDao.markSynced(entity.id, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending expense categories skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending expense categories")
+
+        val dtos = toPush.map { ExpenseCategoryDto.fromEntity(it) }
         syncDataSource.pushExpenseCategories(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             expenseCategoryDao.markSynced(entity.id, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
      * Push all unsynced local cash operations to Supabase in a single batch.
      * Uses upsert with local_id as conflict key to handle duplicates.
+     *
+     * ## Server-Wins Conflict Resolution
+     * 
+     * Before pushing, fetches server timestamps for pending records.
+     * If server has a newer version (server_updated_at > local), the record is skipped
+     * and will be updated via the pull phase instead.
      *
      * @throws Exception if network or critical error occurs
      */
@@ -666,18 +982,70 @@ class SyncService @Inject constructor(
             return PushResult(0, 0)
         }
 
-        Log.d(TAG, "Pushing ${pending.size} pending cash operations")
+        Log.d(TAG, "Checking ${pending.size} pending cash operations for conflicts")
 
-        val dtos = pending.map { CashOperationDto.fromEntity(it) }
+        // Fetch server timestamps for conflict detection
+        val localIds = pending.map { it.localId }
+        val serverTimestamps = try {
+            syncDataSource.getCashOperationTimestamps(localIds)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch server timestamps, proceeding with push", e)
+            emptyMap()
+        }
+
+        val toPush = mutableListOf<CashOperationEntity>()
+        val toSkip = mutableListOf<CashOperationEntity>()
+
+        for (entity in pending) {
+            val serverTimestamp = serverTimestamps[entity.localId]
+
+            if (serverTimestamp != null) {
+                val serverInstant = Instant.parse(serverTimestamp)
+                val localInstant = entity.serverUpdatedAt
+
+                // Server has this record AND server is newer (or we have no local timestamp)
+                // IMPORTANT: Truncate to milliseconds before comparing because:
+                // - Local stores timestamps as milliseconds (Long)
+                // - PostgreSQL returns timestamps with microsecond precision
+                val serverMillis = serverInstant.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+                val localMillis = localInstant?.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+
+                if (localMillis == null || serverMillis.isAfter(localMillis)) {
+                    // Log.d(TAG, "Skipping cash operation ${entity.localId}: server has newer version")
+                    toSkip.add(entity)
+                    continue
+                }
+            }
+
+            toPush.add(entity)
+        }
+
+        // Mark skipped records as synced - pull phase will retrieve correct data
+        if (toSkip.isNotEmpty()) {
+            Log.d(TAG, "Skipping ${toSkip.size} cash operations (server has newer versions)")
+            val now = Instant.now()
+            toSkip.forEach { entity ->
+                cashOperationDao.markSynced(entity.id, now)
+            }
+        }
+
+        if (toPush.isEmpty()) {
+            Log.d(TAG, "All pending cash operations skipped")
+            return PushResult(0, 0)
+        }
+
+        Log.d(TAG, "Pushing ${toPush.size} pending cash operations")
+
+        val dtos = toPush.map { CashOperationDto.fromEntity(it) }
         syncDataSource.pushCashOperations(dtos)
         
         // Mark all as synced after successful batch push
         val now = Instant.now()
-        pending.forEach { entity ->
+        toPush.forEach { entity ->
             cashOperationDao.markSynced(entity.id, now)
         }
 
-        return PushResult(pending.size, 0)
+        return PushResult(toPush.size, 0)
     }
 
     /**
