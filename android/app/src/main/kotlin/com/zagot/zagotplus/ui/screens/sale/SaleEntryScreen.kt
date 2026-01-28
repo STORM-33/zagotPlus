@@ -11,7 +11,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -82,20 +78,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
-import com.zagot.zagotplus.ui.components.EmptyState
-import com.zagot.zagotplus.ui.components.EmptyStateIcons
-import com.zagot.zagotplus.ui.components.PriceType
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
 import com.zagot.zagotplus.ui.components.StepIndicator
-import com.zagot.zagotplus.ui.components.AdaptiveMasterDetail
-import com.zagot.zagotplus.ui.components.AdaptiveTwoColumn
 import com.zagot.zagotplus.ui.components.adaptiveButtonHeight
 import com.zagot.zagotplus.ui.components.adaptiveDisplayScale
 import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
@@ -114,6 +104,7 @@ import java.util.UUID
 fun SaleEntryScreen(
     onNavigateBack: () -> Unit,
     editingBatchId: String? = null,
+    mode: com.zagot.zagotplus.ui.navigation.SaleMode = com.zagot.zagotplus.ui.navigation.SaleMode.WHOLESALE,
     viewModel: SaleEntryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -143,6 +134,7 @@ fun SaleEntryScreen(
                     viewModel.backToGrid()
                 }
             }
+            SaleEntryScreenState.WEIGHT_ENTRY -> viewModel.backToGrid()
             SaleEntryScreenState.WEIGHING -> viewModel.backToGrid()
             SaleEntryScreenState.POSITION_REVIEW -> viewModel.backToWeighing()
             SaleEntryScreenState.POSITIONS_LIST -> viewModel.cancel()
@@ -161,6 +153,7 @@ fun SaleEntryScreen(
     val isEditing = uiState.editingBatchId != null
     val topBarTitle = when (uiState.screenState) {
         SaleEntryScreenState.PRODUCT_GRID -> if (isEditing) "Редагування" else "Оберіть товар"
+        SaleEntryScreenState.WEIGHT_ENTRY -> uiState.selectedProduct?.name ?: "Введіть дані"
         SaleEntryScreenState.WEIGHING -> uiState.selectedProduct?.name ?: "Зважування"
         SaleEntryScreenState.POSITION_REVIEW -> "Перевірка позиції"
         SaleEntryScreenState.POSITIONS_LIST -> "Позиції (${uiState.positions.size})"
@@ -172,6 +165,7 @@ fun SaleEntryScreen(
     val stepLabels = listOf("Товар", "Вага", "Позиції")
     val currentStep = when (uiState.screenState) {
         SaleEntryScreenState.PRODUCT_GRID -> 1
+        SaleEntryScreenState.WEIGHT_ENTRY -> 2  // Regular mode: weight entry
         SaleEntryScreenState.WEIGHING -> 2
         SaleEntryScreenState.POSITION_REVIEW -> 2  // Part of weighing step
         SaleEntryScreenState.POSITIONS_LIST -> 3
@@ -197,6 +191,7 @@ fun SaleEntryScreen(
                                             viewModel.backToGrid()
                                         }
                                     }
+                                    SaleEntryScreenState.WEIGHT_ENTRY -> viewModel.backToGrid()
                                     SaleEntryScreenState.WEIGHING -> viewModel.backToGrid()
                                     SaleEntryScreenState.POSITION_REVIEW -> viewModel.backToWeighing()
                                     SaleEntryScreenState.POSITIONS_LIST -> viewModel.addAnotherProduct()
@@ -266,7 +261,7 @@ fun SaleEntryScreen(
                     stepLabels = stepLabels
                 )
             }
-            
+
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -309,25 +304,47 @@ fun SaleEntryScreen(
                         ) { state ->
                         when (state) {
                             SaleEntryScreenState.UNIFIED_ENTRY -> {
-                                // Tablet: three-column unified layout
-                                SaleEntryTabletContent(
-                                    uiState = uiState,
-                                    onProductSelect = viewModel::selectProduct,
-                                    onProductOrderChanged = viewModel::onProductOrderChanged,
-                                    onKeypadInput = viewModel::onKeypadInput,
-                                    onKeypadDecimal = viewModel::onKeypadDecimal,
-                                    onKeypadBackspace = viewModel::onKeypadBackspace,
-                                    onNextInputField = viewModel::onNextInputField,
-                                    onSelectInputFieldAndClear = viewModel::selectInputFieldAndClear,
-                                    onAddBatch = viewModel::addBatch,
-                                    onRemoveBatch = viewModel::removeBatch,
-                                    onToggleFinalizationMode = viewModel::toggleFinalizationMode,
-                                    onAddPosition = viewModel::addPositionAndContinue,
-                                    onSelectPosition = viewModel::startEditPosition,
-                                    onRemovePosition = viewModel::removePosition,
-                                    onNotesChange = viewModel::onNotesChange,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                // Tablet: three-column unified layout - route based on mode
+                                when (uiState.saleMode) {
+                                    com.zagot.zagotplus.ui.navigation.SaleMode.REGULAR -> {
+                                        // Regular mode: simple single-weight flow
+                                        SaleEntryRegularTabletContent(
+                                            uiState = uiState,
+                                            onProductSelect = viewModel::selectProduct,
+                                            onProductOrderChanged = viewModel::onProductOrderChanged,
+                                            onKeypadInput = viewModel::onKeypadInput,
+                                            onKeypadDecimal = viewModel::onKeypadDecimal,
+                                            onKeypadBackspace = viewModel::onKeypadBackspace,
+                                            onNextInputField = viewModel::onNextInputField,
+                                            onSelectInputFieldAndClear = viewModel::selectInputFieldAndClear,
+                                            onAddPosition = viewModel::addRegularPositionAndContinue,
+                                            onRemovePosition = viewModel::removePosition,
+                                            onNotesChange = viewModel::onNotesChange,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    com.zagot.zagotplus.ui.navigation.SaleMode.WHOLESALE -> {
+                                        // Wholesale mode: batch weighing with tare tracking
+                                        SaleEntryTabletContent(
+                                            uiState = uiState,
+                                            onProductSelect = viewModel::selectProduct,
+                                            onProductOrderChanged = viewModel::onProductOrderChanged,
+                                            onKeypadInput = viewModel::onKeypadInput,
+                                            onKeypadDecimal = viewModel::onKeypadDecimal,
+                                            onKeypadBackspace = viewModel::onKeypadBackspace,
+                                            onNextInputField = viewModel::onNextInputField,
+                                            onSelectInputFieldAndClear = viewModel::selectInputFieldAndClear,
+                                            onAddBatch = viewModel::addBatch,
+                                            onRemoveBatch = viewModel::removeBatch,
+                                            onSelectBatch = viewModel::selectTabletBatch,
+                                            onAddPosition = viewModel::addPositionAndContinue,
+                                            onSelectPosition = viewModel::reviewPositionWeightings,
+                                            onRemovePosition = viewModel::removePosition,
+                                            onNotesChange = viewModel::onNotesChange,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
                             }
                             SaleEntryScreenState.PRODUCT_GRID -> {
                                 SaleProductGrid(
@@ -337,6 +354,24 @@ fun SaleEntryScreen(
                                     onProductClick = viewModel::selectProduct,
                                     onOrderChanged = viewModel::onProductOrderChanged,
                                     onProceedToPositions = { viewModel.finalize() },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            SaleEntryScreenState.WEIGHT_ENTRY -> {
+                                RegularWeightEntryScreen(
+                                    productName = uiState.selectedProduct?.name ?: "",
+                                    currentWeight = uiState.currentWeight,
+                                    currentPrice = uiState.pricePerKg,
+                                    total = uiState.regularModeTotal,
+                                    availableWeight = uiState.availableWeight,
+                                    showInventoryWarning = uiState.currentWeight.toBigDecimalOrNull()?.let {
+                                        it > uiState.availableWeight && uiState.availableWeight >= BigDecimal.ZERO
+                                    } == true,
+                                    canAdd = uiState.canAddRegularPosition,
+                                    onWeightChange = viewModel::onWeightChange,
+                                    onPriceChange = viewModel::onPriceChange,
+                                    onPriceFocused = viewModel::onPriceFocused,
+                                    onAddPosition = viewModel::addRegularPositionAndContinue,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -463,7 +498,7 @@ private fun SaleProductGrid(
     val inventoryMap = remember(inventory) {
         inventory.associate { it.productId to it.totalWeightKg }
     }
-    
+
     Column(modifier = modifier) {
         ReorderableProductGrid(
             products = products,
@@ -473,7 +508,7 @@ private fun SaleProductGrid(
             showPrice = false,
             inventoryMap = inventoryMap
         )
-        
+
         // Show proceed button if there are already positions
         if (positions.isNotEmpty()) {
             Column(
@@ -558,7 +593,7 @@ private fun WeighingScreen(
                 Text(
                     text = "${decimalFormat.format(grossWeight)} кг",
                     style = if (isTabletDevice) MaterialTheme.typography.displayMedium.copy(
-                        fontSize = MaterialTheme.typography.displayMedium.fontSize * displayScale
+                        fontSize = MaterialTheme.typography.displayMedium.fontSize * displayScale.toFloat()
                     ) else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -621,7 +656,7 @@ private fun WeighingScreen(
             Button(
                 onClick = onAddBatch,
                 enabled = canAddBatch,
-                modifier = btnModifier.fillMaxWidth().height(buttonHeight)
+                modifier = btnModifier.fillMaxWidth().height(buttonHeight as androidx.compose.ui.unit.Dp)
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Додати")
                 Spacer(modifier = Modifier.width(8.dp))
@@ -668,7 +703,7 @@ private fun WeighingScreen(
             ) {
                 Button(
                     onClick = onProceed,
-                    modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight),
+                    modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight as androidx.compose.ui.unit.Dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text(
@@ -716,7 +751,7 @@ private fun WeighingScreen(
             Spacer(modifier = Modifier.height(12.dp))
             InputFields(Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             // Batches list
             if (batches.isNotEmpty()) {
                 Text(text = "Зважування:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
@@ -750,7 +785,7 @@ private fun WeighingBatchItem(
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -984,7 +1019,7 @@ private fun PositionReviewScreen(
                 Text(
                     text = totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴0",
                     style = if (isTabletDevice) MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = MaterialTheme.typography.headlineMedium.fontSize * displayScale
+                        fontSize = MaterialTheme.typography.headlineMedium.fontSize * displayScale.toFloat()
                     ) else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -1009,7 +1044,7 @@ private fun PositionReviewScreen(
             Button(
                 onClick = onAddPosition,
                 enabled = canAdd,
-                modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight)
+                modifier = constrainedModifier.fillMaxWidth().height(primaryButtonHeight as androidx.compose.ui.unit.Dp)
             ) {
                 Text(
                     "ДОДАТИ ПОЗИЦІЮ",
@@ -1023,7 +1058,7 @@ private fun PositionReviewScreen(
         // Tablet: Two-column layout
         Row(
             modifier = modifier
-                .padding(contentPadding)
+                .padding(contentPadding as androidx.compose.ui.unit.Dp)
                 .imePadding(),
             horizontalArrangement = Arrangement.spacedBy(32.dp)
         ) {
@@ -1058,7 +1093,7 @@ private fun PositionReviewScreen(
         // Phone: Single column layout
         Column(
             modifier = modifier
-                .padding(contentPadding)
+                .padding(contentPadding as androidx.compose.ui.unit.Dp)
                 .imePadding()
         ) {
             // Product header
@@ -1205,7 +1240,7 @@ private fun EditWeighingDialog(
     var tareCount by remember { mutableStateOf(batch.tareCount.toString()) }
     val isValid = weight.toBigDecimalOrNull()?.let { it > BigDecimal.ZERO } == true &&
             (tareCount.isBlank() || tareCount.toIntOrNull()?.let { it >= 0 } == true)
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Редагувати зважування") },
@@ -1321,7 +1356,7 @@ private fun PositionsListScreen(
                     ) {
                         Button(
                             onClick = onAddAnother,
-                            modifier = addButtonModifier.height(buttonHeight),
+                            modifier = addButtonModifier.height(buttonHeight as androidx.compose.ui.unit.Dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(Icons.Filled.Add, contentDescription = "Додати ще")
@@ -1378,7 +1413,7 @@ private fun PositionsListScreen(
                 Text(
                     text = "₴${currencyFormat.format(totalAmount)}",
                     style = MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = MaterialTheme.typography.headlineLarge.fontSize * displayScale
+                        fontSize = MaterialTheme.typography.headlineLarge.fontSize * displayScale.toFloat()
                     ),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -1405,7 +1440,7 @@ private fun PositionsListScreen(
             Button(
                 onClick = onFinalize,
                 enabled = canFinalize,
-                modifier = buttonWidthModifier.fillMaxWidth().height(primaryButtonHeight)
+                modifier = buttonWidthModifier.fillMaxWidth().height(primaryButtonHeight as androidx.compose.ui.unit.Dp)
             ) {
                 Text(
                     text = if (isEditing) "РЕДАГУВАТИ" else "ПРОДАТИ",
@@ -1414,7 +1449,7 @@ private fun PositionsListScreen(
             }
             OutlinedButton(
                 onClick = onCancel,
-                modifier = buttonWidthModifier.fillMaxWidth().height(buttonHeight),
+                modifier = buttonWidthModifier.fillMaxWidth().height(buttonHeight as androidx.compose.ui.unit.Dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
             ) {
@@ -1501,7 +1536,7 @@ private fun PositionsListScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = onAddAnother,
-                        modifier = Modifier.fillMaxWidth().height(buttonHeight),
+                        modifier = Modifier.fillMaxWidth().height(buttonHeight as androidx.compose.ui.unit.Dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = "Додати ще")
@@ -1564,7 +1599,7 @@ private fun PositionsListScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = onCancel,
-                        modifier = Modifier.weight(1f).height(buttonHeight),
+                        modifier = Modifier.weight(1f).height(buttonHeight as androidx.compose.ui.unit.Dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
                     ) {
@@ -1592,7 +1627,7 @@ private fun SalePositionItem(
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -1630,7 +1665,7 @@ private fun SalePositionItem(
                     )
                 }
             }
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = position.product.name,
@@ -1648,14 +1683,14 @@ private fun SalePositionItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
-            
+
             Text(
                 text = "₴${decimalFormat.format(position.totalAmount)}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            
+
             IconButton(onClick = onRemove) {
                 Icon(Icons.Filled.Close, contentDescription = "Видалити", tint = MaterialTheme.colorScheme.error)
             }
@@ -1856,7 +1891,7 @@ fun SaleSummaryOverlay(
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val currencyFormat = remember { DecimalFormat("#,##0") }
-    
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -1882,11 +1917,11 @@ fun SaleSummaryOverlay(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 // Positions list
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
@@ -1896,17 +1931,17 @@ fun SaleSummaryOverlay(
                         SummaryPositionItem(position = position)
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 // Totals
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Всього:", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("${decimalFormat.format(totalWeight)} кг", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
                 }
-                
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Сума:", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
@@ -1916,7 +1951,7 @@ fun SaleSummaryOverlay(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                
+
                 if (notes.isNotBlank()) {
                     Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider()
@@ -1930,9 +1965,9 @@ fun SaleSummaryOverlay(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = notes, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 // Exit instruction
                 Text(
                     text = "Натисніть будь-де, щоб вийти",
@@ -1951,7 +1986,7 @@ private fun SummaryPositionItem(
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1981,7 +2016,7 @@ private fun SummaryPositionItem(
                 )
             }
         }
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Text(text = position.product.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Text(
@@ -1990,7 +2025,7 @@ private fun SummaryPositionItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
+
         Text(
             text = "₴${decimalFormat.format(position.totalAmount)}",
             style = MaterialTheme.typography.bodyMedium,
@@ -2010,7 +2045,7 @@ private fun LocationSelector(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
     val selectedLocation = locations.find { it.id == selectedLocationId }
 
     ExposedDropdownMenuBox(
@@ -2042,6 +2077,187 @@ private fun LocationSelector(
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * Regular mode weight entry screen - simple weight + price entry (mirrors purchase flow).
+ * No batches, no tare - just enter weight and price, then add position.
+ */
+@Composable
+private fun RegularWeightEntryScreen(
+    productName: String,
+    currentWeight: String,
+    currentPrice: String,
+    total: BigDecimal?,
+    availableWeight: BigDecimal,
+    showInventoryWarning: Boolean,
+    canAdd: Boolean,
+    onWeightChange: (String) -> Unit,
+    onPriceChange: (String) -> Unit,
+    onPriceFocused: () -> Unit,
+    onAddPosition: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    val currencyFormat = remember { DecimalFormat("#,##0") }
+    val contentPadding = adaptivePadding()
+    val primaryButtonHeight = adaptivePrimaryButtonHeight()
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(contentPadding as androidx.compose.ui.unit.Dp)
+            .imePadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Product name card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Text(
+                text = productName,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        // Weight input
+        OutlinedTextField(
+            value = currentWeight,
+            onValueChange = onWeightChange,
+            label = { Text("Вага (кг)") },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Next
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        // Inventory info
+        if (availableWeight > BigDecimal.ZERO) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Залишок:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${decimalFormat.format(availableWeight)} кг",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // Inventory warning
+        if (showInventoryWarning) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "Увага: недостатньо товару на складі",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
+
+        // Price input
+        var isPriceFocused by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            value = currentPrice,
+            onValueChange = onPriceChange,
+            label = { Text("Ціна (₴/кг)") },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused && !isPriceFocused) {
+                        onPriceFocused()
+                        isPriceFocused = true
+                    }
+                    if (!focusState.isFocused) {
+                        isPriceFocused = false
+                    }
+                },
+            singleLine = true
+        )
+
+        // Total amount display
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ),
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Сума:",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = total?.let { "₴${currencyFormat.format(it)}" } ?: "₴0",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Add button
+        Button(
+            onClick = onAddPosition,
+            enabled = canAdd,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(primaryButtonHeight as androidx.compose.ui.unit.Dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Text(
+                text = "Додати позицію",
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }

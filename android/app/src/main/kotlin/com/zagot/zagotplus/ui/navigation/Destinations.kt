@@ -13,6 +13,25 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
+ * Sale entry mode - determines the flow and UI behavior.
+ */
+enum class SaleMode {
+    REGULAR,    // Simple single-weight flow (no batches, no tare)
+    WHOLESALE;  // Batch weighing with tare tracking
+
+    companion object {
+        fun fromString(value: String?): SaleMode {
+            return when (value?.uppercase()) {
+                "REGULAR" -> REGULAR
+                "WHOLESALE" -> WHOLESALE
+                null -> WHOLESALE // Default to wholesale for backward compatibility
+                else -> WHOLESALE
+            }
+        }
+    }
+}
+
+/**
  * Navigation destinations for the app.
  */
 sealed class Destination(
@@ -54,14 +73,20 @@ sealed class Destination(
         title = "Новий продаж",
         icon = Icons.Filled.Sell
     ) {
-        const val ROUTE_WITH_ARGS = "sale_entry?batchId={batchId}"
+        const val ROUTE_WITH_ARGS = "sale_entry?batchId={batchId}&mode={mode}"
         const val ARG_BATCH_ID = "batchId"
-        
-        fun createRoute(batchId: String? = null): String {
-            return if (batchId != null) {
-                "sale_entry?batchId=$batchId"
-            } else {
-                "sale_entry"
+        const val ARG_MODE = "mode"
+
+        fun createRoute(batchId: String? = null, mode: SaleMode = SaleMode.WHOLESALE): String {
+            return buildString {
+                append("sale_entry")
+                val params = mutableListOf<String>()
+                batchId?.let { params.add("batchId=$it") }
+                params.add("mode=${mode.name}")
+                if (params.isNotEmpty()) {
+                    append("?")
+                    append(params.joinToString("&"))
+                }
             }
         }
     }

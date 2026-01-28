@@ -1,10 +1,15 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,9 +17,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +44,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,111 +87,249 @@ fun SaleEntryTabletContent(
     onSelectInputFieldAndClear: (SaleInputField) -> Unit,
     onAddBatch: () -> Unit,
     onRemoveBatch: (String) -> Unit,
-    onToggleFinalizationMode: () -> Unit,
+    onSelectBatch: (SaleWeighingBatch) -> Unit,
     onAddPosition: () -> Unit,
     onSelectPosition: (SalePosition) -> Unit,
     onRemovePosition: (String) -> Unit,
     onNotesChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Create inventory map for product grid
     val inventoryMap = remember(uiState.inventory) {
         uiState.inventory.associate { it.productId to it.totalWeightKg }
     }
 
-    Row(
+    // Determine Active Position
+    val selectedPositionId = uiState.tabletReviewingPositionId
+    val selectedPosition = uiState.positions.find { it.id == selectedPositionId }
+    val isPanelOpen = selectedPosition != null
+
+    // Animation
+    val slideProgress = animateFloatAsState(
+        targetValue = if (isPanelOpen) 1f else 0f,
+        animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing),
+        label = "positionsPanelSlide"
+    )
+
+    // LAYOUT CONSTANTS
+    val spacingDp = 16.dp
+    val density = LocalDensity.current
+
+    // Use BoxWithConstraints to calculate exact pixel positions
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = spacingDp, vertical = 8.dp)
     ) {
-        // LEFT COLUMN: Product Grid (40%)
-        ProductGridPanel(
-            products = uiState.products,
-            selectedProductId = uiState.selectedProduct?.id,
-            inventoryMap = inventoryMap,
-            onProductClick = onProductSelect,
-            onOrderChanged = onProductOrderChanged,
-            modifier = Modifier
-                .weight(0.4f)
-                .fillMaxHeight()
-        )
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+        val spacingPx = with(density) { spacingDp.toPx() }
 
-        // CENTER COLUMN: Context-Aware Panel (30%)
-        // Shows either Weightings (during batch entry) or Positions (during finalization)
-        if (uiState.showWeightingsInMiddlePanel && uiState.selectedProduct != null) {
-            WeightingsPanel(
-                productName = uiState.selectedProduct.name,
-                batches = uiState.currentBatches,
-                grossWeight = uiState.currentGrossWeight,
-                onRemoveBatch = onRemoveBatch,
-                modifier = Modifier
-                    .weight(0.3f)
-                    .fillMaxHeight()
-            )
-        } else {
-            PositionsPanel(
-                positions = uiState.positions,
-                notes = uiState.notes,
-                totalWeight = uiState.totalWeight,
-                totalAmount = uiState.totalAmount,
-                onNotesChange = onNotesChange,
-                onPositionClick = onSelectPosition,
-                onRemovePosition = onRemovePosition,
-                modifier = Modifier
-                    .weight(0.3f)
-                    .fillMaxHeight()
-            )
-        }
+        // CALCULATE GRID GEOMETRY
+        // The Row below uses weights 0.4 / 0.3 / 0.3 with 16dp spacing.
+        // Formula: AvailableWidth = TotalWidth - (2 * Spacing)
+        val availableWidthPx = containerWidthPx - (2 * spacingPx)
 
-        // RIGHT COLUMN: Data Entry Panel with Numpad (30%)
-        if (uiState.isInFinalizationMode) {
-            FinalizationPanelWithNumpad(
-                selectedProduct = uiState.selectedProduct,
-                batches = uiState.currentBatches,
-                grossWeight = uiState.currentGrossWeight,
-                tareWeightPerUnit = uiState.tareWeightPerUnit,
-                totalTareCount = uiState.currentTotalTareCount,
-                totalTareWeight = uiState.currentTotalTareWeight,
-                netWeight = uiState.currentNetWeight,
-                price = uiState.pricePerKg,
-                totalAmount = uiState.currentTotalAmount,
-                activeInputField = uiState.activeInputField,
-                canAdd = uiState.canAddPosition,
-                onFieldSelect = onSelectInputFieldAndClear,
-                onKeypadInput = onKeypadInput,
-                onKeypadDecimal = onKeypadDecimal,
-                onKeypadBackspace = onKeypadBackspace,
-                onNextInputField = onNextInputField,
-                onBackToBatches = onToggleFinalizationMode,
-                onAddPosition = onAddPosition,
+        // Exact width of columns based on weights
+        val leftColWidthPx = availableWidthPx * 0.4f
+        val middleColWidthPx = availableWidthPx * 0.3f
+
+        // The X coordinate where the Middle Column starts
+        val middleColStartX = leftColWidthPx + spacingPx
+
+        // OFFSETS FOR ANIMATION
+        // Closed State: Panel sits exactly in the Middle Column slot
+        val closedOffset = middleColStartX
+
+        // Open State: Panel sits to the LEFT of the Middle Column, separated by 'spacingPx'
+        // Position = (MiddleStart) - (Gap) - (PanelWidth)
+        val openOffset = middleColStartX - spacingPx - middleColWidthPx
+
+        // Current interpolated offset
+        val currentOffset = closedOffset + ((openOffset - closedOffset) * slideProgress.value)
+
+        // --- LAYER 1: BACKGROUND GRID ---
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(spacingDp)
+        ) {
+            // LEFT PANEL (Product Grid)
+            Box(
                 modifier = Modifier
-                    .weight(0.3f)
+                    .weight(0.4f)
                     .fillMaxHeight()
-            )
-        } else {
+                    .alpha(if (isPanelOpen) 0.3f else 1f)
+            ) {
+                ProductGridPanel(
+                    products = uiState.products,
+                    selectedProductId = selectedPosition?.product?.id,
+                    inventoryMap = inventoryMap,
+                    onProductClick = if (isPanelOpen) { {} } else onProductSelect,
+                    onOrderChanged = if (isPanelOpen) { {} } else onProductOrderChanged,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // MIDDLE PANEL (Weightings)
+            if (selectedPosition != null) {
+                WeightingsPanel(
+                    productName = selectedPosition.product.name,
+                    batches = selectedPosition.batches,
+                    grossWeight = selectedPosition.grossWeight,
+                    tareWeight = uiState.tareWeightPerUnit,
+                    price = uiState.pricePerKg,
+                    activeInputField = uiState.activeInputField,
+                    selectedBatchId = uiState.tabletEditingBatchId,
+                    onFieldSelect = onSelectInputFieldAndClear,
+                    onSelectBatch = onSelectBatch,
+                    onRemoveBatch = onRemoveBatch,
+                    modifier = Modifier
+                        .weight(0.3f)
+                        .fillMaxHeight()
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(0.3f))
+            }
+
+            // RIGHT PANEL (Numpad)
             BatchEntryPanelWithNumpad(
-                selectedProduct = uiState.selectedProduct,
                 weight = uiState.currentWeight,
                 tareCount = uiState.currentTareCount,
-                batches = uiState.currentBatches,
-                grossWeight = uiState.currentGrossWeight,
                 activeInputField = uiState.activeInputField,
                 canAddBatch = uiState.canAddBatch,
-                canProceed = uiState.canProceedToReview,
+                isEditMode = uiState.isTabletBatchEditMode,
+                inputsEnabled = isPanelOpen,
                 onFieldSelect = onSelectInputFieldAndClear,
                 onKeypadInput = onKeypadInput,
                 onKeypadDecimal = onKeypadDecimal,
                 onKeypadBackspace = onKeypadBackspace,
                 onNextInputField = onNextInputField,
                 onAddBatch = onAddBatch,
-                onRemoveBatch = onRemoveBatch,
-                onProceedToFinalize = onToggleFinalizationMode,
+                onDone = { if (selectedPosition != null) onSelectPosition(selectedPosition) },
                 modifier = Modifier
                     .weight(0.3f)
                     .fillMaxHeight()
             )
         }
+
+        // --- LAYER 2: SLIDING PANEL (Positions) ---
+        // We set the width explicitly to 'middleColWidthPx' so it matches the grid exactly
+        Box(
+            modifier = Modifier
+                .width(with(density) { middleColWidthPx.toDp() })
+                .fillMaxHeight()
+                .offset { IntOffset(currentOffset.roundToInt(), 0) }
+        ) {
+            PositionsPanel(
+                positions = uiState.positions,
+                notes = uiState.notes,
+                selectedPositionId = selectedPositionId,
+                totalWeight = uiState.totalWeight,
+                totalAmount = uiState.totalAmount,
+                onNotesChange = onNotesChange,
+                onPositionClick = onSelectPosition,
+                onRemovePosition = onRemovePosition,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+/**
+ * Updated Batch Entry Panel
+ * Now accepts productName string instead of whole Product object,
+ * and takes an explicit `inputsEnabled` boolean.
+ */
+@Composable
+private fun BatchEntryPanelWithNumpad(
+    weight: String,
+    tareCount: String,
+    activeInputField: SaleInputField,
+    canAddBatch: Boolean,
+    isEditMode: Boolean,
+    inputsEnabled: Boolean,
+    onFieldSelect: (SaleInputField) -> Unit,
+    onKeypadInput: (Char) -> Unit,
+    onKeypadDecimal: () -> Unit,
+    onKeypadBackspace: () -> Unit,
+    onNextInputField: () -> Unit,
+    onAddBatch: () -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(12.dp)
+    ) {
+        // TOP SECTION: Inputs
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // 1. Header (Single line, Bold Title Medium - Exact match to WeightingsPanel)
+            Text(
+                text = "Введення ваги",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // 2. Exact spacer match (12.dp)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3. Inputs
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InputDisplayBox(
+                    label = "Вага (кг)",
+                    value = weight,
+                    isActive = activeInputField == SaleInputField.WEIGHT,
+                    onClick = { onFieldSelect(SaleInputField.WEIGHT) },
+                    enabled = inputsEnabled,
+                    modifier = Modifier.weight(1f)
+                )
+
+                InputDisplayBox(
+                    label = "Тара (шт)",
+                    value = tareCount,
+                    isActive = activeInputField == SaleInputField.TARE_COUNT,
+                    onClick = { onFieldSelect(SaleInputField.TARE_COUNT) },
+                    enabled = inputsEnabled,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // "Done" Button
+            Button(
+                onClick = onDone,
+                enabled = inputsEnabled,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                ),
+                modifier = Modifier.fillMaxWidth().height(40.dp)
+            ) {
+                Text("ГОТОВО (ЗБЕРЕГТИ)", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // NUMPAD
+        CustomNumpad(
+            onNumberClick = onKeypadInput,
+            onDecimalClick = onKeypadDecimal,
+            onBackspaceClick = onKeypadBackspace,
+            onNextFieldClick = onNextInputField,
+            onActionClick = onAddBatch,
+            actionEnabled = canAddBatch && inputsEnabled,
+            isEditMode = isEditMode,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        )
     }
 }
 
@@ -216,7 +367,8 @@ private fun ProductGridPanel(
             onOrderChanged = onOrderChanged,
             modifier = Modifier.fillMaxSize(),
             showPrice = false,
-            inventoryMap = inventoryMap
+            inventoryMap = inventoryMap,
+            selectedProductId = selectedProductId
         )
     }
 }
@@ -230,6 +382,12 @@ private fun WeightingsPanel(
     productName: String,
     batches: List<SaleWeighingBatch>,
     grossWeight: BigDecimal,
+    tareWeight: String,
+    price: String,
+    activeInputField: SaleInputField,
+    onFieldSelect: (SaleInputField) -> Unit,
+    selectedBatchId: String?,
+    onSelectBatch: (SaleWeighingBatch) -> Unit,
     onRemoveBatch: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -239,35 +397,46 @@ private fun WeightingsPanel(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(16.dp)
+            .padding(12.dp)
     ) {
-        // Header with product name
+        // 1. Header
+        Text(
+            text = productName,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 2. Global Settings (Mirrors Right Panel Layout)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Зважування",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = productName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            InputDisplayBox(
+                label = "Тара (кг/шт)",
+                value = tareWeight,
+                isActive = activeInputField == SaleInputField.TARE_WEIGHT_UNIT,
+                onClick = { onFieldSelect(SaleInputField.TARE_WEIGHT_UNIT) },
+                enabled = true,
+                modifier = Modifier.weight(1f)
+            )
+
+            InputDisplayBox(
+                label = "Ціна (₴/кг)",
+                value = price,
+                isActive = activeInputField == SaleInputField.PRICE,
+                onClick = { onFieldSelect(SaleInputField.PRICE) },
+                enabled = true,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(modifier = Modifier.height(12.dp))
 
-        // Running total card
+        // 3. Running Total
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -276,9 +445,7 @@ private fun WeightingsPanel(
             border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.padding(12.dp).fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -298,32 +465,29 @@ private fun WeightingsPanel(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Batches list (scrollable, fills remaining space)
+        // 4. Batches List
         if (batches.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Введіть вагу і натисніть +",
+                    text = "Введіть вагу справа →",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(batches.size) { index ->
-                    val batch = batches[index]
+                items(batches.asReversed()) { batch ->
                     WeightingBatchItem(
-                        batchNumber = index + 1,
+                        batchNumber = batches.indexOf(batch) + 1,
                         batch = batch,
+                        isSelected = batch.id == selectedBatchId,
+                        onClick = { onSelectBatch(batch) },
                         onRemove = { onRemoveBatch(batch.id) }
                     )
                 }
@@ -335,22 +499,39 @@ private fun WeightingsPanel(
 /**
  * Weighting batch item in the middle panel.
  * Larger and more detailed than the compact version.
+ * Supports tap-to-select for inline editing.
  */
 @Composable
 private fun WeightingBatchItem(
     batchNumber: Int,
     batch: SaleWeighingBatch,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {},
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
+    val selectionBorderColor = Color(0xFFFFC107) // Yellow for selection
+    val cardShape = RoundedCornerShape(12.dp)
+    val contentAlpha = 1f
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .then(Modifier.clickable(onClick = onClick))
+            .alpha(contentAlpha),
+        shape = cardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surface
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = if (isSelected)
+            BorderStroke(3.dp, selectionBorderColor)
+        else
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
@@ -369,14 +550,22 @@ private fun WeightingBatchItem(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(
+                            if (isSelected)
+                                selectionBorderColor
+                            else
+                                MaterialTheme.colorScheme.primaryContainer
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "#$batchNumber",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = if (isSelected)
+                            Color.Black
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
 
@@ -416,6 +605,7 @@ private fun WeightingBatchItem(
 private fun PositionsPanel(
     positions: List<SalePosition>,
     notes: String,
+    selectedPositionId: String?,
     totalWeight: BigDecimal,
     totalAmount: BigDecimal,
     onNotesChange: (String) -> Unit,
@@ -459,14 +649,13 @@ private fun PositionsPanel(
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(positions, key = { it.id }) { position ->
                     TabletPositionItem(
                         position = position,
+                        isSelected = position.id == selectedPositionId,
                         onClick = { onPositionClick(position) },
                         onRemove = { onRemovePosition(position.id) }
                     )
@@ -535,6 +724,7 @@ private fun PositionsPanel(
 @Composable
 private fun TabletPositionItem(
     position: SalePosition,
+    isSelected: Boolean = false,
     onClick: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
@@ -542,15 +732,20 @@ private fun TabletPositionItem(
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
     val cardShape = RoundedCornerShape(12.dp)
 
+    // Highlight colors (Matching the batch items)
+    val selectionColor = Color(0xFFFFC107) // Amber/Yellow
+    val backgroundColor = if (isSelected) selectionColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+    val borderColor = if (isSelected) selectionColor else MaterialTheme.colorScheme.outlineVariant
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
             .clickable(onClick = onClick),
         shape = cardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(borderWidth, borderColor) // <--- Yellow border if selected
     ) {
         Row(
             modifier = Modifier
@@ -581,6 +776,9 @@ private fun TabletPositionItem(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+
+                // Optional: Hide remove button on the active item to prevent accidental deletion while editing?
+                // For now, we keep it visible.
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
                     onClick = onRemove,
@@ -595,339 +793,5 @@ private fun TabletPositionItem(
                 }
             }
         }
-    }
-}
-
-/**
- * Right panel (Batch Entry Mode): Add multiple batches before finalization.
- * Shows weight + tare count inputs and action button. Batches list is in middle panel.
- */
-@Composable
-private fun BatchEntryPanelWithNumpad(
-    selectedProduct: Product?,
-    weight: String,
-    tareCount: String,
-    batches: List<SaleWeighingBatch>,
-    grossWeight: BigDecimal,
-    activeInputField: SaleInputField,
-    canAddBatch: Boolean,
-    canProceed: Boolean,
-    onFieldSelect: (SaleInputField) -> Unit,
-    onKeypadInput: (Char) -> Unit,
-    onKeypadDecimal: () -> Unit,
-    onKeypadBackspace: () -> Unit,
-    onNextInputField: () -> Unit,
-    onAddBatch: () -> Unit,
-    onRemoveBatch: (String) -> Unit,
-    onProceedToFinalize: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val inputsEnabled = selectedProduct != null
-
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(12.dp)
-    ) {
-        // ==================== TOP SECTION: Inputs + Button ====================
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Header
-            Text(
-                text = "Введення ваги",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            // Product name card (compact)
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (selectedProduct != null)
-                        MaterialTheme.colorScheme.secondaryContainer
-                    else
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            ) {
-                Text(
-                    text = selectedProduct?.name ?: "Оберіть товар зліва",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selectedProduct != null) FontWeight.Bold else FontWeight.Normal,
-                    color = if (selectedProduct != null)
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(8.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Weight and Tare Count input boxes
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                InputDisplayBox(
-                    label = "Вага (кг)",
-                    value = weight,
-                    isActive = activeInputField == SaleInputField.WEIGHT,
-                    onClick = { onFieldSelect(SaleInputField.WEIGHT) },
-                    enabled = inputsEnabled,
-                    modifier = Modifier.weight(1f)
-                )
-
-                InputDisplayBox(
-                    label = "Тара (шт)",
-                    value = tareCount,
-                    isActive = activeInputField == SaleInputField.TARE_COUNT,
-                    onClick = { onFieldSelect(SaleInputField.TARE_COUNT) },
-                    enabled = inputsEnabled,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Review button (glued to inputs, always visible, disabled when no batches)
-            Button(
-                onClick = onProceedToFinalize,
-                enabled = canProceed,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text("ПЕРЕГЛЯНУТИ ТА ВСТАНОВИТИ ЦІНУ", style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // ==================== BOTTOM SECTION: Custom Numpad ====================
-        CustomNumpad(
-            onNumberClick = onKeypadInput,
-            onDecimalClick = onKeypadDecimal,
-            onBackspaceClick = onKeypadBackspace,
-            onNextFieldClick = onNextInputField,
-            onActionClick = onAddBatch,
-            actionEnabled = canAddBatch,
-            isEditMode = false,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-/**
- * Right panel (Finalization Mode): Enter tare weight per unit + price, review calculations.
- * Shows tare weight + price inputs, net weight calculation, and "Add Position" button.
- */
-@Composable
-private fun FinalizationPanelWithNumpad(
-    selectedProduct: Product?,
-    batches: List<SaleWeighingBatch>,
-    grossWeight: BigDecimal,
-    tareWeightPerUnit: String,
-    totalTareCount: Int,
-    totalTareWeight: BigDecimal,
-    netWeight: BigDecimal,
-    price: String,
-    totalAmount: BigDecimal?,
-    activeInputField: SaleInputField,
-    canAdd: Boolean,
-    onFieldSelect: (SaleInputField) -> Unit,
-    onKeypadInput: (Char) -> Unit,
-    onKeypadDecimal: () -> Unit,
-    onKeypadBackspace: () -> Unit,
-    onNextInputField: () -> Unit,
-    onBackToBatches: () -> Unit,
-    onAddPosition: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val decimalFormat = remember { DecimalFormat("#,##0.00") }
-    val currencyFormat = remember { DecimalFormat("#,##0") }
-
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(12.dp)
-    ) {
-        // ==================== TOP SECTION: Inputs & Calculation (35%) ====================
-        Column(
-            modifier = Modifier.weight(0.35f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // Header
-            Text(
-                text = "Фіналізація",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Product name card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text(
-                        text = selectedProduct?.name ?: "",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${batches.size} зважувань • ${decimalFormat.format(grossWeight)} кг",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            // Tare Weight and Price input boxes
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                InputDisplayBox(
-                    label = "Тара (кг/шт)",
-                    value = tareWeightPerUnit,
-                    isActive = activeInputField == SaleInputField.TARE_WEIGHT_UNIT,
-                    onClick = { onFieldSelect(SaleInputField.TARE_WEIGHT_UNIT) },
-                    enabled = true,
-                    modifier = Modifier.weight(1f)
-                )
-
-                InputDisplayBox(
-                    label = "Ціна (₴/кг)",
-                    value = price,
-                    isActive = activeInputField == SaleInputField.PRICE,
-                    onClick = { onFieldSelect(SaleInputField.PRICE) },
-                    enabled = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Weight calculation breakdown
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Брутто:", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            "${decimalFormat.format(grossWeight)} кг",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Тара ($totalTareCount шт):", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            "-${decimalFormat.format(totalTareWeight)} кг",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Нетто:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "${decimalFormat.format(netWeight)} кг",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            // Total amount - LARGE and prominent
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Сума:",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴0.00",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Back to batches button
-        OutlinedButton(
-            onClick = onBackToBatches,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        ) {
-            Text("← НАЗАД ДО ЗВАЖУВАНЬ", style = MaterialTheme.typography.labelMedium)
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ==================== BOTTOM SECTION: Custom Numpad (65%) ====================
-        CustomNumpad(
-            onNumberClick = onKeypadInput,
-            onDecimalClick = onKeypadDecimal,
-            onBackspaceClick = onKeypadBackspace,
-            onNextFieldClick = onNextInputField,
-            onActionClick = onAddPosition,
-            actionEnabled = canAdd,
-            isEditMode = false,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.65f)
-        )
     }
 }

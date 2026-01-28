@@ -267,6 +267,7 @@ class PurchaseEntryViewModel @Inject constructor(
 
     /**
      * Tablet only: select product for data entry panel without navigating.
+     * Also clears any tablet editing state (exits edit mode if editing a position).
      */
     fun selectProductForEntry(product: Product) {
         _uiState.update {
@@ -274,7 +275,9 @@ class PurchaseEntryViewModel @Inject constructor(
                 dataEntryProduct = product,
                 currentWeight = "",
                 currentPrice = product.defaultBuyPrice?.toPlainString() ?: "",
-                isManualWeightMode = false
+                isManualWeightMode = false,
+                tabletEditingPositionId = null,
+                activeInputField = InputField.WEIGHT
             )
         }
     }

@@ -160,7 +160,8 @@ private fun ProductGridPanel(
             onOrderChanged = onOrderChanged,
             modifier = Modifier.fillMaxSize(),
             showPrice = true,
-            priceType = PriceType.BUY
+            priceType = PriceType.BUY,
+            selectedProductId = selectedProductId
         )
     }
 }
@@ -297,7 +298,7 @@ private fun TabletPositionItem(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = if (isSelected) Color(0xFFFFC107) else Color.Transparent
+    val borderColor = if (isSelected) Color(0xFF4CAF50) else Color.Transparent
     val borderWidth = if (isSelected) 2.dp else 0.dp
     val cardShape = RoundedCornerShape(12.dp)
     

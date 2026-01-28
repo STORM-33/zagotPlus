@@ -275,8 +275,8 @@ fun NavGraph(
             }
             composable(Destination.Sale.route) {
                 SaleScreen(
-                    onNavigateToNewSale = {
-                        navController.navigate(Destination.SaleEntry.route)
+                    onNavigateToNewSale = { mode: SaleMode ->
+                        navController.navigate(Destination.SaleEntry.createRoute(mode = mode))
                     }
                 )
             }
@@ -288,6 +288,11 @@ fun NavGraph(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument(Destination.SaleEntry.ARG_MODE) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = SaleMode.WHOLESALE.name
                     }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
@@ -296,9 +301,12 @@ fun NavGraph(
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_BATCH_ID)
+                val modeString = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_MODE)
+                val mode = SaleMode.fromString(modeString)
                 SaleEntryScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    editingBatchId = batchId
+                    editingBatchId = batchId,
+                    mode = mode
                 )
             }
             composable(Destination.Inventory.route) {

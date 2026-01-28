@@ -125,6 +125,48 @@ class SaleEntryViewModelTest {
         assertEquals(testInventoryItem.totalWeightKg, viewModel.uiState.value.availableWeight)
     }
 
+    @Test
+    fun `selectProduct clears tablet batch editing state`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("30")
+        viewModel.onTareCountChange("3")
+        viewModel.addBatch()
+        
+        // Start editing a batch
+        val batch = viewModel.uiState.value.currentBatches[0]
+        viewModel.selectTabletBatch(batch)
+        assertEquals(batch.id, viewModel.uiState.value.tabletEditingBatchId)
+        
+        // Select product again - should clear edit state
+        viewModel.selectProduct(testProduct)
+        
+        assertNull(viewModel.uiState.value.tabletEditingBatchId)
+    }
+
+    @Test
+    fun `selectProduct clears tablet position reviewing state`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("30")
+        viewModel.addBatch()
+        viewModel.proceedToReview()
+        viewModel.onPriceChange("55")
+        viewModel.addPositionAndContinue()
+        
+        // Start reviewing position weightings
+        val position = viewModel.uiState.value.positions[0]
+        viewModel.reviewPositionWeightings(position)
+        assertEquals(position.id, viewModel.uiState.value.tabletReviewingPositionId)
+        
+        // Select product - should clear review state
+        viewModel.selectProduct(testProduct)
+        
+        assertNull(viewModel.uiState.value.tabletReviewingPositionId)
+    }
+
     // ==================== Weighing Input Tests ====================
 
     @Test

@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.SkeletonList
+import com.zagot.zagotplus.ui.navigation.SaleMode
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -46,14 +48,15 @@ import kotlin.math.abs
 fun SaleScreen(
     modifier: Modifier = Modifier,
     viewModel: SaleViewModel = hiltViewModel(),
-    onNavigateToNewSale: () -> Unit = {}
+    onNavigateToNewSale: (SaleMode) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.navigateToNewSale) {
-        if (uiState.navigateToNewSale) {
-            onNavigateToNewSale()
+    LaunchedEffect(uiState.navigateToNewSale, uiState.selectedSaleMode) {
+        val mode = uiState.selectedSaleMode
+        if (uiState.navigateToNewSale && mode != null) {
+            onNavigateToNewSale(mode)
             viewModel.onNavigationHandled()
         }
     }
@@ -125,17 +128,83 @@ fun SaleScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // New sale button
-            Button(
-                onClick = { viewModel.onNewSaleClick() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
+            // Mode selection buttons
+            Text(
+                text = "Оберіть режим продажу:",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "НОВИЙ ПРОДАЖ",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                // Regular mode button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(120.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { viewModel.onNewSaleClick(com.zagot.zagotplus.ui.navigation.SaleMode.REGULAR) }
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Звичайний",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Одне зважування на товар",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+
+                // Wholesale mode button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(120.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { viewModel.onNewSaleClick(com.zagot.zagotplus.ui.navigation.SaleMode.WHOLESALE) }
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Оптовий",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Кілька зважувань з урахуванням тари",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
             }
         }
         }

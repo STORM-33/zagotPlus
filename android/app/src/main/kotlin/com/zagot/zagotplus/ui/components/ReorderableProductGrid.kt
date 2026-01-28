@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,7 +64,8 @@ fun ReorderableProductGrid(
     modifier: Modifier = Modifier,
     showPrice: Boolean = true,
     priceType: PriceType = PriceType.BUY,
-    inventoryMap: Map<UUID, BigDecimal>? = null
+    inventoryMap: Map<UUID, BigDecimal>? = null,
+    selectedProductId: UUID? = null
 ) {
     // Mutable copy of product order (IDs only)
     // Use products list identity to preserve incoming order from ViewModel
@@ -115,6 +117,7 @@ fun ReorderableProductGrid(
                         showPrice = showPrice,
                         priceType = priceType,
                         availableKg = inventoryMap?.get(product.id),
+                        isSelected = product.id == selectedProductId,
                         modifier = Modifier
                             .shadow(elevation, RoundedCornerShape(16.dp))
                             .longPressDraggableHandle(
@@ -140,10 +143,14 @@ private fun ProductTile(
     showPrice: Boolean,
     priceType: PriceType,
     availableKg: BigDecimal?,
+    isSelected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.0") }
     val isLowStock = availableKg != null && availableKg <= BigDecimal.ZERO
+    
+    // Selection border color (green) for product grid
+    val selectionBorderColor = Color(0xFF4CAF50)
     
     Card(
         modifier = modifier.clickable(onClick = onClick),
@@ -153,7 +160,8 @@ private fun ProductTile(
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
             else 
                 MaterialTheme.colorScheme.surfaceVariant
-        )
+        ),
+        border = if (isSelected) BorderStroke(3.dp, selectionBorderColor) else null
     ) {
         // Full-tile image with text overlay
         Box(
