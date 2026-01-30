@@ -1,41 +1,42 @@
-package com.zagot.zagotplus.ui.screens.purchase
+package com.zagot.zagotplus.ui.screens.sale
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.TransactionType
-import com.zagot.zagotplus.ui.screens.shared.PurchaseEntryUiState
-import com.zagot.zagotplus.ui.screens.shared.PurchaseInputField
-import com.zagot.zagotplus.ui.screens.shared.PurchasePosition
+import com.zagot.zagotplus.ui.screens.shared.SaleEntryUiState
+import com.zagot.zagotplus.ui.screens.shared.SaleInputField
 import com.zagot.zagotplus.ui.screens.shared.TransactionEntryRegularTabletContent
 import java.util.UUID
 
-// Backward compatibility alias
-private typealias InputField = PurchaseInputField
-
 /**
- * Tablet-specific three-column layout for purchase entry with custom numpad.
+ * Tablet-specific three-column layout for sale entry in REGULAR mode.
  * Delegates to shared TransactionEntryRegularTabletContent.
  */
 @Composable
-fun PurchaseEntryTabletContent(
-    uiState: PurchaseEntryUiState,
+fun SaleEntryRegularTabletContent(
+    uiState: SaleEntryUiState,
     onProductSelect: (Product) -> Unit,
     onProductOrderChanged: (List<UUID>) -> Unit,
     onKeypadInput: (Char) -> Unit,
     onKeypadDecimal: () -> Unit,
     onKeypadBackspace: () -> Unit,
     onNextInputField: () -> Unit,
-    onSelectInputFieldAndClear: (InputField) -> Unit,
+    onSelectInputFieldAndClear: (SaleInputField) -> Unit,
     onAddPosition: () -> Unit,
-    onSelectTabletPosition: (PurchasePosition) -> Unit,
     onRemovePosition: (String) -> Unit,
     onNotesChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Create inventory map for product grid
+    val inventoryMap = remember(uiState.inventory) {
+        uiState.inventory.associate { it.productId to it.totalWeightKg }
+    }
+
     TransactionEntryRegularTabletContent(
         uiState = uiState,
-        transactionType = TransactionType.PURCHASE,
+        transactionType = TransactionType.SALE,
         onProductSelect = onProductSelect,
         onProductOrderChanged = onProductOrderChanged,
         onKeypadInput = onKeypadInput,
@@ -44,9 +45,10 @@ fun PurchaseEntryTabletContent(
         onNextInputField = onNextInputField,
         onSelectInputFieldAndClear = onSelectInputFieldAndClear,
         onAddPosition = onAddPosition,
-        onSelectPosition = onSelectTabletPosition,
+        onSelectPosition = null, // Sale regular mode doesn't support position editing
         onRemovePosition = onRemovePosition,
         onNotesChange = onNotesChange,
+        inventoryMap = inventoryMap,
         modifier = modifier
     )
 }

@@ -48,7 +48,8 @@ import kotlin.math.abs
 fun SaleScreen(
     modifier: Modifier = Modifier,
     viewModel: SaleViewModel = hiltViewModel(),
-    onNavigateToNewSale: (SaleMode) -> Unit = {}
+    onNavigateToNewSale: (SaleMode) -> Unit = {},
+    isRestrictedMode: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -128,81 +129,70 @@ fun SaleScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Mode selection buttons
-            Text(
-                text = "Оберіть режим продажу:",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Regular mode button
-                Card(
+            // Mode selection - different UI for restricted vs full mode
+            if (isRestrictedMode) {
+                // RESTRICTED MODE: Single button for regular sale only
+                Button(
+                    onClick = { viewModel.onNewSaleClick(SaleMode.REGULAR) },
                     modifier = Modifier
-                        .weight(1f)
-                        .height(120.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                        .fillMaxWidth()
+                        .height(56.dp)
                 ) {
-                    Column(
+                    Text(
+                        text = "НОВИЙ ПРОДАЖ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                // FULL MODE: Two buttons horizontal - regular (prominent) and wholesale (smaller)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Regular mode button - PRIMARY (prominent, larger)
+                    Button(
+                        onClick = { viewModel.onNewSaleClick(SaleMode.REGULAR) },
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { viewModel.onNewSaleClick(com.zagot.zagotplus.ui.navigation.SaleMode.REGULAR) }
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .weight(1.5f)
+                            .height(56.dp)
                     ) {
                         Text(
-                            text = "Звичайний",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Одне зважування на товар",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            text = "НОВИЙ ПРОДАЖ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                }
 
-                // Wholesale mode button
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(120.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Column(
+                    // Wholesale mode button - SECONDARY (less prominent, smaller)
+                    Card(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { viewModel.onNewSaleClick(com.zagot.zagotplus.ui.navigation.SaleMode.WHOLESALE) }
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
                     ) {
-                        Text(
-                            text = "Оптовий",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Кілька зважувань з урахуванням тари",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { viewModel.onNewSaleClick(SaleMode.WHOLESALE) }
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Оптовий",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "продаж",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }

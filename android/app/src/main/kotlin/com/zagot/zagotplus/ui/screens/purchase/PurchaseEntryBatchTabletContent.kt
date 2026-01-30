@@ -7,18 +7,16 @@ import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.ui.screens.shared.PurchaseEntryUiState
 import com.zagot.zagotplus.ui.screens.shared.PurchaseInputField
 import com.zagot.zagotplus.ui.screens.shared.PurchasePosition
-import com.zagot.zagotplus.ui.screens.shared.TransactionEntryRegularTabletContent
+import com.zagot.zagotplus.ui.screens.shared.PurchaseWeighingBatch
+import com.zagot.zagotplus.ui.screens.shared.TransactionEntryBatchTabletContent
 import java.util.UUID
 
-// Backward compatibility alias
-private typealias InputField = PurchaseInputField
-
 /**
- * Tablet-specific three-column layout for purchase entry with custom numpad.
- * Delegates to shared TransactionEntryRegularTabletContent.
+ * Tablet-specific three-column layout for batch (wholesale) purchase entry.
+ * Delegates to shared TransactionEntryBatchTabletContent.
  */
 @Composable
-fun PurchaseEntryTabletContent(
+fun PurchaseEntryBatchTabletContent(
     uiState: PurchaseEntryUiState,
     onProductSelect: (Product) -> Unit,
     onProductOrderChanged: (List<UUID>) -> Unit,
@@ -26,14 +24,16 @@ fun PurchaseEntryTabletContent(
     onKeypadDecimal: () -> Unit,
     onKeypadBackspace: () -> Unit,
     onNextInputField: () -> Unit,
-    onSelectInputFieldAndClear: (InputField) -> Unit,
-    onAddPosition: () -> Unit,
-    onSelectTabletPosition: (PurchasePosition) -> Unit,
+    onSelectInputFieldAndClear: (PurchaseInputField) -> Unit,
+    onAddBatch: () -> Unit,
+    onRemoveBatch: (String) -> Unit,
+    onSelectBatch: (PurchaseWeighingBatch) -> Unit,
+    onSelectPosition: (PurchasePosition) -> Unit,
     onRemovePosition: (String) -> Unit,
     onNotesChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    TransactionEntryRegularTabletContent(
+    TransactionEntryBatchTabletContent(
         uiState = uiState,
         transactionType = TransactionType.PURCHASE,
         onProductSelect = onProductSelect,
@@ -43,8 +43,10 @@ fun PurchaseEntryTabletContent(
         onKeypadBackspace = onKeypadBackspace,
         onNextInputField = onNextInputField,
         onSelectInputFieldAndClear = onSelectInputFieldAndClear,
-        onAddPosition = onAddPosition,
-        onSelectPosition = onSelectTabletPosition,
+        onAddBatch = onAddBatch,
+        onRemoveBatch = onRemoveBatch,
+        onSelectBatch = onSelectBatch,
+        onSelectPosition = onSelectPosition,
         onRemovePosition = onRemovePosition,
         onNotesChange = onNotesChange,
         modifier = modifier

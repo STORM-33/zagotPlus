@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
 import androidx.compose.foundation.background
+import com.zagot.zagotplus.ui.screens.shared.PurchasePosition
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

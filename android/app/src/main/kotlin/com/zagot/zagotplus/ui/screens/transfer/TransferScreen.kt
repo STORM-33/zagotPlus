@@ -57,6 +57,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -377,10 +378,14 @@ private fun TransferWeightEntry(
 ) {
     // Auto-focus weight field
     val focusRequester = remember { FocusRequester() }
+    val view = LocalView.current
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        // Prevent crash if composition completes before window is focused
+        if (view.isAttachedToWindow) {
+            focusRequester.requestFocus()
+        }
     }
-    
+
     val hasTare = tareCount.toIntOrNull()?.let { it > 0 } == true
     
     Column(

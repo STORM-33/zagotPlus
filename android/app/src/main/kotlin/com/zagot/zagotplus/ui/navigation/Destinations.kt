@@ -32,6 +32,25 @@ enum class SaleMode {
 }
 
 /**
+ * Purchase entry mode - determines the flow and UI behavior.
+ */
+enum class PurchaseMode {
+    REGULAR,    // Simple single-weight flow (no batches, no tare)
+    BATCH;      // Batch weighing with tare tracking (wholesale-style)
+
+    companion object {
+        fun fromString(value: String?): PurchaseMode {
+            return when (value?.uppercase()) {
+                "REGULAR" -> REGULAR
+                "BATCH" -> BATCH
+                null -> REGULAR // Default to regular for backward compatibility
+                else -> REGULAR
+            }
+        }
+    }
+}
+
+/**
  * Navigation destinations for the app.
  */
 sealed class Destination(
@@ -50,14 +69,20 @@ sealed class Destination(
         title = "Нова закупка",
         icon = Icons.Filled.ShoppingCart
     ) {
-        const val ROUTE_WITH_ARGS = "purchase_entry?batchId={batchId}"
+        const val ROUTE_WITH_ARGS = "purchase_entry?batchId={batchId}&mode={mode}"
         const val ARG_BATCH_ID = "batchId"
-        
-        fun createRoute(batchId: String? = null): String {
-            return if (batchId != null) {
-                "purchase_entry?batchId=$batchId"
-            } else {
-                "purchase_entry"
+        const val ARG_MODE = "mode"
+
+        fun createRoute(batchId: String? = null, mode: PurchaseMode = PurchaseMode.REGULAR): String {
+            return buildString {
+                append("purchase_entry")
+                val params = mutableListOf<String>()
+                batchId?.let { params.add("batchId=$it") }
+                params.add("mode=${mode.name}")
+                if (params.isNotEmpty()) {
+                    append("?")
+                    append(params.joinToString("&"))
+                }
             }
         }
     }

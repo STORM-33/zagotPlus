@@ -59,10 +59,10 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
         syncManager.initializePeriodicSync()
         
         // Initialize performance debugging in debug builds
-        if (BuildConfig.DEBUG) {
-            mainThreadDebugger.initialize()
-            performanceTracer.startPeriodicReport(30_000L) // Report every 30 seconds
-        }
+//        if (BuildConfig.DEBUG) {
+//            mainThreadDebugger.initialize()
+//            performanceTracer.startPeriodicReport(30_000L) // Report every 30 seconds
+//        }
     }
 
     override fun attachBaseContext(base: Context) {

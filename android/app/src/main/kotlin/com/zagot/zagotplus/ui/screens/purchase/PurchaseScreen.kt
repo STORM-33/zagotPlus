@@ -56,6 +56,7 @@ import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
 import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import com.zagot.zagotplus.ui.components.isTablet
 import com.zagot.zagotplus.ui.components.roundBalanceForDisplay
+import com.zagot.zagotplus.ui.navigation.PurchaseMode
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.util.UUID
@@ -64,7 +65,7 @@ import java.util.UUID
 fun PurchaseScreen(
     modifier: Modifier = Modifier,
     viewModel: PurchaseViewModel = hiltViewModel(),
-    onNavigateToNewClient: () -> Unit = {},
+    onNavigateToNewPurchase: (PurchaseMode) -> Unit = {},
     isRestrictedMode: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,9 +76,10 @@ fun PurchaseScreen(
     // Selection state for products (mirroring Inventory screen behavior)
     var selectedProductIds by remember { mutableStateOf<Set<UUID>>(emptySet()) }
 
-    LaunchedEffect(uiState.navigateToNewClient) {
-        if (uiState.navigateToNewClient) {
-            onNavigateToNewClient()
+    LaunchedEffect(uiState.navigateToNewPurchase, uiState.selectedPurchaseMode) {
+        val mode = uiState.selectedPurchaseMode
+        if (uiState.navigateToNewPurchase && mode != null) {
+            onNavigateToNewPurchase(mode)
             viewModel.onNavigationHandled()
         }
     }
@@ -210,17 +212,72 @@ fun PurchaseScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // New client button - LARGER touch target
-            Button(
-                onClick = { viewModel.onNewClientClick() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-            ) {
-                Text(
-                    text = "НОВИЙ КЛІЄНТ",
-                    style = MaterialTheme.typography.titleMedium
-                )
+            // Mode selection - different UI for restricted vs full mode
+            if (isRestrictedMode) {
+                // RESTRICTED MODE: Single button for regular purchase only
+                Button(
+                    onClick = { viewModel.onNewPurchaseClick(PurchaseMode.REGULAR) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "НОВИЙ КЛІЄНТ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                // FULL MODE: Two buttons horizontal - regular (prominent) and batch (smaller)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Regular mode button - PRIMARY (prominent, larger)
+                    Button(
+                        onClick = { viewModel.onNewPurchaseClick(PurchaseMode.REGULAR) },
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(56.dp)
+                    ) {
+                        Text(
+                            text = "НОВИЙ КЛІЄНТ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Batch mode button - SECONDARY (less prominent, smaller)
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { viewModel.onNewPurchaseClick(PurchaseMode.BATCH) }
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Оптова",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "закупка",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
             }
         }
         }
@@ -319,7 +376,7 @@ private fun SummaryTotalItem(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy()
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)

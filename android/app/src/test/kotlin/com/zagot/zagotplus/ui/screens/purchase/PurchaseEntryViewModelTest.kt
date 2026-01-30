@@ -31,6 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
 import java.util.UUID
+import com.zagot.zagotplus.ui.screens.shared.PurchaseEntryScreenState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PurchaseEntryViewModelTest {

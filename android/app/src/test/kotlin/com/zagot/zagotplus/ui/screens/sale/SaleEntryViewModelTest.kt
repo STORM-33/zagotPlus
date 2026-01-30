@@ -22,6 +22,11 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
+import com.zagot.zagotplus.ui.screens.shared.SaleEntryScreenState
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesService
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SaleEntryViewModelTest {
@@ -35,6 +40,7 @@ class SaleEntryViewModelTest {
     private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
+    private lateinit var scalesService: ScalesService
     private lateinit var viewModel: SaleEntryViewModel
 
     private val testProduct = TestData.PRODUCT_WHITE_WALNUT
@@ -62,6 +68,12 @@ class SaleEntryViewModelTest {
         every { productOrderPreferences.getProductOrder() } returns emptyList()
         every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
         coEvery { saleBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
+        
+        // Setup ScalesService mocks
+        scalesService = mockk(relaxed = true)
+        every { scalesService.connectionState } returns MutableStateFlow(ScalesConnectionState.Disconnected)
+        every { scalesService.weightReadings } returns MutableSharedFlow()
+        every { scalesService.errors } returns MutableSharedFlow()
     }
 
     private fun createViewModel(): SaleEntryViewModel {
@@ -72,6 +84,7 @@ class SaleEntryViewModelTest {
             locationRepository = locationRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences,
+            scalesService = scalesService,
             savedStateHandle = SavedStateHandle()
         )
     }

@@ -20,6 +20,7 @@ import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
+import com.zagot.zagotplus.ui.navigation.SaleMode
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SaleViewModelTest {
@@ -75,7 +76,7 @@ class SaleViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.onNewSaleClick()
+        viewModel.onNewSaleClick(SaleMode.REGULAR)
 
         assertTrue(viewModel.uiState.value.navigateToNewSale)
     }
@@ -85,7 +86,7 @@ class SaleViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.onNewSaleClick()
+        viewModel.onNewSaleClick(SaleMode.REGULAR)
         viewModel.onNavigationHandled()
 
         assertFalse(viewModel.uiState.value.navigateToNewSale)

@@ -12,14 +12,14 @@ class DestinationsTest {
     fun `PurchaseEntry createRoute without batchId returns base route`() {
         val route = Destination.PurchaseEntry.createRoute()
         
-        assertEquals("purchase_entry", route)
+        assertEquals("purchase_entry?mode=REGULAR", route)
     }
 
     @Test
     fun `PurchaseEntry createRoute with null batchId returns base route`() {
         val route = Destination.PurchaseEntry.createRoute(batchId = null)
         
-        assertEquals("purchase_entry", route)
+        assertEquals("purchase_entry?mode=REGULAR", route)
     }
 
     @Test
@@ -27,7 +27,7 @@ class DestinationsTest {
         val batchId = UUID.randomUUID().toString()
         val route = Destination.PurchaseEntry.createRoute(batchId = batchId)
         
-        assertEquals("purchase_entry?batchId=$batchId", route)
+        assertEquals("purchase_entry?batchId=$batchId&mode=REGULAR", route)
     }
 
     // === SaleEntry.createRoute tests ===
@@ -36,7 +36,7 @@ class DestinationsTest {
     fun `SaleEntry createRoute without batchId returns base route`() {
         val route = Destination.SaleEntry.createRoute()
         
-        assertEquals("sale_entry", route)
+        assertEquals("sale_entry?mode=WHOLESALE", route)
     }
 
     @Test
@@ -44,7 +44,7 @@ class DestinationsTest {
         val batchId = "test-batch-123"
         val route = Destination.SaleEntry.createRoute(batchId = batchId)
         
-        assertEquals("sale_entry?batchId=$batchId", route)
+        assertEquals("sale_entry?batchId=$batchId&mode=WHOLESALE", route)
     }
 
     // === Transfer.createRoute tests ===
@@ -167,13 +167,13 @@ class DestinationsTest {
 
     @Test
     fun `PurchaseEntry has correct route with args pattern`() {
-        assertEquals("purchase_entry?batchId={batchId}", Destination.PurchaseEntry.ROUTE_WITH_ARGS)
+        assertEquals("purchase_entry?batchId={batchId}&mode={mode}", Destination.PurchaseEntry.ROUTE_WITH_ARGS)
         assertEquals("batchId", Destination.PurchaseEntry.ARG_BATCH_ID)
     }
 
     @Test
     fun `SaleEntry has correct route with args pattern`() {
-        assertEquals("sale_entry?batchId={batchId}", Destination.SaleEntry.ROUTE_WITH_ARGS)
+        assertEquals("sale_entry?batchId={batchId}&mode={mode}", Destination.SaleEntry.ROUTE_WITH_ARGS)
         assertEquals("batchId", Destination.SaleEntry.ARG_BATCH_ID)
     }
 

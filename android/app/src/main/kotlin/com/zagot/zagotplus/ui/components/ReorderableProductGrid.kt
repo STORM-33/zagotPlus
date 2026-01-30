@@ -1,5 +1,8 @@
 package com.zagot.zagotplus.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -37,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -152,8 +156,26 @@ private fun ProductTile(
     // Selection border color (green) for product grid
     val selectionBorderColor = Color(0xFF4CAF50)
     
+    // Animate selection: scale up and elevate shadow
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.05f else 1f,
+        animationSpec = tween(200),
+        label = "productTileScale"
+    )
+    val shadowElevation by animateDpAsState(
+        targetValue = if (isSelected) 8.dp else 2.dp,
+        animationSpec = tween(200),
+        label = "productTileShadow"
+    )
+    
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .shadow(shadowElevation, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isLowStock) 

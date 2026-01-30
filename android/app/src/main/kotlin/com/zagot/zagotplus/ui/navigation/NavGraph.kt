@@ -246,8 +246,8 @@ fun NavGraph(
         ) {
             composable(Destination.Purchase.route) {
                 PurchaseScreen(
-                    onNavigateToNewClient = {
-                        navController.navigate(Destination.PurchaseEntry.route)
+                    onNavigateToNewPurchase = { mode: PurchaseMode ->
+                        navController.navigate(Destination.PurchaseEntry.createRoute(mode = mode))
                     },
                     isRestrictedMode = isRestrictedMode
                 )
@@ -260,6 +260,11 @@ fun NavGraph(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument(Destination.PurchaseEntry.ARG_MODE) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = PurchaseMode.REGULAR.name
                     }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
@@ -268,16 +273,20 @@ fun NavGraph(
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_BATCH_ID)
+                val modeString = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_MODE)
+                val mode = PurchaseMode.fromString(modeString)
                 PurchaseEntryScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    editingBatchId = batchId
+                    editingBatchId = batchId,
+                    mode = mode
                 )
             }
             composable(Destination.Sale.route) {
                 SaleScreen(
                     onNavigateToNewSale = { mode: SaleMode ->
                         navController.navigate(Destination.SaleEntry.createRoute(mode = mode))
-                    }
+                    },
+                    isRestrictedMode = isRestrictedMode
                 )
             }
             // Detail screens get slide transitions
