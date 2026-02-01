@@ -73,6 +73,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Lock to portrait on mobile devices (sw < 600dp)
+        if (resources.configuration.smallestScreenWidthDp < 600) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+
         // Restore auth state from persistent storage (survives process death)
         isAuthenticated = authPreferences.isAuthenticated()
         // Check if location selection is needed (first install or location cleared)

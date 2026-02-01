@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -92,6 +95,9 @@ import com.zagot.zagotplus.domain.model.CashHistoryItemType
 import com.zagot.zagotplus.domain.model.DayCashGroup
 import com.zagot.zagotplus.domain.model.ExpenseCategory
 import com.zagot.zagotplus.domain.model.Location
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
+import com.zagot.zagotplus.ui.components.isTablet
 import com.zagot.zagotplus.ui.components.roundBalanceForDisplay
 import com.zagot.zagotplus.ui.theme.CashInfo
 import com.zagot.zagotplus.ui.theme.CashNegative
@@ -127,6 +133,9 @@ fun CashScreen(
         }
     }
 
+    // Determine tablet layout early for TopAppBar actions
+    val isTabletLayout = isTablet()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -137,8 +146,11 @@ fun CashScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.showCategoriesDialog() }) {
-                        Icon(Icons.Filled.Category, contentDescription = stringResource(R.string.cash_categories_title))
+                    // Only show categories icon on phone (on tablet it's inline)
+                    if (!isTabletLayout) {
+                        IconButton(onClick = { viewModel.showCategoriesDialog() }) {
+                            Icon(Icons.Filled.Category, contentDescription = stringResource(R.string.cash_categories_title))
+                        }
                     }
                 }
             )
@@ -159,21 +171,24 @@ fun CashScreen(
                 CircularProgressIndicator()
             }
         } else {
+            val horizontalPadding = adaptiveHorizontalPadding()
+            val itemSpacing = adaptiveItemSpacing()
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Location tabs + Total tab
+                // Location tabs + Total tab (always full-width)
                 if (uiState.locations.isNotEmpty()) {
                     val selectedIndex = if (uiState.isTotalsView) {
                         uiState.locations.size // Total tab is last
                     } else {
-                        uiState.locations.indexOfFirst { 
-                                it.id == uiState.selectedLocationId 
+                        uiState.locations.indexOfFirst {
+                                it.id == uiState.selectedLocationId
                             }.coerceAtLeast(0)
                         }
-                    
+
                     TabRow(selectedTabIndex = selectedIndex) {
                         uiState.locations.forEachIndexed { index, location ->
                             Tab(
@@ -191,133 +206,299 @@ fun CashScreen(
                     }
                 }
 
-                // Balance Card
-                BalanceCard(
-                    balance = uiState.balance.roundBalanceForDisplay(),
-                    dailyChange = uiState.dailyChange,
-                    dailyAddition = uiState.dailyAddition,
-                    selectedLocationId = uiState.selectedLocationId,
-                    modifier = Modifier.padding(16.dp)
-                )
+                // Content: Split layout on tablet, stacked on phone
+                if (isTabletLayout) {
+                    // Tablet: Balance/Actions on left, History on right
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = horizontalPadding, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        // Left panel: Balance + Actions + Categories (scrollable)
+                        Column(
+                            modifier = Modifier
+                                .weight(0.35f)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            BalanceCard(
+                                balance = uiState.balance.roundBalanceForDisplay(),
+                                dailyChange = uiState.dailyChange,
+                                dailyAddition = uiState.dailyAddition,
+                                selectedLocationId = uiState.selectedLocationId,
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
-                // Show action buttons only in location view (not in totals view)
-                if (!uiState.isTotalsView) {
-                    ActionButtons(
-                        onDeposit = { viewModel.showDepositDialog() },
-                        onWithdraw = { viewModel.showWithdrawDialog() },
-                        onPayment = { viewModel.showPaymentDialog() },
-                        onTransfer = { viewModel.showTransferDialog() },
-                        enabled = true,
-                        hasMultipleLocations = uiState.locations.size > 1,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Operations List Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.cash_history_title),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    if (uiState.dayGroups.isNotEmpty()) {
-                        Text(
-                            text = "${uiState.dayGroups.size} днів",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                val listState = rememberLazyListState()
-
-                // Trigger load more when reaching end
-                val shouldLoadMore by remember {
-                    derivedStateOf {
-                        val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-                            ?: return@derivedStateOf false
-                        lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 3
-                    }
-                }
-
-                LaunchedEffect(shouldLoadMore) {
-                    snapshotFlow { shouldLoadMore }
-                        .distinctUntilChanged()
-                        .collect { shouldLoad ->
-                            if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreItems) {
-                                viewModel.loadMoreOperations()
+                            // Show action buttons only in location view (not in totals view)
+                            if (!uiState.isTotalsView) {
+                                ActionButtons(
+                                    onDeposit = { viewModel.showDepositDialog() },
+                                    onWithdraw = { viewModel.showWithdrawDialog() },
+                                    onPayment = { viewModel.showPaymentDialog() },
+                                    onTransfer = { viewModel.showTransferDialog() },
+                                    enabled = true,
+                                    hasMultipleLocations = uiState.locations.size > 1,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
+
+                            // Inline Categories Panel for tablet (visible in both location and totals view)
+                            CategoriesPanel(
+                                categories = uiState.categories,
+                                newCategoryName = uiState.newCategoryName,
+                                onNewCategoryNameChange = viewModel::onNewCategoryNameChange,
+                                onAddCategory = viewModel::addCategory,
+                                onDeactivateCategory = viewModel::deactivateCategory,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
-                }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        items = uiState.dayGroups,
-                        key = { it.date.toString() }
-                    ) { dayGroup ->
-                        ExpandableDayCard(
-                            dayGroup = dayGroup,
-                            isExpanded = dayGroup.date in uiState.expandedDays,
-                            showLocationName = uiState.isTotalsView,
-                            onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
-                            onEditItem = { item -> viewModel.showEditDialog(item) },
-                            canModifyItem = { item -> viewModel.canModifyItem(item) },
-                            modifier = Modifier.animateItemPlacement()
-                        )
-                    }
-
-                    // Loading indicator at bottom
-                    if (uiState.isLoadingMore) {
-                        item {
-                            Box(
+                        // Right panel: History
+                        Column(
+                            modifier = Modifier
+                                .weight(0.65f)
+                                .fillMaxHeight()
+                        ) {
+                            // Operations List Header
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
+                                Text(
+                                    text = stringResource(R.string.cash_history_title),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                if (uiState.dayGroups.isNotEmpty()) {
+                                    Text(
+                                        text = "${uiState.dayGroups.size} днів",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            val listState = rememberLazyListState()
+
+                            // Trigger load more when reaching end
+                            val shouldLoadMore by remember {
+                                derivedStateOf {
+                                    val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+                                        ?: return@derivedStateOf false
+                                    lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 3
+                                }
+                            }
+
+                            LaunchedEffect(shouldLoadMore) {
+                                snapshotFlow { shouldLoadMore }
+                                    .distinctUntilChanged()
+                                    .collect { shouldLoad ->
+                                        if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreItems) {
+                                            viewModel.loadMoreOperations()
+                                        }
+                                    }
+                            }
+
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                            ) {
+                                items(
+                                    items = uiState.dayGroups,
+                                    key = { it.date.toString() }
+                                ) { dayGroup ->
+                                    ExpandableDayCard(
+                                        dayGroup = dayGroup,
+                                        isExpanded = dayGroup.date in uiState.expandedDays,
+                                        showLocationName = uiState.isTotalsView,
+                                        onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
+                                        onEditItem = { item -> viewModel.showEditDialog(item) },
+                                        canModifyItem = { item -> viewModel.canModifyItem(item) },
+                                        modifier = Modifier.animateItemPlacement()
+                                    )
+                                }
+
+                                // Loading indicator at bottom
+                                if (uiState.isLoadingMore) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (uiState.dayGroups.isEmpty() && !uiState.isLoading) {
+                                    item {
+                                        Text(
+                                            text = stringResource(R.string.cash_no_operations),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    }
+                                }
+
+                                // End of list indicator
+                                if (!uiState.hasMoreItems && uiState.dayGroups.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            text = stringResource(R.string.cash_all_loaded),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Phone: Original stacked layout
+                    // Balance Card
+                    BalanceCard(
+                        balance = uiState.balance.roundBalanceForDisplay(),
+                        dailyChange = uiState.dailyChange,
+                        dailyAddition = uiState.dailyAddition,
+                        selectedLocationId = uiState.selectedLocationId,
+                        modifier = Modifier.padding(16.dp)
+                    )
+
+                    // Show action buttons only in location view (not in totals view)
+                    if (!uiState.isTotalsView) {
+                        ActionButtons(
+                            onDeposit = { viewModel.showDepositDialog() },
+                            onWithdraw = { viewModel.showWithdrawDialog() },
+                            onPayment = { viewModel.showPaymentDialog() },
+                            onTransfer = { viewModel.showTransferDialog() },
+                            enabled = true,
+                            hasMultipleLocations = uiState.locations.size > 1,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Operations List Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cash_history_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        if (uiState.dayGroups.isNotEmpty()) {
+                            Text(
+                                text = "${uiState.dayGroups.size} днів",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    val listState = rememberLazyListState()
+
+                    // Trigger load more when reaching end
+                    val shouldLoadMore by remember {
+                        derivedStateOf {
+                            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+                                ?: return@derivedStateOf false
+                            lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 3
+                        }
+                    }
+
+                    LaunchedEffect(shouldLoadMore) {
+                        snapshotFlow { shouldLoadMore }
+                            .distinctUntilChanged()
+                            .collect { shouldLoad ->
+                                if (shouldLoad && !uiState.isLoadingMore && uiState.hasMoreItems) {
+                                    viewModel.loadMoreOperations()
+                                }
+                            }
+                    }
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            items = uiState.dayGroups,
+                            key = { it.date.toString() }
+                        ) { dayGroup ->
+                            ExpandableDayCard(
+                                dayGroup = dayGroup,
+                                isExpanded = dayGroup.date in uiState.expandedDays,
+                                showLocationName = uiState.isTotalsView,
+                                onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
+                                onEditItem = { item -> viewModel.showEditDialog(item) },
+                                canModifyItem = { item -> viewModel.canModifyItem(item) },
+                                modifier = Modifier.animateItemPlacement()
+                            )
+                        }
+
+                        // Loading indicator at bottom
+                        if (uiState.isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
+                        }
+
+                        if (uiState.dayGroups.isEmpty() && !uiState.isLoading) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.cash_no_operations),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp)
                                 )
                             }
                         }
-                    }
 
-                    if (uiState.dayGroups.isEmpty() && !uiState.isLoading) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.cash_no_operations),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                    }
-
-                    // End of list indicator
-                    if (!uiState.hasMoreItems && uiState.dayGroups.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.cash_all_loaded),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
+                        // End of list indicator
+                        if (!uiState.hasMoreItems && uiState.dayGroups.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.cash_all_loaded),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -558,6 +739,137 @@ private fun ActionButtons(
     }
 }
 
+/**
+ * Inline categories panel for tablet layout.
+ * Displays expense categories with add/delete functionality.
+ */
+@Composable
+private fun CategoriesPanel(
+    categories: List<ExpenseCategory>,
+    newCategoryName: String,
+    onNewCategoryNameChange: (String) -> Unit,
+    onAddCategory: () -> Unit,
+    onDeactivateCategory: (UUID) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var pendingDeactivateCategoryId by remember { mutableStateOf<UUID?>(null) }
+    var pendingDeactivateCategoryName by remember { mutableStateOf<String?>(null) }
+
+    // Deactivate confirmation dialog
+    if (pendingDeactivateCategoryId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeactivateCategoryId = null; pendingDeactivateCategoryName = null },
+            title = { Text("Видалити категорію?") },
+            text = { Text("Категорію \"${pendingDeactivateCategoryName}\" буде видалено. Ви впевнені?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeactivateCategoryId?.let { onDeactivateCategory(it) }
+                        pendingDeactivateCategoryId = null
+                        pendingDeactivateCategoryName = null
+                    }
+                ) {
+                    Text("Видалити", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeactivateCategoryId = null; pendingDeactivateCategoryName = null }) {
+                    Text("Скасувати")
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.cash_categories_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            // Add new category row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = newCategoryName,
+                    onValueChange = onNewCategoryNameChange,
+                    label = { Text(stringResource(R.string.cash_new_category_label)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                IconButton(
+                    onClick = onAddCategory,
+                    enabled = newCategoryName.isNotBlank()
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.save),
+                        tint = if (newCategoryName.isNotBlank())
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Categories list
+            if (categories.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.cash_no_categories),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    categories.forEach { category ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = category.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    pendingDeactivateCategoryId = category.id
+                                    pendingDeactivateCategoryName = category.name
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.delete),
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryItem(
@@ -568,7 +880,7 @@ private fun HistoryItem(
     modifier: Modifier = Modifier
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
-    
+
     val depositLabel = stringResource(R.string.cash_history_deposit)
     val withdrawalLabel = stringResource(R.string.cash_history_withdrawal)
     val paymentLabel = stringResource(R.string.cash_history_payment)

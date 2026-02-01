@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
@@ -64,6 +70,7 @@ import com.zagot.zagotplus.ui.components.InventoryItemSkeleton
 import com.zagot.zagotplus.ui.components.SkeletonList
 import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
 import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
+import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.ZoneId
@@ -226,50 +233,101 @@ fun InventoryScreen(
                             val isTotalView = uiState.viewMode == InventoryViewMode.TOTAL
                             val horizontalPadding = adaptiveHorizontalPadding()
                             val itemSpacing = adaptiveItemSpacing()
-                            
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(itemSpacing)
-                            ) {
-                                // Inventory items as cards
-                                items(displayItems, key = { it.productId }) { item ->
-                                    val isSelected = item.productId in selectedProductIds
-                                    InventoryItemCard(
-                                        item = item,
-                                        currencyFormat = currencyFormat,
-                                        priceFormat = priceFormat,
-                                        weightFormat = weightFormat,
-                                        isSelected = isSelected,
-                                        showContextMenuOption = !isTotalView,
-                                        isRestrictedMode = isRestrictedMode,
-                                        onClick = {
-                                            selectedProductIds = if (isSelected) {
-                                                selectedProductIds - item.productId
-                                            } else {
-                                                selectedProductIds + item.productId
+                            val isTabletLayout = isTablet()
+
+                            if (isTabletLayout) {
+                                // Tablet: Grid layout with 2-3 columns
+                                LazyVerticalGrid(
+                                    columns = GridCells.Adaptive(minSize = 320.dp),
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(displayItems, key = { it.productId }) { item ->
+                                        val isSelected = item.productId in selectedProductIds
+                                        InventoryItemCard(
+                                            item = item,
+                                            currencyFormat = currencyFormat,
+                                            priceFormat = priceFormat,
+                                            weightFormat = weightFormat,
+                                            isSelected = isSelected,
+                                            showContextMenuOption = !isTotalView,
+                                            isRestrictedMode = isRestrictedMode,
+                                            onClick = {
+                                                selectedProductIds = if (isSelected) {
+                                                    selectedProductIds - item.productId
+                                                } else {
+                                                    selectedProductIds + item.productId
+                                                }
+                                            },
+                                            onTransferClick = {
+                                                selectedItem = item
+                                                showMoveDialog = true
+                                            },
+                                            onAdjustClick = {
+                                                selectedItem = item
+                                                showAdjustDialog = true
                                             }
-                                        },
-                                        onTransferClick = {
-                                            selectedItem = item
-                                            showMoveDialog = true
-                                        },
-                                        onAdjustClick = {
-                                            selectedItem = item
-                                            showAdjustDialog = true
-                                        }
-                                    )
+                                        )
+                                    }
+
+                                    // Summary panel spans full width
+                                    item(key = "summary", span = { GridItemSpan(maxLineSpan) }) {
+                                        InventorySummaryPanel(
+                                            summary = summary,
+                                            currencyFormat = currencyFormat,
+                                            weightFormat = weightFormat,
+                                            hasSelection = selectedProductIds.isNotEmpty(),
+                                            isRestrictedMode = isRestrictedMode
+                                        )
+                                    }
                                 }
-                                
-                                // Summary panel at the end of the list
-                                item(key = "summary") {
-                                    InventorySummaryPanel(
-                                        summary = summary,
-                                        currencyFormat = currencyFormat,
-                                        weightFormat = weightFormat,
-                                        hasSelection = selectedProductIds.isNotEmpty(),
-                                        isRestrictedMode = isRestrictedMode
-                                    )
+                            } else {
+                                // Phone: List layout
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                                ) {
+                                    items(displayItems, key = { it.productId }) { item ->
+                                        val isSelected = item.productId in selectedProductIds
+                                        InventoryItemCard(
+                                            item = item,
+                                            currencyFormat = currencyFormat,
+                                            priceFormat = priceFormat,
+                                            weightFormat = weightFormat,
+                                            isSelected = isSelected,
+                                            showContextMenuOption = !isTotalView,
+                                            isRestrictedMode = isRestrictedMode,
+                                            onClick = {
+                                                selectedProductIds = if (isSelected) {
+                                                    selectedProductIds - item.productId
+                                                } else {
+                                                    selectedProductIds + item.productId
+                                                }
+                                            },
+                                            onTransferClick = {
+                                                selectedItem = item
+                                                showMoveDialog = true
+                                            },
+                                            onAdjustClick = {
+                                                selectedItem = item
+                                                showAdjustDialog = true
+                                            }
+                                        )
+                                    }
+
+                                    // Summary panel at the end of the list
+                                    item(key = "summary") {
+                                        InventorySummaryPanel(
+                                            summary = summary,
+                                            currencyFormat = currencyFormat,
+                                            weightFormat = weightFormat,
+                                            hasSelection = selectedProductIds.isNotEmpty(),
+                                            isRestrictedMode = isRestrictedMode
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -690,6 +748,7 @@ private fun AdjustmentDialog(
                     label = { Text("Фактична вага (кг)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = actualWeight == null && actualWeightText.isNotEmpty()
                 )
                 

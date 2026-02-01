@@ -8,17 +8,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Mock printer service for development and testing.
  * Logs print data to Logcat instead of sending to actual printer.
- * 
+ *
  * Use in debug builds when real printer is not available.
+ * Provided via HardwareModule based on BuildConfig.DEBUG.
  */
-@Singleton
-class MockPrinterService @Inject constructor() : PrinterService {
+class MockPrinterService : PrinterService {
 
     companion object {
         private const val TAG = "MockPrinter"

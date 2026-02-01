@@ -91,7 +91,9 @@ android {
                 // Required for MockK/ByteBuddy on JDK 17+
                 "--add-opens", "java.base/java.lang=ALL-UNNAMED",
                 "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
-                "--add-opens", "java.base/java.util=ALL-UNNAMED"
+                "--add-opens", "java.base/java.util=ALL-UNNAMED",
+                "-XX:+EnableDynamicAgentLoading",
+                "-Djdk.attach.allowAttachSelf=true"
             )
         }
         unitTests.isReturnDefaultValues = true

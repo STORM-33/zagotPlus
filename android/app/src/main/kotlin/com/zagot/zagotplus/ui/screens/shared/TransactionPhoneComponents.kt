@@ -410,6 +410,7 @@ fun TransactionBatchWeighing(
     grossWeight: BigDecimal,
     canAddBatch: Boolean,
     canProceed: Boolean,
+    lastWeighingAddedId: Long,
     onWeightChange: (String) -> Unit,
     onTareCountChange: (String) -> Unit,
     onAddBatch: () -> Unit,
@@ -423,6 +424,13 @@ fun TransactionBatchWeighing(
     LaunchedEffect(Unit) {
         // Prevent crash if composition completes before window is focused
         if (view.isAttachedToWindow) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    // Auto-focus on weight input when a new weighing is added
+    LaunchedEffect(lastWeighingAddedId) {
+        if (lastWeighingAddedId > 0 && view.isAttachedToWindow) {
             focusRequester.requestFocus()
         }
     }

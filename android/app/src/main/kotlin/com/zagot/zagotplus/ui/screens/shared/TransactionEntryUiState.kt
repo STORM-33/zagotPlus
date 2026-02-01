@@ -79,7 +79,10 @@ data class TransactionEntryUiState(
 
     // Sale-specific: inventory tracking (empty for purchase)
     val inventory: List<InventoryItem> = emptyList(),
-    val availableWeight: BigDecimal = BigDecimal.ZERO
+    val availableWeight: BigDecimal = BigDecimal.ZERO,
+
+    // Event tracking
+    val lastWeighingAddedId: Long = 0L // Incrementing counter to trigger UI events
 ) {
     // ==================== COMPUTED PROPERTIES ====================
 

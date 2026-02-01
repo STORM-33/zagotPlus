@@ -22,7 +22,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
-import com.zagot.zagotplus.ui.screens.shared.SaleEntryScreenState
+import com.zagot.zagotplus.ui.screens.shared.TransactionEntryScreenState
+import com.zagot.zagotplus.ui.screens.shared.TransactionEntryMode
+import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
 import com.zagot.zagotplus.hardware.scales.ScalesService
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -125,7 +127,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(testProduct, state.selectedProduct)
         assertEquals(testProduct.defaultSellPrice?.toPlainString(), state.pricePerKg)
-        assertEquals(SaleEntryScreenState.WEIGHING, state.screenState)
+        assertEquals(TransactionEntryScreenState.WEIGHT_ENTRY, state.screenState)
     }
 
     @Test
@@ -331,7 +333,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(1, state.positions.size)
         assertEquals(testProduct, state.positions[0].product)
-        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 
     @Test
@@ -344,10 +346,10 @@ class SaleEntryViewModelTest {
         viewModel.proceedToReview()
 
         viewModel.onPriceChange("55.00")
-        assertTrue(viewModel.uiState.value.canAddPosition)
+        assertTrue(viewModel.uiState.value.canAddBatchPosition)
 
         viewModel.onPriceChange("0")
-        assertFalse(viewModel.uiState.value.canAddPosition)
+        assertFalse(viewModel.uiState.value.canAddBatchPosition)
     }
 
     @Test
@@ -366,7 +368,7 @@ class SaleEntryViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.positions.isEmpty())
-        assertEquals(SaleEntryScreenState.PRODUCT_GRID, state.screenState)
+        assertEquals(TransactionEntryScreenState.PRODUCT_GRID, state.screenState)
     }
 
     // ==================== Totals Tests ====================
@@ -413,7 +415,7 @@ class SaleEntryViewModelTest {
         viewModel.finalize()
         advanceUntilIdle()
 
-        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -424,7 +426,7 @@ class SaleEntryViewModelTest {
         viewModel.finalize()
         advanceUntilIdle()
 
-        assertEquals(SaleEntryScreenState.PRODUCT_GRID, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.PRODUCT_GRID, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -441,7 +443,7 @@ class SaleEntryViewModelTest {
         advanceUntilIdle()
 
         coVerify { saleBatchRepository.createBatchWithTransactions(any(), any()) }
-        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -480,7 +482,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertNotNull(state.error)
         assertFalse(state.isSaving)
-        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 
     // ==================== Navigation Tests ====================
@@ -619,7 +621,7 @@ class SaleEntryViewModelTest {
         }
         coVerify(exactly = 0) { saleBatchRepository.createBatchWithTransactions(any(), any()) }
         
-        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -692,6 +694,6 @@ class SaleEntryViewModelTest {
         assertNotNull(state.error)
         assertTrue(state.error!!.contains("анулювати"))
         assertFalse(state.isSaving)
-        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 }

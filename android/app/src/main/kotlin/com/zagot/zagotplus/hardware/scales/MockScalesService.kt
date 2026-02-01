@@ -16,18 +16,16 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlin.random.Random
 
 /**
  * Mock scales service for development and testing.
  * Simulates weight readings with configurable behavior.
- * 
+ *
  * Use in debug builds when real scales are not available.
+ * Provided via HardwareModule based on BuildConfig.DEBUG.
  */
-@Singleton
-class MockScalesService @Inject constructor() : ScalesService {
+class MockScalesService : ScalesService {
 
     private val _connectionState = MutableStateFlow<ScalesConnectionState>(
         ScalesConnectionState.Disconnected

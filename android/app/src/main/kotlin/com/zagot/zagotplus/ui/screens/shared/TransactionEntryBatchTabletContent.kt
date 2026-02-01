@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -37,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -155,6 +157,7 @@ fun TransactionEntryBatchTabletContent(
                     price = uiState.currentPrice,
                     activeInputField = uiState.activeInputField,
                     selectedBatchId = uiState.tabletEditingBatchId,
+                    lastWeighingAddedId = uiState.lastWeighingAddedId,
                     onFieldSelect = onSelectInputFieldAndClear,
                     onSelectBatch = onSelectBatch,
                     onRemoveBatch = onRemoveBatch,
@@ -262,6 +265,7 @@ private fun BatchWeightingsPanel(
     price: String,
     activeInputField: TransactionInputField,
     selectedBatchId: String?,
+    lastWeighingAddedId: Long,
     onFieldSelect: (TransactionInputField) -> Unit,
     onSelectBatch: (WeighingBatch) -> Unit,
     onRemoveBatch: (String) -> Unit,
@@ -357,13 +361,24 @@ private fun BatchWeightingsPanel(
                 )
             }
         } else {
+            val listState = rememberLazyListState()
+            
+            // Auto-scroll to bottom when a new weighing is added
+            LaunchedEffect(lastWeighingAddedId) {
+                if (batches.isNotEmpty()) {
+                    listState.animateScrollToItem(batches.lastIndex)
+                }
+            }
+            
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(batches.asReversed()) { batch ->
+                // Display in chronological order (oldest top, newest bottom)
+                items(batches) { batch ->
                     BatchWeightingItem(
                         batchNumber = batches.indexOf(batch) + 1,
                         batch = batch,

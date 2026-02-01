@@ -331,10 +331,12 @@ fun NavGraph(
             composable(Destination.History.route) {
                 HistoryScreen(
                     onNavigateToEditPurchase = { batchId ->
-                        navController.navigate(Destination.PurchaseEntry.createRoute(batchId))
+                        // Use REGULAR mode for redaction - batch weightings are not saved
+                        navController.navigate(Destination.PurchaseEntry.createRoute(batchId, PurchaseMode.REGULAR))
                     },
                     onNavigateToEditSale = { batchId ->
-                        navController.navigate(Destination.SaleEntry.createRoute(batchId))
+                        // Use REGULAR mode for redaction - batch weightings are not saved
+                        navController.navigate(Destination.SaleEntry.createRoute(batchId, SaleMode.REGULAR))
                     },
                     isRestrictedMode = isRestrictedMode
                 )

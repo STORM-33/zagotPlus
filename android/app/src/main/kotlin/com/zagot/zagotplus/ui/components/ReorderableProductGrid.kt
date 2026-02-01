@@ -47,8 +47,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.theme.Green80
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import java.math.BigDecimal
@@ -113,8 +115,6 @@ fun ReorderableProductGrid(
         ) {
             items(orderedProducts, key = { it.id }) { product ->
                 ReorderableItem(reorderableLazyGridState, key = product.id) { isDragging ->
-                    val elevation = if (isDragging) 8.dp else 2.dp
-                    
                     ProductTile(
                         product = product,
                         onClick = { onProductClick(product) },
@@ -122,8 +122,8 @@ fun ReorderableProductGrid(
                         priceType = priceType,
                         availableKg = inventoryMap?.get(product.id),
                         isSelected = product.id == selectedProductId,
+                        isDragging = isDragging,
                         modifier = Modifier
-                            .shadow(elevation, RoundedCornerShape(16.dp))
                             .longPressDraggableHandle(
                                 onDragStopped = {
                                     onOrderChanged(orderedProductIds)
@@ -148,42 +148,50 @@ private fun ProductTile(
     priceType: PriceType,
     availableKg: BigDecimal?,
     isSelected: Boolean = false,
+    isDragging: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.0") }
     val isLowStock = availableKg != null && availableKg <= BigDecimal.ZERO
     
-    // Selection border color (green) for product grid
-    val selectionBorderColor = Color(0xFF4CAF50)
+    // Animate selection/drag: scale up and elevate
+    // Combine isSelected and isDragging for visual state
+    val isLifted = isSelected || isDragging
     
-    // Animate selection: scale up and elevate shadow
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.05f else 1f,
+        targetValue = if (isLifted) 1.05f else 1f,
         animationSpec = tween(200),
         label = "productTileScale"
     )
-    val shadowElevation by animateDpAsState(
-        targetValue = if (isSelected) 8.dp else 2.dp,
+    val elevation by animateDpAsState(
+        targetValue = if (isDragging) 12.dp else if (isSelected) 8.dp else 2.dp,
         animationSpec = tween(200),
-        label = "productTileShadow"
+        label = "productTileElevation"
     )
+    
+    // Stronger visual cues for selection
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val border = if (isSelected) BorderStroke(7.dp, Green80) else null
+    val textColor = if (isSelected) Green80 else Color.White
+    val secondaryTextColor = if (isSelected) Green80 else Color.White.copy(alpha = 0.9f)
     
     Card(
         modifier = modifier
+            .zIndex(if (isLifted) 1f else 0f)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .shadow(shadowElevation, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         colors = CardDefaults.cardColors(
             containerColor = if (isLowStock) 
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
             else 
                 MaterialTheme.colorScheme.surfaceVariant
         ),
-        border = if (isSelected) BorderStroke(3.dp, selectionBorderColor) else null
+        border = border
     ) {
         // Full-tile image with text overlay
         Box(
@@ -224,7 +232,7 @@ private fun ProductTile(
                     Text(
                         text = product.name,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
+                        color = textColor,
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
@@ -238,7 +246,7 @@ private fun ProductTile(
                                 text = "${decimalFormat.format(availableKg)} кг",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
-                                color = if (isLowStock) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.9f)
+                                color = if (isLowStock) MaterialTheme.colorScheme.error else secondaryTextColor
                             )
                         }
                         showPrice -> {
@@ -251,7 +259,7 @@ private fun ProductTile(
                                     text = "₴${it.toPlainString()}/кг",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
-                                    color = Color.White.copy(alpha = 0.9f)
+                                    color = secondaryTextColor
                                 )
                             }
                         }

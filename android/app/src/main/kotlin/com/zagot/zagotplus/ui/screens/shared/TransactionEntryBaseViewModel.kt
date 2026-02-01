@@ -100,22 +100,31 @@ abstract class TransactionEntryBaseViewModel(
 
     private fun loadProductsAndLocations() {
         viewModelScope.launch {
-            // Load locations for edit mode dropdown
-            val locations = locationRepository.getAllLocations().first()
-            _uiState.update { it.copy(availableLocations = locations) }
+            try {
+                // Load locations for edit mode dropdown
+                val locations = locationRepository.getAllLocations().first()
+                _uiState.update { it.copy(availableLocations = locations) }
 
-            productRepository.getActiveProducts().collect { products ->
-                val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
+                productRepository.getActiveProducts().collect { products ->
+                    val orderedProducts = productOrderPreferences.applyOrder(products) { it.id }
+                    _uiState.update {
+                        it.copy(
+                            products = orderedProducts,
+                            isLoading = argBatchId != null // Keep loading if we need to load a batch
+                        )
+                    }
+
+                    // Load batch for editing if batchId was provided
+                    if (argBatchId != null && _uiState.value.editingBatchId == null) {
+                        loadBatchForEditing(argBatchId!!)
+                    }
+                }
+            } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        products = orderedProducts,
-                        isLoading = argBatchId != null // Keep loading if we need to load a batch
+                        isLoading = false,
+                        error = e.message ?: "Помилка завантаження даних"
                     )
-                }
-
-                // Load batch for editing if batchId was provided
-                if (argBatchId != null && _uiState.value.editingBatchId == null) {
-                    loadBatchForEditing(argBatchId!!)
                 }
             }
         }
@@ -196,7 +205,10 @@ abstract class TransactionEntryBaseViewModel(
                         currentWeight = "",
                         currentPrice = getDefaultPrice(product)?.toPlainString() ?: "",
                         isManualWeightMode = false,
-                        screenState = TransactionEntryScreenState.WEIGHT_ENTRY
+                        screenState = TransactionEntryScreenState.WEIGHT_ENTRY,
+                        // Ensure tablet state is cleared
+                        tabletEditingBatchId = null,
+                        tabletReviewingPositionId = null
                     )
                 }
             }
@@ -205,34 +217,29 @@ abstract class TransactionEntryBaseViewModel(
 
         // BATCH MODE
         if (state.isTabletMode) {
-            // TABLET BATCH: Check for existing position or create new empty position
-            val existingPosition = state.positions.find { it.product.id == product.id }
+            // TABLET BATCH: ALWAYS Create new empty position for batch tablet mode
+            // We do NOT reopen existing positions to allow multiple batches for same product
+            // with different parameters (price, tare)
+            val defaultPrice = getDefaultPrice(product) ?: BigDecimal.ZERO
 
-            if (existingPosition != null) {
-                reviewPositionWeightings(existingPosition)
-            } else {
-                // Create new empty position for batch tablet mode
-                val defaultPrice = getDefaultPrice(product) ?: BigDecimal.ZERO
+            val newPosition = TransactionPosition(
+                product = product,
+                batches = emptyList(),
+                tareWeightPerUnit = BigDecimal("0.1"),
+                pricePerKg = defaultPrice
+            )
 
-                val newPosition = TransactionPosition(
-                    product = product,
-                    batches = emptyList(),
-                    tareWeightPerUnit = BigDecimal("0.1"),
-                    pricePerKg = defaultPrice
+            _uiState.update {
+                it.copy(
+                    positions = it.positions + newPosition,
+                    tabletReviewingPositionId = newPosition.id,
+                    currentWeight = "",
+                    currentTareCount = "",
+                    tareWeightPerUnit = "0.1",
+                    currentPrice = if (defaultPrice > BigDecimal.ZERO) defaultPrice.toPlainString() else "",
+                    selectedProduct = null,
+                    activeInputField = TransactionInputField.WEIGHT
                 )
-
-                _uiState.update {
-                    it.copy(
-                        positions = it.positions + newPosition,
-                        tabletReviewingPositionId = newPosition.id,
-                        currentWeight = "",
-                        currentTareCount = "",
-                        tareWeightPerUnit = "0.1",
-                        currentPrice = if (defaultPrice > BigDecimal.ZERO) defaultPrice.toPlainString() else "",
-                        selectedProduct = null,
-                        activeInputField = TransactionInputField.WEIGHT
-                    )
-                }
             }
             resetTabletState()
         } else {
@@ -247,7 +254,10 @@ abstract class TransactionEntryBaseViewModel(
                     tareWeightPerUnit = "0.1",
                     currentPrice = if (defaultPrice > BigDecimal.ZERO) defaultPrice.toPlainString() else "",
                     screenState = TransactionEntryScreenState.WEIGHING,
-                    activeInputField = TransactionInputField.WEIGHT
+                    activeInputField = TransactionInputField.WEIGHT,
+                    // Ensure tablet state is cleared even if we are in phone mode (for consistency/shared logic tests)
+                    tabletEditingBatchId = null,
+                    tabletReviewingPositionId = null
                 )
             }
         }
@@ -530,7 +540,8 @@ abstract class TransactionEntryBaseViewModel(
                     currentWeight = "",
                     currentTareCount = "",
                     tabletEditingBatchId = null,
-                    activeInputField = TransactionInputField.WEIGHT
+                    activeInputField = TransactionInputField.WEIGHT,
+                    lastWeighingAddedId = System.currentTimeMillis() // Trigger scroll
                 )
             }
         } else {
@@ -544,7 +555,8 @@ abstract class TransactionEntryBaseViewModel(
                 it.copy(
                     currentBatches = it.currentBatches + batch,
                     currentWeight = "",
-                    currentTareCount = ""
+                    currentTareCount = "",
+                    lastWeighingAddedId = System.currentTimeMillis() // Trigger focus
                 )
             }
         }

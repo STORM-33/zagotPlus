@@ -13,6 +13,14 @@ import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.repository.LocationRepository
+import com.zagot.zagotplus.hardware.printer.BluetoothDeviceInfo
+import com.zagot.zagotplus.hardware.printer.PrinterConfig
+import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
+import com.zagot.zagotplus.hardware.printer.PrinterService
+import com.zagot.zagotplus.hardware.printer.escpos.EscPosEncoder
+import com.zagot.zagotplus.hardware.scales.ScalesConfig
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesService
 import com.zagot.zagotplus.sync.SyncManager
 import com.zagot.zagotplus.sync.SyncStatus
 import com.zagot.zagotplus.sync.SyncStatusRepository
@@ -21,7 +29,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
@@ -41,7 +48,16 @@ data class SettingsUiState(
     val isRestrictedMode: Boolean = false,
     val isExporting: Boolean = false,
     val exportSuccess: Boolean = false,
-    val exportError: String? = null
+    val exportError: String? = null,
+    // Hardware state
+    val scalesConnectionState: ScalesConnectionState = ScalesConnectionState.Disconnected,
+    val scalesConfig: ScalesConfig? = null,
+    val printerConnectionState: PrinterConnectionState = PrinterConnectionState.Disconnected,
+    val printerConfig: PrinterConfig? = null,
+    val availablePrinters: List<BluetoothDeviceInfo> = emptyList(),
+    val isTestingScales: Boolean = false,
+    val isTestingPrinter: Boolean = false,
+    val hardwareTestResult: String? = null
 )
 
 @HiltViewModel
@@ -53,7 +69,9 @@ class SettingsViewModel @Inject constructor(
     private val authPreferences: AuthPreferences,
     private val locationRepository: LocationRepository,
     private val transactionDao: TransactionDao,
-    private val databaseExporter: DatabaseExporter
+    private val databaseExporter: DatabaseExporter,
+    private val scalesService: ScalesService,
+    private val printerService: PrinterService
 ) : ViewModel() {
 
     private val _copySuccess = MutableStateFlow(false)
@@ -62,6 +80,9 @@ class SettingsViewModel @Inject constructor(
     private val _isExporting = MutableStateFlow(false)
     private val _exportSuccess = MutableStateFlow(false)
     private val _exportError = MutableStateFlow<String?>(null)
+    private val _isTestingScales = MutableStateFlow(false)
+    private val _isTestingPrinter = MutableStateFlow(false)
+    private val _hardwareTestResult = MutableStateFlow<String?>(null)
 
     private data class LocalState(
         val selectedLocationId: UUID?,
@@ -69,20 +90,27 @@ class SettingsViewModel @Inject constructor(
         val copySuccess: Boolean,
         val isExporting: Boolean,
         val exportSuccess: Boolean,
-        val exportError: String?
+        val exportError: String?,
+        val isTestingScales: Boolean,
+        val isTestingPrinter: Boolean,
+        val hardwareTestResult: String?
     )
 
     private val localState = combine(
         combine(_selectedLocationId, _isRestrictedMode, _copySuccess) { a, b, c -> Triple(a, b, c) },
-        combine(_isExporting, _exportSuccess, _exportError) { a, b, c -> Triple(a, b, c) }
-    ) { (selectedLocationId, isRestrictedMode, copySuccess), (isExporting, exportSuccess, exportError) ->
+        combine(_isExporting, _exportSuccess, _exportError) { a, b, c -> Triple(a, b, c) },
+        combine(_isTestingScales, _isTestingPrinter, _hardwareTestResult) { a, b, c -> Triple(a, b, c) }
+    ) { (selectedLocationId, isRestrictedMode, copySuccess), (isExporting, exportSuccess, exportError), (isTestingScales, isTestingPrinter, hardwareTestResult) ->
         LocalState(
             selectedLocationId = selectedLocationId,
             isRestrictedMode = isRestrictedMode,
             copySuccess = copySuccess,
             isExporting = isExporting,
             exportSuccess = exportSuccess,
-            exportError = exportError
+            exportError = exportError,
+            isTestingScales = isTestingScales,
+            isTestingPrinter = isTestingPrinter,
+            hardwareTestResult = hardwareTestResult
         )
     }
 
@@ -90,8 +118,21 @@ class SettingsViewModel @Inject constructor(
         syncStatusRepository.syncStatus,
         transactionDao.getUnsyncedCountFlow(),
         locationRepository.getAllLocations(),
-        localState
-    ) { syncStatus, pendingCount, locations, local ->
+        localState,
+        scalesService.connectionState,
+        printerService.connectionState,
+        printerService.availableDevices
+    ) { values ->
+        val syncStatus = values[0] as SyncStatus
+        val pendingCount = values[1] as Int
+        @Suppress("UNCHECKED_CAST")
+        val locations = values[2] as List<Location>
+        val local = values[3] as LocalState
+        val scalesState = values[4] as ScalesConnectionState
+        val printerState = values[5] as PrinterConnectionState
+        @Suppress("UNCHECKED_CAST")
+        val availablePrinters = values[6] as List<BluetoothDeviceInfo>
+
         SettingsUiState(
             syncStatus = syncStatus,
             pendingCount = pendingCount,
@@ -103,7 +144,15 @@ class SettingsViewModel @Inject constructor(
             isRestrictedMode = local.isRestrictedMode,
             isExporting = local.isExporting,
             exportSuccess = local.exportSuccess,
-            exportError = local.exportError
+            exportError = local.exportError,
+            scalesConnectionState = scalesState,
+            scalesConfig = devicePreferences.getScalesConfig(),
+            printerConnectionState = printerState,
+            printerConfig = devicePreferences.getPrinterConfig(),
+            availablePrinters = availablePrinters,
+            isTestingScales = local.isTestingScales,
+            isTestingPrinter = local.isTestingPrinter,
+            hardwareTestResult = local.hardwareTestResult
         )
     }
     .distinctUntilChanged()
@@ -114,7 +163,9 @@ class SettingsViewModel @Inject constructor(
             deviceId = devicePreferences.getDeviceId(),
             selectedLocationId = devicePreferences.getSelectedLocationId(),
             appVersion = BuildConfig.VERSION_NAME,
-            isRestrictedMode = authPreferences.isRestrictedMode()
+            isRestrictedMode = authPreferences.isRestrictedMode(),
+            scalesConfig = devicePreferences.getScalesConfig(),
+            printerConfig = devicePreferences.getPrinterConfig()
         )
     )
 
@@ -181,5 +232,152 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissExportError() {
         _exportError.value = null
+    }
+
+    // ==================== Hardware Methods ====================
+
+    /**
+     * Save scales configuration.
+     */
+    fun saveScalesConfig(config: ScalesConfig) {
+        devicePreferences.setScalesConfig(config)
+    }
+
+    /**
+     * Test scales connection.
+     */
+    fun testScalesConnection() {
+        if (_isTestingScales.value) return
+
+        viewModelScope.launch {
+            _isTestingScales.value = true
+            _hardwareTestResult.value = null
+
+            try {
+                scalesService.connect()
+                kotlinx.coroutines.delay(2000) // Wait for connection
+
+                val state = scalesService.connectionState.value
+                _hardwareTestResult.value = when (state) {
+                    is ScalesConnectionState.Connected -> "Підключено до ваг"
+                    is ScalesConnectionState.Connecting -> "Підключення..."
+                    is ScalesConnectionState.Error -> state.error.toDisplayMessage()
+                    else -> "Не вдалося підключитися"
+                }
+            } catch (e: Exception) {
+                _hardwareTestResult.value = "Помилка: ${e.message}"
+            } finally {
+                _isTestingScales.value = false
+            }
+        }
+    }
+
+    /**
+     * Disconnect scales.
+     */
+    fun disconnectScales() {
+        viewModelScope.launch {
+            scalesService.disconnect()
+        }
+    }
+
+    /**
+     * Save printer configuration.
+     */
+    fun savePrinterConfig(config: PrinterConfig) {
+        devicePreferences.setPrinterConfig(config)
+    }
+
+    /**
+     * Start scanning for Bluetooth printers.
+     */
+    fun scanForPrinters() {
+        viewModelScope.launch {
+            printerService.scan()
+        }
+    }
+
+    /**
+     * Stop scanning for printers.
+     */
+    fun stopPrinterScan() {
+        printerService.stopScan()
+    }
+
+    /**
+     * Connect to a printer by address.
+     */
+    fun connectPrinter(address: String) {
+        viewModelScope.launch {
+            printerService.connect(address)
+        }
+    }
+
+    /**
+     * Disconnect printer.
+     */
+    fun disconnectPrinter() {
+        viewModelScope.launch {
+            printerService.disconnect()
+        }
+    }
+
+    /**
+     * Test print a sample receipt.
+     */
+    fun testPrint() {
+        if (_isTestingPrinter.value) return
+
+        viewModelScope.launch {
+            _isTestingPrinter.value = true
+            _hardwareTestResult.value = null
+
+            try {
+                // Create test receipt
+                val testReceipt = EscPosEncoder()
+                    .initUkrainian()
+                    .alignCenter()
+                    .boldOn()
+                    .doubleSize()
+                    .text("ЗАГОТ+")
+                    .newLine()
+                    .normalSize()
+                    .boldOff()
+                    .text("Тестовий друк")
+                    .newLine()
+                    .separator('=')
+                    .alignLeft()
+                    .text("Якщо ви бачите цей текст,")
+                    .newLine()
+                    .text("принтер працює правильно.")
+                    .newLine()
+                    .text("Українська: ЇЄІҐ їєіґ")
+                    .newLine()
+                    .separator('=')
+                    .alignCenter()
+                    .text("Дякуємо!")
+                    .feedLines(3)
+                    .cut()
+                    .toByteArray()
+
+                val result = printerService.print(testReceipt)
+                _hardwareTestResult.value = if (result.isSuccess) {
+                    "Друк успішний"
+                } else {
+                    "Помилка друку: ${result.exceptionOrNull()?.message}"
+                }
+            } catch (e: Exception) {
+                _hardwareTestResult.value = "Помилка: ${e.message}"
+            } finally {
+                _isTestingPrinter.value = false
+            }
+        }
+    }
+
+    /**
+     * Dismiss hardware test result.
+     */
+    fun dismissHardwareTestResult() {
+        _hardwareTestResult.value = null
     }
 }

@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -82,6 +84,7 @@ import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.SkeletonList
 import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
 import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
+import com.zagot.zagotplus.ui.components.isTablet
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.ZoneId
@@ -188,59 +191,73 @@ fun HistoryScreen(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize()
-    ) {
-        // Filter chip row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+    val isTabletLayout = isTablet()
+    val horizontalPadding = adaptiveHorizontalPadding()
+
+    // Filter bottom sheet (phone only)
+    if (showFilterSheet && !isTabletLayout) {
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            sheetState = sheetState
         ) {
-            // Filter chip that opens bottom sheet
-            FilterChip(
-                selected = activeFilterCount > 0,
-                onClick = { showFilterSheet = true },
-                label = { Text("Фільтри${if (activeFilterCount > 0) " ($activeFilterCount)" else ""}") },
-                leadingIcon = { Icon(Icons.Default.FilterList, null) }
+            FilterContent(
+                uiState = uiState,
+                isRestrictedMode = isRestrictedMode,
+                onToggleTypeFilter = viewModel::toggleTypeFilter,
+                onDateRangeChange = viewModel::setDateRange,
+                onLocationChange = viewModel::setLocationFilter,
+                onToggleShowDeleted = viewModel::toggleShowDeleted,
+                onClearFilters = viewModel::clearFilters,
+                onApply = { showFilterSheet = false }
             )
         }
+    }
 
-        HorizontalDivider()
-        
-        // Filter bottom sheet
-        if (showFilterSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showFilterSheet = false },
-                sheetState = sheetState
+    if (isTabletLayout) {
+        // Tablet: Side-by-side layout with inline filters
+        Row(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPadding, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // Left panel: Filters
+            Card(
+                modifier = Modifier
+                    .width(280.dp)
+                    .fillMaxHeight(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Фільтри", style = MaterialTheme.typography.titleMedium)
-                    
+                    Text(
+                        text = "Фільтри",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
                     // Batch type filter chips
                     Text("Тип операції", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         BatchType.entries.forEach { type ->
                             FilterChip(
                                 selected = type in uiState.selectedTypes,
                                 onClick = { viewModel.toggleTypeFilter(type) },
-                                label = { Text(type.toDisplayString()) }
+                                label = { Text(type.toDisplayString()) },
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
-                    
+
+                    HorizontalDivider()
+
                     // Date range dropdown
                     Text("Період", style = MaterialTheme.typography.labelMedium)
                     DateRangeDropdown(
@@ -248,8 +265,7 @@ fun HistoryScreen(
                         onDateRangeChange = viewModel::setDateRange,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    // Location dropdown
+
                     // Location dropdown - hide in restricted mode
                     if (!isRestrictedMode) {
                         Text("Локація", style = MaterialTheme.typography.labelMedium)
@@ -260,169 +276,319 @@ fun HistoryScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                    
+
+                    HorizontalDivider()
+
                     // Show deleted toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterChip(
-                            selected = uiState.showDeleted,
-                            onClick = { viewModel.toggleShowDeleted() },
-                            label = { Text("Показати видалені") },
-                            leadingIcon = if (uiState.showDeleted) {
-                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                    }
-                    
-                    // Action buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (uiState.hasActiveFilters) {
-                            TextButton(
-                                onClick = { viewModel.clearFilters() },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Скинути")
-                            }
-                        }
-                        Button(
-                            onClick = { showFilterSheet = false },
-                            modifier = Modifier.weight(1f)
+                    FilterChip(
+                        selected = uiState.showDeleted,
+                        onClick = { viewModel.toggleShowDeleted() },
+                        label = { Text("Показати видалені") },
+                        leadingIcon = if (uiState.showDeleted) {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Clear filters button
+                    if (uiState.hasActiveFilters) {
+                        TextButton(
+                            onClick = { viewModel.clearFilters() },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Застосувати")
+                            Icon(Icons.Default.Clear, null, modifier = Modifier.size(18.dp))
+                            Text("Скинути фільтри")
                         }
                     }
                 }
             }
+
+            // Right panel: Content
+            HistoryContent(
+                uiState = uiState,
+                expandedBatchIds = expandedBatchIds,
+                expandedBatchTransactions = expandedBatchTransactions,
+                isLoadingBatchDetails = isLoadingBatchDetails,
+                listState = listState,
+                horizontalPadding = 0.dp,
+                currencyFormat = currencyFormat,
+                weightFormat = weightFormat,
+                dateFormatter = dateFormatter,
+                onRefresh = viewModel::refresh,
+                onToggleBatchExpansion = viewModel::toggleBatchExpansion,
+                onNavigateToEditPurchase = onNavigateToEditPurchase,
+                onNavigateToEditSale = onNavigateToEditSale,
+                onVoidBatch = { batchId, batchType -> pendingVoidBatch = batchId to batchType },
+                onClearFilters = viewModel::clearFilters,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    } else {
+        // Phone: Stacked layout with filter button
+        Column(
+            modifier = modifier.fillMaxSize()
+        ) {
+            // Filter chip row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = activeFilterCount > 0,
+                    onClick = { showFilterSheet = true },
+                    label = { Text("Фільтри${if (activeFilterCount > 0) " ($activeFilterCount)" else ""}") },
+                    leadingIcon = { Icon(Icons.Default.FilterList, null) }
+                )
+            }
+
+            HorizontalDivider()
+
+            // Content with pull-to-refresh
+            HistoryContent(
+                uiState = uiState,
+                expandedBatchIds = expandedBatchIds,
+                expandedBatchTransactions = expandedBatchTransactions,
+                isLoadingBatchDetails = isLoadingBatchDetails,
+                listState = listState,
+                horizontalPadding = 16.dp,
+                currencyFormat = currencyFormat,
+                weightFormat = weightFormat,
+                dateFormatter = dateFormatter,
+                onRefresh = viewModel::refresh,
+                onToggleBatchExpansion = viewModel::toggleBatchExpansion,
+                onNavigateToEditPurchase = onNavigateToEditPurchase,
+                onNavigateToEditSale = onNavigateToEditSale,
+                onVoidBatch = { batchId, batchType -> pendingVoidBatch = batchId to batchType },
+                onClearFilters = viewModel::clearFilters,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterContent(
+    uiState: HistoryUiState,
+    isRestrictedMode: Boolean,
+    onToggleTypeFilter: (BatchType) -> Unit,
+    onDateRangeChange: (DateRange?) -> Unit,
+    onLocationChange: (UUID?) -> Unit,
+    onToggleShowDeleted: () -> Unit,
+    onClearFilters: () -> Unit,
+    onApply: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Фільтри", style = MaterialTheme.typography.titleMedium)
+
+        // Batch type filter chips
+        Text("Тип операції", style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BatchType.entries.forEach { type ->
+                FilterChip(
+                    selected = type in uiState.selectedTypes,
+                    onClick = { onToggleTypeFilter(type) },
+                    label = { Text(type.toDisplayString()) }
+                )
+            }
         }
 
-        // Content with pull-to-refresh
-        val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
-        
-        SwipeRefresh(
-            state = swipeRefreshState,
-            onRefresh = { viewModel.refresh() },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            when {
-                uiState.isLoading && uiState.batches.isEmpty() -> {
-                    SkeletonList(itemCount = 5) { BatchCardSkeleton() }
-                }
-                uiState.batches.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        EmptyState(
-                            icon = EmptyStateIcons.History,
-                            title = if (uiState.hasActiveFilters) {
-                                "Немає результатів"
-                            } else {
-                                "Немає операцій"
-                            },
-                            description = if (uiState.hasActiveFilters) {
-                                "Спробуйте змінити фільтри"
-                            } else {
-                                "Операції з'являться тут після закупівель або продажів"
-                            },
-                            actionLabel = if (uiState.hasActiveFilters) "Скинути фільтри" else null,
-                            onAction = if (uiState.hasActiveFilters) viewModel::clearFilters else null
-                        )
-                    }
-                }
-                else -> {
-                    // Group batches by date
-                    val dateDividerFormatter = remember { DateTimeFormatter.ofPattern("dd.MM") }
-                    val batchesByDate = remember(uiState.batches) {
-                        uiState.batches.groupBy { batch ->
-                            batch.createdAt.atZone(ZoneId.systemDefault()).toLocalDate()
-                        }.toSortedMap(compareByDescending { it })
-                    }
-                    val horizontalPadding = adaptiveHorizontalPadding()
-                    val itemSpacing = adaptiveItemSpacing()
-                    
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(itemSpacing)
-                    ) {
-                        batchesByDate.forEach { (date, batchesForDate) ->
-                            // Date divider
-                            stickyHeader(key = "date_$date") {
-                                DateDivider(
-                                    date = date,
-                                    formatter = dateDividerFormatter,
-                                    itemCount = batchesForDate.size
-                                )
-                            }
-                            
-                            // Batches for this date
-                            items(batchesForDate, key = { it.id }) { batch ->
-                                val isExpanded = batch.id in expandedBatchIds
-                                val transactions = expandedBatchTransactions[batch.id]
-                                val isLoadingTransactions = batch.id in isLoadingBatchDetails
+        // Date range dropdown
+        Text("Період", style = MaterialTheme.typography.labelMedium)
+        DateRangeDropdown(
+            dateRange = uiState.dateRange,
+            onDateRangeChange = onDateRangeChange,
+            modifier = Modifier.fillMaxWidth()
+        )
 
-                                ExpandableBatchCard(
-                                    batch = batch,
-                                    isExpanded = isExpanded,
-                                    transactions = transactions,
-                                    isLoadingTransactions = isLoadingTransactions,
-                                    onClick = { viewModel.toggleBatchExpansion(batch.id) },
-                                    onEditClick = { batchId ->
-                                        when (batch) {
-                                            is HistoryBatchDisplayItem.RealBatch -> 
-                                                onNavigateToEditPurchase(batchId.toString())
-                                            is HistoryBatchDisplayItem.RealSaleBatch -> 
-                                                onNavigateToEditSale(batchId.toString())
-                                            is HistoryBatchDisplayItem.EditedBatch -> {
-                                                // Navigate based on batch type
-                                                when (batch.batchType) {
-                                                    BatchType.PURCHASE -> onNavigateToEditPurchase(batchId.toString())
-                                                    BatchType.SALE -> onNavigateToEditSale(batchId.toString())
-                                                    else -> { /* Cannot edit */ }
-                                                }
-                                            }
-                                            is HistoryBatchDisplayItem.VirtualBatch,
-                                            is HistoryBatchDisplayItem.TransferBatch -> 
-                                                { /* Virtual/transfer batches cannot be edited */ }
-                                        }
-                                    },
-                                    onDeleteClick = { batchId ->
-                                        when (batch) {
-                                            is HistoryBatchDisplayItem.RealBatch -> 
-                                                pendingVoidBatch = batchId to BatchType.PURCHASE
-                                            is HistoryBatchDisplayItem.RealSaleBatch -> 
-                                                pendingVoidBatch = batchId to BatchType.SALE
-                                            is HistoryBatchDisplayItem.EditedBatch -> 
-                                                pendingVoidBatch = batchId to batch.batchType
-                                            is HistoryBatchDisplayItem.VirtualBatch,
-                                            is HistoryBatchDisplayItem.TransferBatch -> 
-                                                { /* Virtual/transfer batches cannot be deleted */ }
-                                        }
-                                    },
-                                    currencyFormat = currencyFormat,
-                                    weightFormat = weightFormat,
-                                    dateFormatter = dateFormatter,
-                                    modifier = Modifier.animateItemPlacement()
-                                )
-                            }
+        // Location dropdown - hide in restricted mode
+        if (!isRestrictedMode) {
+            Text("Локація", style = MaterialTheme.typography.labelMedium)
+            LocationDropdown(
+                selectedLocationId = uiState.selectedLocationId,
+                locations = uiState.locations,
+                onLocationChange = onLocationChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Show deleted toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = uiState.showDeleted,
+                onClick = onToggleShowDeleted,
+                label = { Text("Показати видалені") },
+                leadingIcon = if (uiState.showDeleted) {
+                    { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                } else null
+            )
+        }
+
+        // Action buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (uiState.hasActiveFilters) {
+                TextButton(
+                    onClick = onClearFilters,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Скинути")
+                }
+            }
+            Button(
+                onClick = onApply,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Застосувати")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HistoryContent(
+    uiState: HistoryUiState,
+    expandedBatchIds: Set<String>,
+    expandedBatchTransactions: Map<String, List<HistoryDisplayItem>>,
+    isLoadingBatchDetails: Set<String>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
+    dateFormatter: DateTimeFormatter,
+    onRefresh: () -> Unit,
+    onToggleBatchExpansion: (String) -> Unit,
+    onNavigateToEditPurchase: (String) -> Unit,
+    onNavigateToEditSale: (String) -> Unit,
+    onVoidBatch: (UUID, BatchType) -> Unit,
+    onClearFilters: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val swipeRefreshState = rememberSwipeRefreshState(uiState.isLoading)
+
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize()
+    ) {
+        when {
+            uiState.isLoading && uiState.batches.isEmpty() -> {
+                SkeletonList(itemCount = 5) { BatchCardSkeleton() }
+            }
+            uiState.batches.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyState(
+                        icon = EmptyStateIcons.History,
+                        title = if (uiState.hasActiveFilters) "Немає результатів" else "Немає операцій",
+                        description = if (uiState.hasActiveFilters) "Спробуйте змінити фільтри" else "Операції з'являться тут після закупівель або продажів",
+                        actionLabel = if (uiState.hasActiveFilters) "Скинути фільтри" else null,
+                        onAction = if (uiState.hasActiveFilters) onClearFilters else null
+                    )
+                }
+            }
+            else -> {
+                val dateDividerFormatter = remember { DateTimeFormatter.ofPattern("dd.MM") }
+                val batchesByDate = remember(uiState.batches) {
+                    uiState.batches.groupBy { batch ->
+                        batch.createdAt.atZone(ZoneId.systemDefault()).toLocalDate()
+                    }.toSortedMap(compareByDescending { it })
+                }
+                val itemSpacing = adaptiveItemSpacing()
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                ) {
+                    batchesByDate.forEach { (date, batchesForDate) ->
+                        stickyHeader(key = "date_$date") {
+                            DateDivider(
+                                date = date,
+                                formatter = dateDividerFormatter,
+                                itemCount = batchesForDate.size
+                            )
                         }
 
-                        if (uiState.isLoadingMore) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
+                        items(batchesForDate, key = { it.id }) { batch ->
+                            val isExpanded = batch.id in expandedBatchIds
+                            val transactions = expandedBatchTransactions[batch.id]
+                            val isLoadingTransactions = batch.id in isLoadingBatchDetails
+
+                            ExpandableBatchCard(
+                                batch = batch,
+                                isExpanded = isExpanded,
+                                transactions = transactions,
+                                isLoadingTransactions = isLoadingTransactions,
+                                onClick = { onToggleBatchExpansion(batch.id) },
+                                onEditClick = { batchId ->
+                                    when (batch) {
+                                        is HistoryBatchDisplayItem.RealBatch ->
+                                            onNavigateToEditPurchase(batchId.toString())
+                                        is HistoryBatchDisplayItem.RealSaleBatch ->
+                                            onNavigateToEditSale(batchId.toString())
+                                        is HistoryBatchDisplayItem.EditedBatch -> {
+                                            when (batch.batchType) {
+                                                BatchType.PURCHASE -> onNavigateToEditPurchase(batchId.toString())
+                                                BatchType.SALE -> onNavigateToEditSale(batchId.toString())
+                                                else -> { }
+                                            }
+                                        }
+                                        is HistoryBatchDisplayItem.VirtualBatch,
+                                        is HistoryBatchDisplayItem.TransferBatch -> { }
+                                    }
+                                },
+                                onDeleteClick = { batchId ->
+                                    when (batch) {
+                                        is HistoryBatchDisplayItem.RealBatch ->
+                                            onVoidBatch(batchId, BatchType.PURCHASE)
+                                        is HistoryBatchDisplayItem.RealSaleBatch ->
+                                            onVoidBatch(batchId, BatchType.SALE)
+                                        is HistoryBatchDisplayItem.EditedBatch ->
+                                            onVoidBatch(batchId, batch.batchType)
+                                        is HistoryBatchDisplayItem.VirtualBatch,
+                                        is HistoryBatchDisplayItem.TransferBatch -> { }
+                                    }
+                                },
+                                currencyFormat = currencyFormat,
+                                weightFormat = weightFormat,
+                                dateFormatter = dateFormatter,
+                                modifier = Modifier.animateItemPlacement()
+                            )
+                        }
+                    }
+
+                    if (uiState.isLoadingMore) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
                         }
                     }

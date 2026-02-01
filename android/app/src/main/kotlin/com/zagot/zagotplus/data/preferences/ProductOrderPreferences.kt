@@ -16,7 +16,7 @@ import javax.inject.Singleton
  * Stored locally per device.
  */
 @Singleton
-class ProductOrderPreferences @Inject constructor(
+open class ProductOrderPreferences @Inject constructor(
     @ApplicationContext context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
@@ -36,7 +36,7 @@ class ProductOrderPreferences @Inject constructor(
      * Get the saved product order.
      * Returns empty list if no order is saved.
      */
-    fun getProductOrder(): List<UUID> {
+    open fun getProductOrder(): List<UUID> {
         val orderString = prefs.getString(KEY_PRODUCT_ORDER, null)
         if (orderString.isNullOrBlank()) {
             return emptyList()
@@ -65,7 +65,7 @@ class ProductOrderPreferences @Inject constructor(
      * Products in saved order appear first (in that order),
      * remaining products appear after in their original order.
      */
-    fun <T> applyOrder(products: List<T>, getId: (T) -> UUID): List<T> {
+    open fun <T> applyOrder(products: List<T>, getId: (T) -> UUID): List<T> {
         val savedOrder = getProductOrder()
         if (savedOrder.isEmpty()) return products
 

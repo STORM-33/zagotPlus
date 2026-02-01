@@ -44,6 +44,7 @@ data class ReportsUiState(
     val totalSpendings: BigDecimal = BigDecimal.ZERO,
     val totalEarnings: BigDecimal = BigDecimal.ZERO,
     val totalWeightKg: BigDecimal = BigDecimal.ZERO,
+    val inventoryValue: BigDecimal = BigDecimal.ZERO,
     
     // Spendings breakdown
     val purchaseTotal: BigDecimal = BigDecimal.ZERO,
@@ -221,8 +222,25 @@ class ReportsViewModel @Inject constructor(
                 // Build product list from purchases
                 val productItems = computeProductItems(purchases)
                 
-                // Calculate total weight
                 val totalWeightKg = productItems.sumOf { it.totalWeightKg }
+
+                // Calculate inventory value (current stock potential revenue)
+                // This is NOT affected by date range, only by location
+                val inventoryItems = if (state.selectedLocationId != null) {
+                    transactionRepository.getInventoryByLocation(state.selectedLocationId).first()
+                } else {
+                    transactionRepository.getInventory().first()
+                }
+
+                val inventoryValue = inventoryItems.sumOf { item ->
+                    val product = products[item.productId]
+                    val price = product?.defaultSellPrice ?: BigDecimal.ZERO
+                    if (item.totalWeightKg > BigDecimal.ZERO) {
+                        item.totalWeightKg.multiply(price)
+                    } else {
+                        BigDecimal.ZERO
+                    }
+                }
 
                 val hasData = transactions.isNotEmpty() || totalSpendings > BigDecimal.ZERO || totalEarnings > BigDecimal.ZERO
 
@@ -232,6 +250,7 @@ class ReportsViewModel @Inject constructor(
                         totalSpendings = totalSpendings,
                         totalEarnings = totalEarnings,
                         totalWeightKg = totalWeightKg,
+                        inventoryValue = inventoryValue,
                         purchaseTotal = purchaseTotal,
                         paymentsByCategory = paymentsByCategory,
                         salesItems = salesItems,

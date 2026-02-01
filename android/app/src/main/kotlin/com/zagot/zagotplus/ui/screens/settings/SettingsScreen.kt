@@ -18,17 +18,22 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Hardware
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -60,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.data.preferences.AuthPreferences
+import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
 import com.zagot.zagotplus.sync.SyncStatus
 import com.zagot.zagotplus.ui.components.AdminPinDialog
 import java.time.ZoneId
@@ -86,6 +93,10 @@ fun SettingsScreen(
     var showAdminPinForProducts by remember { mutableStateOf(false) }
     var pendingLocationId by remember { mutableStateOf<java.util.UUID?>(null) }
     var pendingModeChange by remember { mutableStateOf<Boolean?>(null) }
+
+    // State for hardware dialogs
+    var showScalesConfig by remember { mutableStateOf(false) }
+    var showPrinterConfig by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.copySuccess) {
         if (uiState.copySuccess) {
@@ -150,6 +161,45 @@ fun SettingsScreen(
             },
             onDismiss = {
                 showAdminPinForProducts = false
+            }
+        )
+    }
+
+    // Scales configuration dialog
+    if (showScalesConfig) {
+        ScalesConfigDialog(
+            currentConfig = uiState.scalesConfig,
+            connectionState = uiState.scalesConnectionState,
+            isTestingConnection = uiState.isTestingScales,
+            testResult = uiState.hardwareTestResult,
+            onSave = { config -> viewModel.saveScalesConfig(config) },
+            onTestConnection = { viewModel.testScalesConnection() },
+            onDisconnect = { viewModel.disconnectScales() },
+            onDismiss = {
+                showScalesConfig = false
+                viewModel.dismissHardwareTestResult()
+            }
+        )
+    }
+
+    // Printer configuration dialog
+    if (showPrinterConfig) {
+        PrinterConfigDialog(
+            currentConfig = uiState.printerConfig,
+            connectionState = uiState.printerConnectionState,
+            availableDevices = uiState.availablePrinters,
+            isTestingPrint = uiState.isTestingPrinter,
+            testResult = uiState.hardwareTestResult,
+            onScan = { viewModel.scanForPrinters() },
+            onStopScan = { viewModel.stopPrinterScan() },
+            onConnect = { address -> viewModel.connectPrinter(address) },
+            onDisconnect = { viewModel.disconnectPrinter() },
+            onTestPrint = { viewModel.testPrint() },
+            onSave = { config -> viewModel.savePrinterConfig(config) },
+            onDismiss = {
+                showPrinterConfig = false
+                viewModel.stopPrinterScan()
+                viewModel.dismissHardwareTestResult()
             }
         )
     }
@@ -396,6 +446,111 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
+            }
+
+            HorizontalDivider()
+
+            // Hardware section
+            SettingsSection(title = "Обладнання", icon = Icons.Filled.Hardware) {
+                // Scales configuration
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showScalesConfig = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Scale,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Ваги",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = when (uiState.scalesConnectionState) {
+                                    is ScalesConnectionState.Connected -> "Підключено"
+                                    is ScalesConnectionState.Connecting -> "Підключення..."
+                                    is ScalesConnectionState.Reconnecting -> "Перепідключення..."
+                                    is ScalesConnectionState.Error -> "Помилка"
+                                    ScalesConnectionState.Disconnected -> uiState.scalesConfig?.let {
+                                        "${it.ipAddress}:${it.port}"
+                                    } ?: "Не налаштовано"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when (uiState.scalesConnectionState) {
+                                    is ScalesConnectionState.Connected -> MaterialTheme.colorScheme.primary
+                                    is ScalesConnectionState.Error -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = "Налаштувати ваги",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Printer configuration
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPrinterConfig = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Print,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Принтер",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = when (val state = uiState.printerConnectionState) {
+                                    is PrinterConnectionState.Connected -> state.device.name
+                                    is PrinterConnectionState.Connecting -> "Підключення..."
+                                    is PrinterConnectionState.Scanning -> "Пошук..."
+                                    is PrinterConnectionState.Error -> "Помилка"
+                                    PrinterConnectionState.Disconnected -> uiState.printerConfig?.name ?: "Не налаштовано"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when (uiState.printerConnectionState) {
+                                    is PrinterConnectionState.Connected -> MaterialTheme.colorScheme.primary
+                                    is PrinterConnectionState.Error -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = "Налаштувати принтер",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             HorizontalDivider()

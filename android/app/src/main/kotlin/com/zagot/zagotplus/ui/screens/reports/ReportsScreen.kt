@@ -115,6 +115,7 @@ fun ReportsScreen(
             salesItems = uiState.salesItems,
             totalEarnings = uiState.totalEarnings,
             totalSpendings = uiState.totalSpendings,
+            inventoryValue = uiState.inventoryValue,
             currencyFormat = currencyFormat,
             weightFormat = weightFormat,
             onDismiss = { showEarningsDialog = false }
@@ -393,6 +394,7 @@ private fun EarningsDetailDialog(
     salesItems: List<SalesReportItem>,
     totalEarnings: BigDecimal,
     totalSpendings: BigDecimal,
+    inventoryValue: BigDecimal,
     currencyFormat: DecimalFormat,
     weightFormat: DecimalFormat,
     onDismiss: () -> Unit
@@ -482,6 +484,26 @@ private fun EarningsDetailDialog(
                             MaterialTheme.colorScheme.primary 
                         else 
                             MaterialTheme.colorScheme.error
+                    )
+                }
+
+                // Inventory value (potential revenue)
+                // Always shown, unaffected by date range
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "В наявності товар на",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "₴${currencyFormat.format(inventoryValue)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }
