@@ -11,6 +11,8 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.sync.engine.SyncMetadataDao
+import com.zagot.zagotplus.sync.engine.SyncOutboxDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -43,7 +45,8 @@ object DatabaseModule {
         ZagotDatabase.MIGRATION_10_11,
         ZagotDatabase.MIGRATION_11_12,
         ZagotDatabase.MIGRATION_12_13,
-        ZagotDatabase.MIGRATION_13_14
+        ZagotDatabase.MIGRATION_13_14,
+        ZagotDatabase.MIGRATION_14_15
     )
 
     /**
@@ -125,5 +128,17 @@ object DatabaseModule {
     @Singleton
     fun provideCashOperationDao(database: ZagotDatabase): CashOperationDao {
         return database.cashOperationDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncMetadataDao(database: ZagotDatabase): SyncMetadataDao {
+        return database.syncMetadataDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncOutboxDao(database: ZagotDatabase): SyncOutboxDao {
+        return database.syncOutboxDao()
     }
 }

@@ -20,13 +20,17 @@ import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.sync.engine.SyncMetadataDao
+import com.zagot.zagotplus.sync.engine.SyncMetadataEntity
+import com.zagot.zagotplus.sync.engine.SyncOutboxDao
+import com.zagot.zagotplus.sync.engine.SyncOutboxEntity
 
 /**
  * Room database for Zagot+ application.
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 14 (add server_updated_at for server-wins conflict resolution)
+ * Version: 15 (add sync_metadata and sync_outbox tables for realtime sync engine)
  */
 @Database(
     entities = [
@@ -36,9 +40,11 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         PurchaseBatchEntity::class,
         SaleBatchEntity::class,
         ExpenseCategoryEntity::class,
-        CashOperationEntity::class
+        CashOperationEntity::class,
+        SyncMetadataEntity::class,
+        SyncOutboxEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -78,6 +84,16 @@ abstract class ZagotDatabase : RoomDatabase() {
      * Provides access to cash_operations table.
      */
     abstract fun cashOperationDao(): CashOperationDao
+
+    /**
+     * Provides access to sync_metadata table.
+     */
+    abstract fun syncMetadataDao(): SyncMetadataDao
+
+    /**
+     * Provides access to sync_outbox table.
+     */
+    abstract fun syncOutboxDao(): SyncOutboxDao
 
     companion object {
         /**
@@ -537,6 +553,38 @@ abstract class ZagotDatabase : RoomDatabase() {
                 // Add server_updated_at to products
                 db.execSQL("ALTER TABLE products ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_products_server_updated_at ON products(server_updated_at)")
+            }
+        }
+
+        /**
+         * Migration from version 14 to 15: Add sync_metadata and sync_outbox tables
+         * for the realtime sync engine.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // sync_metadata: tracks last_synced_at per table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_metadata (
+                        table_name TEXT NOT NULL PRIMARY KEY,
+                        last_synced_at INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+
+                // sync_outbox: change tracker for offline mutations
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_outbox (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        table_name TEXT NOT NULL,
+                        record_id TEXT NOT NULL,
+                        operation TEXT NOT NULL,
+                        payload TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        synced INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_table_name_record_id ON sync_outbox(table_name, record_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_synced ON sync_outbox(synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_created_at ON sync_outbox(created_at)")
             }
         }
     }
