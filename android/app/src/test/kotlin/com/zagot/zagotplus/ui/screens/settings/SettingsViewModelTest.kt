@@ -7,6 +7,10 @@ import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.preferences.AuthPreferences
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.repository.LocationRepository
+import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
+import com.zagot.zagotplus.hardware.printer.PrinterService
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesService
 import com.zagot.zagotplus.sync.SyncManager
 import com.zagot.zagotplus.sync.SyncStatus
 import com.zagot.zagotplus.sync.SyncStatusRepository
@@ -40,6 +44,8 @@ class SettingsViewModelTest {
     private lateinit var transactionDao: TransactionDao
     private lateinit var clipboardManager: ClipboardManager
     private lateinit var databaseExporter: DatabaseExporter
+    private lateinit var scalesService: ScalesService
+    private lateinit var printerService: PrinterService
     private lateinit var viewModel: SettingsViewModel
 
     private val testDeviceId = "test-device-12345"
@@ -60,7 +66,11 @@ class SettingsViewModelTest {
         transactionDao = mockk()
         clipboardManager = mockk(relaxed = true)
         databaseExporter = mockk(relaxed = true)
+        scalesService = mockk(relaxed = true)
+        printerService = mockk(relaxed = true)
 
+        every { scalesService.connectionState } returns MutableStateFlow(ScalesConnectionState.Disconnected)
+        every { printerService.connectionState } returns MutableStateFlow(PrinterConnectionState.Disconnected)
         every { syncStatusRepository.syncStatus } returns syncStatusFlow
         every { devicePreferences.getDeviceId() } returns testDeviceId
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
@@ -80,7 +90,9 @@ class SettingsViewModelTest {
             authPreferences = authPreferences,
             locationRepository = locationRepository,
             transactionDao = transactionDao,
-            databaseExporter = databaseExporter
+            databaseExporter = databaseExporter,
+            scalesService = scalesService,
+            printerService = printerService
         )
     }
 
