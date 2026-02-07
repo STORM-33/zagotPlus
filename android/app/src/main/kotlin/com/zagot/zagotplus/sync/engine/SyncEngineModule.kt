@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.sync.engine
 
 import androidx.room.RoomDatabase
+import androidx.work.WorkManager
 import com.zagot.zagotplus.data.local.ZagotDatabase
 import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
@@ -13,6 +14,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -56,4 +58,9 @@ object SyncEngineModule {
     @Provides
     @Singleton
     fun provideRoomDatabase(database: ZagotDatabase): RoomDatabase = database
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: android.content.Context): WorkManager =
+        WorkManager.getInstance(context)
 }

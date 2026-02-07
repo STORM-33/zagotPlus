@@ -3,10 +3,16 @@ package com.zagot.zagotplus.sync.engine
 import android.util.Log
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,6 +61,7 @@ class SyncEngineImpl @Inject constructor(
     private val remoteClient: SyncRemoteClient,
     private val outboxDao: SyncOutboxDao,
     private val database: RoomDatabase,
+    private val workManager: WorkManager,
 ) : SyncEngine {
 
     companion object {
@@ -88,6 +95,20 @@ class SyncEngineImpl @Inject constructor(
 
         // Start network monitoring (registers ConnectivityManager callbacks)
         networkMonitor.start()
+
+        // Enqueue periodic safety sync (spec Section 8)
+        val safetySyncRequest = PeriodicWorkRequestBuilder<SafetySyncWorker>(
+            repeatInterval = 15, repeatIntervalTimeUnit = TimeUnit.MINUTES
+        ).setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+        ).build()
+        workManager.enqueueUniquePeriodicWork(
+            SafetySyncWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            safetySyncRequest
+        )
 
         // Wire realtime manager callbacks
         realtimeManager.onLiveEvent = { event ->
