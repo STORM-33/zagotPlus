@@ -331,13 +331,28 @@ class SyncEngineImpl @Inject constructor(
         val eventTs = event.record[config.timestampColumn] as? String
         val pk = event.record[config.primaryKey]?.toString()
 
-        // Log for diagnostic purposes; actual dedup is handled by applyToRoom's UPSERT timestamp guard
         if (pk != null && eventTs != null) {
             Log.d(TAG, "Applying realtime event: ${event.table}/$pk ts=$eventTs")
         }
 
-        config.applyToRoom?.invoke(listOf(event.record))
-            ?: Log.w(TAG, "No applyToRoom callback for ${event.table}")
+        // Retry with short delay for FK ordering: a transaction event may arrive
+        // before its parent batch event. One retry after 500ms usually suffices.
+        var applied = false
+        for (attempt in 1..2) {
+            try {
+                config.applyToRoom?.invoke(listOf(event.record))
+                    ?: Log.w(TAG, "No applyToRoom callback for ${event.table}")
+                applied = true
+                break
+            } catch (e: android.database.sqlite.SQLiteConstraintException) {
+                if (attempt < 2) {
+                    Log.w(TAG, "FK constraint applying ${event.table}/$pk, retrying in 500ms")
+                    delay(500)
+                } else {
+                    Log.e(TAG, "FK constraint applying ${event.table}/$pk after retry — will be caught by safety sync")
+                }
+            }
+        }
     }
 
     /**

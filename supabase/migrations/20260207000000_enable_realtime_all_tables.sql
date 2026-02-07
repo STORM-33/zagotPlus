@@ -9,3 +9,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE purchase_batches;
 ALTER PUBLICATION supabase_realtime ADD TABLE sale_batches;
 ALTER PUBLICATION supabase_realtime ADD TABLE transactions;
 ALTER PUBLICATION supabase_realtime ADD TABLE cash_operations;
+
+-- Set REPLICA IDENTITY FULL so UPDATE/DELETE events include the complete row.
+-- Without this, Realtime only sends the PK for updates, breaking applyToRoom.
+ALTER TABLE locations REPLICA IDENTITY FULL;
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE expense_categories REPLICA IDENTITY FULL;
+ALTER TABLE purchase_batches REPLICA IDENTITY FULL;
+ALTER TABLE sale_batches REPLICA IDENTITY FULL;
+ALTER TABLE transactions REPLICA IDENTITY FULL;
+ALTER TABLE cash_operations REPLICA IDENTITY FULL;
