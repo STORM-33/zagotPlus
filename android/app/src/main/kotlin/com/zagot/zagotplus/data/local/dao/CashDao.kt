@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
@@ -32,6 +33,13 @@ interface ExpenseCategoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<ExpenseCategoryEntity>)
+
+    /**
+     * Upsert expense categories (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(categories: List<ExpenseCategoryEntity>)
 
     /**
      * Get all existing local_ids for efficient batch deduplication during sync.
@@ -92,6 +100,13 @@ interface CashOperationDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(operations: List<CashOperationEntity>)
+
+    /**
+     * Upsert cash operations (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(operations: List<CashOperationEntity>)
 
     @Query("""
         SELECT COALESCE(

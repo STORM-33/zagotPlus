@@ -4,7 +4,6 @@ import com.zagot.zagotplus.data.local.dao.ExpenseCategoryDao
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
 import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,7 +48,7 @@ class SyncAwareExpenseCategoryDao @Inject constructor(
         tableName = "expense_categories",
         recordId = entity.id.toString(),
         operation = operation,
-        payload = Json.encodeToString(ExpenseCategoryDto.fromEntity(entity)),
+        payload = SyncJson.encodeToString(ExpenseCategoryDto.fromEntity(entity)),
         createdAt = System.currentTimeMillis(),
     )
 }

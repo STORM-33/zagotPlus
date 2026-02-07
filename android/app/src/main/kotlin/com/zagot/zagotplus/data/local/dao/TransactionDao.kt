@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow
@@ -71,6 +72,13 @@ interface TransactionDao {
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(transactions: List<TransactionEntity>)
+
+    /**
+     * Upsert transactions (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(transactions: List<TransactionEntity>)
 
     /**
      * Update existing transaction (primarily for marking as synced).

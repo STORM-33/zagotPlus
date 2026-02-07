@@ -4,7 +4,6 @@ import com.zagot.zagotplus.data.local.dao.LocationDao
 import com.zagot.zagotplus.data.local.entity.LocationEntity
 import com.zagot.zagotplus.data.remote.dto.LocationDto
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,7 +41,7 @@ class SyncAwareLocationDao @Inject constructor(
         tableName = "locations",
         recordId = entity.id.toString(),
         operation = operation,
-        payload = Json.encodeToString(LocationDto.fromEntity(entity)),
+        payload = SyncJson.encodeToString(LocationDto.fromEntity(entity)),
         createdAt = System.currentTimeMillis(),
     )
 }

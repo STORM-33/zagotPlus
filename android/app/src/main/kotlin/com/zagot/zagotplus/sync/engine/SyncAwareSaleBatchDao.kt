@@ -4,7 +4,6 @@ import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,7 +57,7 @@ class SyncAwareSaleBatchDao @Inject constructor(
         tableName = "sale_batches",
         recordId = entity.id.toString(),
         operation = operation,
-        payload = Json.encodeToString(SaleBatchDto.fromEntity(entity)),
+        payload = SyncJson.encodeToString(SaleBatchDto.fromEntity(entity)),
         createdAt = System.currentTimeMillis(),
     )
 }

@@ -60,7 +60,7 @@ class ZagotSyncRegistrar @Inject constructor(
             fullPull = true,
             applyToRoom = { records ->
                 val entities = records.map { LocationDto.fromRecord(it).toEntity() }
-                locationDao.insertAll(entities)
+                locationDao.upsertAll(entities)
             }
         ))
 
@@ -69,7 +69,7 @@ class ZagotSyncRegistrar @Inject constructor(
             tableName = "products",
             applyToRoom = { records ->
                 val entities = records.map { ProductDto.fromRecord(it).toEntity() }
-                productDao.insertAll(entities)
+                productDao.upsertAll(entities)
             }
         ))
 
@@ -78,7 +78,7 @@ class ZagotSyncRegistrar @Inject constructor(
             tableName = "expense_categories",
             applyToRoom = { records ->
                 val entities = records.map { ExpenseCategoryDto.fromRecord(it).toEntity() }
-                expenseCategoryDao.insertAll(entities)
+                expenseCategoryDao.upsertAll(entities)
             }
         ))
 
@@ -107,7 +107,7 @@ class ZagotSyncRegistrar @Inject constructor(
             tableName = "transactions",
             applyToRoom = { records ->
                 val entities = records.map { TransactionDto.fromRecord(it).toEntity() }
-                transactionDao.insertAll(entities)
+                transactionDao.upsertAll(entities)
             }
         ))
 
@@ -116,7 +116,7 @@ class ZagotSyncRegistrar @Inject constructor(
             tableName = "cash_operations",
             applyToRoom = { records ->
                 val entities = records.map { CashOperationDto.fromRecord(it).toEntity() }
-                cashOperationDao.insertAll(entities)
+                cashOperationDao.upsertAll(entities)
             }
         ))
 

@@ -33,6 +33,8 @@ class AndroidNetworkMonitor @Inject constructor(
         private const val TAG = "AndroidNetworkMonitor"
         const val DEBOUNCE_MS = 3_000L
         private const val PING_TIMEOUT_MS = 3_000L
+        /** Delayed re-check after registration in case initial state was missed. */
+        private const val RECHECK_DELAY_MS = 1_000L
     }
 
     private val connectivityManager =
@@ -93,6 +95,23 @@ class AndroidNetworkMonitor @Inject constructor(
                 && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         if (isOnline) {
             startDebounce()
+        }
+
+        // Fallback: delayed re-check in case ConnectivityManager wasn't fully ready
+        // during initial check or onAvailable/onCapabilitiesChanged never fired
+        // (e.g., network was already established before callback registration).
+        scope.launch {
+            delay(RECHECK_DELAY_MS)
+            if (!_isConnected.value && debounceJob?.isActive != true) {
+                val recheckNetwork = connectivityManager.activeNetwork
+                val recheckCaps = recheckNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
+                val nowOnline = recheckCaps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+                        && recheckCaps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                if (nowOnline) {
+                    Log.d(TAG, "Delayed re-check detected online — starting debounce")
+                    startDebounce()
+                }
+            }
         }
     }
 

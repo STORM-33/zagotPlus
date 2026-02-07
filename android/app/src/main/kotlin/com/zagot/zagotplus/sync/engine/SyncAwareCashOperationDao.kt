@@ -4,7 +4,6 @@ import com.zagot.zagotplus.data.local.dao.CashOperationDao
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.remote.dto.CashOperationDto
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,7 +40,7 @@ class SyncAwareCashOperationDao @Inject constructor(
         tableName = "cash_operations",
         recordId = entity.id.toString(),
         operation = operation,
-        payload = Json.encodeToString(CashOperationDto.fromEntity(entity)),
+        payload = SyncJson.encodeToString(CashOperationDto.fromEntity(entity)),
         createdAt = System.currentTimeMillis(),
     )
 }

@@ -4,7 +4,6 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.remote.dto.ProductDto
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,7 +40,7 @@ class SyncAwareProductDao @Inject constructor(
         tableName = "products",
         recordId = entity.id.toString(),
         operation = operation,
-        payload = Json.encodeToString(ProductDto.fromEntity(entity)),
+        payload = SyncJson.encodeToString(ProductDto.fromEntity(entity)),
         createdAt = System.currentTimeMillis(),
     )
 }

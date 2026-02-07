@@ -1,7 +1,6 @@
 package com.zagot.zagotplus.data.remote.dto
 
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
-import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.math.BigDecimal
@@ -62,8 +61,8 @@ data class TransactionDto(
     @SerialName("sale_batch_id")
     val saleBatchId: String?,
     
-    // server_updated_at is set by server trigger - never sent in push, only received in pull
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    // server_updated_at is set by server trigger — included as null in push payloads
+    // to ensure consistent key sets across batched records (Postgrest requirement).
     @SerialName("server_updated_at")
     val serverUpdatedAt: String? = null
 ) {

@@ -18,7 +18,6 @@ import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -68,7 +67,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "products",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(ProductDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(ProductDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
@@ -81,7 +80,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "expense_categories",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(ExpenseCategoryDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(ExpenseCategoryDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
@@ -94,7 +93,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "purchase_batches",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(PurchaseBatchDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(PurchaseBatchDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
@@ -107,7 +106,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "sale_batches",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(SaleBatchDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(SaleBatchDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
@@ -120,7 +119,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "transactions",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(TransactionDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(TransactionDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
@@ -133,7 +132,7 @@ class SyncMigrationHelper @Inject constructor(
                 tableName = "cash_operations",
                 recordId = entity.id.toString(),
                 operation = "INSERT",
-                payload = Json.encodeToString(CashOperationDto.fromEntity(entity)),
+                payload = SyncJson.encodeToString(CashOperationDto.fromEntity(entity)),
                 createdAt = now,
             ))
         }
