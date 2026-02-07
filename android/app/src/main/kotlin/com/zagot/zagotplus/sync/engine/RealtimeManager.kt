@@ -2,7 +2,6 @@ package com.zagot.zagotplus.sync.engine
 
 import android.util.Log
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,9 +29,6 @@ class RealtimeManager @Inject constructor(
     /** Callback invoked when a realtime event should be applied to Room in LIVE state. */
     var onLiveEvent: (suspend (RealtimeChangeEvent) -> Unit)? = null
 
-    /** Callback invoked when realtime disconnects (triggers safety sync). */
-    var onDisconnect: (() -> Unit)? = null
-
     /**
      * Start listening on the given channel for the given tables.
      */
@@ -41,7 +37,7 @@ class RealtimeManager @Inject constructor(
         this.scope = scope
 
         scope.launch {
-            channel.subscribe(tables)
+            channel.subscribe(tables, scope)
             Log.d(TAG, "Subscribed to realtime for tables: $tables")
         }
 

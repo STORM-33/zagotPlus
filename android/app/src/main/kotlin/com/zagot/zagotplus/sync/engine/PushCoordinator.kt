@@ -206,6 +206,5 @@ class PushCoordinator @Inject constructor(
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     private fun parsePayload(json: String): Record = JsonUtil.parsePayload(json)
 }

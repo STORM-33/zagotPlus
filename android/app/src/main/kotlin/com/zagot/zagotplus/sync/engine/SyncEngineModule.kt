@@ -1,13 +1,11 @@
 package com.zagot.zagotplus.sync.engine
 
-import android.content.Context
 import androidx.room.RoomDatabase
 import com.zagot.zagotplus.data.local.ZagotDatabase
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 

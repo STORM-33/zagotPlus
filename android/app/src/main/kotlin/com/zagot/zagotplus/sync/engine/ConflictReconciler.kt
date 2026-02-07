@@ -17,7 +17,6 @@ import javax.inject.Singleton
 @Singleton
 class ConflictReconciler @Inject constructor(
     private val outboxDao: SyncOutboxDao,
-    private val stateMachine: SyncStateMachine,
 ) {
 
     companion object {
@@ -52,7 +51,7 @@ class ConflictReconciler @Inject constructor(
             // Run conflict resolution
             val winner = config.conflictResolver.resolve(localRecord, remoteRecord)
 
-            val localWins = winner === localRecord || winner == localRecord
+            val localWins = winner == localRecord
             if (!localWins) {
                 // Remote wins — mark outbox entry as synced (don't push)
                 losers.add(entry.id)
@@ -70,6 +69,5 @@ class ConflictReconciler @Inject constructor(
         return losers
     }
 
-    @Suppress("UNCHECKED_CAST")
     private fun parsePayload(json: String): Record = JsonUtil.parsePayload(json)
 }

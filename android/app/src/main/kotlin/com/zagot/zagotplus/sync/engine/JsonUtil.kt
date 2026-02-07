@@ -23,17 +23,16 @@ object JsonUtil {
      */
     fun jsonElementToAny(element: JsonElement): Any? {
         return when (element) {
+            is JsonNull -> null
             is JsonPrimitive -> {
                 when {
                     element.isString -> element.content
-                    element.content == "null" -> null
                     element.content == "true" -> true
                     element.content == "false" -> false
                     element.content.contains(".") -> element.content.toDoubleOrNull()
                     else -> element.content.toLongOrNull() ?: element.content
                 }
             }
-            is JsonNull -> null
             else -> element.toString()
         }
     }

@@ -3,7 +3,6 @@ package com.zagot.zagotplus.sync.engine
 import android.util.Log
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
-import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -54,7 +53,6 @@ class SyncEngineImpl @Inject constructor(
     private val realtimeChannel: RealtimeChannelContract,
     private val remoteClient: SyncRemoteClient,
     private val outboxDao: SyncOutboxDao,
-    private val syncMetadataDao: SyncMetadataDao,
     private val database: RoomDatabase,
 ) : SyncEngine {
 

@@ -11,13 +11,11 @@ class ConflictReconcilerTest {
 
     private lateinit var reconciler: ConflictReconciler
     private lateinit var outboxDao: FakeSyncOutboxDao
-    private lateinit var stateMachine: SyncStateMachine
 
     @Before
     fun setup() {
         outboxDao = FakeSyncOutboxDao()
-        stateMachine = SyncStateMachine()
-        reconciler = ConflictReconciler(outboxDao, stateMachine)
+        reconciler = ConflictReconciler(outboxDao)
     }
 
     @Test

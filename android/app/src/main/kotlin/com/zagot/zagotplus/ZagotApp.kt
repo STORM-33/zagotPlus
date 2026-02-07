@@ -15,7 +15,6 @@ import com.zagot.zagotplus.debug.CrashLogger
 import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
-import com.zagot.zagotplus.sync.SyncManager
 import com.zagot.zagotplus.sync.engine.SyncEngine
 import dagger.hilt.android.HiltAndroidApp
 import java.util.Locale
@@ -26,9 +25,6 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
-
-    @Inject
-    lateinit var syncManager: SyncManager
 
     @Inject
     lateinit var syncEngine: SyncEngine

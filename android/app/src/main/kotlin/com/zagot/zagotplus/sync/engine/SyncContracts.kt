@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.sync.engine
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -42,7 +43,7 @@ interface SyncRemoteClient {
  */
 interface RealtimeChannelContract {
     val events: SharedFlow<RealtimeChangeEvent>
-    suspend fun subscribe(tables: List<String>)
+    suspend fun subscribe(tables: List<String>, scope: CoroutineScope)
     suspend fun unsubscribe()
 }
 
@@ -53,7 +54,7 @@ interface RealtimeChannelContract {
  */
 class FakeSupabaseClient : SyncRemoteClient {
     val pushedRecords = mutableListOf<Pair<String, Record>>()
-    val remoteTables = mutableMapOf<String, MutableList<Record>>()
+    private val remoteTables = mutableMapOf<String, MutableList<Record>>()
 
     private var failCount = 0
     private var failError: Exception? = null
@@ -112,7 +113,7 @@ class FakeRealtimeChannel : RealtimeChannelContract {
     var isSubscribed = false
         private set
 
-    override suspend fun subscribe(tables: List<String>) {
+    override suspend fun subscribe(tables: List<String>, scope: CoroutineScope) {
         isSubscribed = true
     }
 
@@ -122,9 +123,5 @@ class FakeRealtimeChannel : RealtimeChannelContract {
 
     fun emitEvent(event: RealtimeChangeEvent) {
         _events.tryEmit(event)
-    }
-
-    fun simulateDisconnect() {
-        isSubscribed = false
     }
 }

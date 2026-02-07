@@ -3,7 +3,6 @@ package com.zagot.zagotplus.sync.engine
 import android.util.Log
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.realtime.PostgresAction
-import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -39,22 +38,13 @@ class SupabaseRealtimeChannel @Inject constructor(
     private var channel: RealtimeChannel? = null
     private val flowJobs = mutableListOf<Job>()
 
-    override suspend fun subscribe(tables: List<String>) {
+    override suspend fun subscribe(tables: List<String>, scope: CoroutineScope) {
         Log.d(TAG, "Subscribing to realtime for tables: $tables")
 
         val ch = supabaseClient.channel("sync-engine")
         this.channel = ch
 
-        ch.subscribe()
-        Log.d(TAG, "Subscribed to realtime channel")
-    }
-
-    /**
-     * Start collecting events from the channel into the SharedFlow.
-     * Must be called after subscribe with a parent scope that owns the lifecycle.
-     */
-    fun startCollecting(tables: List<String>, scope: CoroutineScope) {
-        val ch = channel ?: return
+        // Wire up event collection before subscribing
         flowJobs.forEach { it.cancel() }
         flowJobs.clear()
 
@@ -69,6 +59,9 @@ class SupabaseRealtimeChannel @Inject constructor(
             }.launchIn(scope)
             flowJobs.add(job)
         }
+
+        ch.subscribe()
+        Log.d(TAG, "Subscribed to realtime channel")
     }
 
     override suspend fun unsubscribe() {

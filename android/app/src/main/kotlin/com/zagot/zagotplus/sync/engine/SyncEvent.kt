@@ -1,7 +1,5 @@
 package com.zagot.zagotplus.sync.engine
 
-import java.time.Instant
-
 /**
  * Events that drive sync-state transitions and internal sync log.
  */
