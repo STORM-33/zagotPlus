@@ -52,10 +52,12 @@ class ZagotSyncRegistrar @Inject constructor(
     fun registerAll(engine: SyncEngine) {
         Log.d(TAG, "Registering all Zagot+ tables")
 
-        // 1. locations — no FK deps, no server_updated_at (uses created_at)
+        // 1. locations — reference data, no server_updated_at.
+        //    fullPull=true: always fetch all locations so renames are caught.
         engine.registerTable(SyncTableConfig(
             tableName = "locations",
             timestampColumn = "created_at",
+            fullPull = true,
             applyToRoom = { records ->
                 val entities = records.map { LocationDto.fromRecord(it).toEntity() }
                 locationDao.insertAll(entities)

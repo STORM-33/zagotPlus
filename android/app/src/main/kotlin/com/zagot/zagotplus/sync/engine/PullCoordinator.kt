@@ -36,15 +36,21 @@ class PullCoordinator @Inject constructor(
         remoteClient: SyncRemoteClient,
         config: SyncTableConfig,
     ): List<Record> {
-        val lastSyncedAt = syncMetadataDao.getLastSyncedAt(config.tableName) ?: 0L
-        val effectiveSince = maxOf(0L, lastSyncedAt - OVERLAP_WINDOW_MS)
-
-        Log.d(TAG, "Pulling ${config.tableName}: lastSyncedAt=$lastSyncedAt, effectiveSince=$effectiveSince")
+        val since: Long
+        if (config.fullPull) {
+            // Full pull: always fetch all records (e.g., locations with no server_updated_at)
+            since = 0L
+            Log.d(TAG, "Full-pulling ${config.tableName} (no incremental filter)")
+        } else {
+            val lastSyncedAt = syncMetadataDao.getLastSyncedAt(config.tableName) ?: 0L
+            since = maxOf(0L, lastSyncedAt - OVERLAP_WINDOW_MS)
+            Log.d(TAG, "Pulling ${config.tableName}: lastSyncedAt=$lastSyncedAt, effectiveSince=$since")
+        }
 
         val records = remoteClient.pull(
             table = config.tableName,
             timestampColumn = config.timestampColumn,
-            since = effectiveSince,
+            since = since,
             overlapWindowMs = 0L, // we already subtracted the overlap
         )
 

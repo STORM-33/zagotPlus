@@ -16,11 +16,18 @@ import javax.inject.Singleton
 class SyncStatusRepository @Inject constructor(
     private val syncEngine: SyncEngine,
 ) {
+    /** Tracks the wall-clock time of the most recent successful catch-up. */
+    @Volatile
+    private var lastLiveTransitionTime: Instant? = null
+
     val syncStatus: Flow<SyncStatus> = syncEngine.state.map { state ->
         when (state) {
-            SyncState.OFFLINE -> SyncStatus.idle(null)
+            SyncState.OFFLINE -> SyncStatus.idle(lastLiveTransitionTime)
             SyncState.CATCHING_UP -> SyncStatus.syncing()
-            SyncState.LIVE -> SyncStatus.success(Instant.now())
+            SyncState.LIVE -> {
+                lastLiveTransitionTime = Instant.now()
+                SyncStatus.success(lastLiveTransitionTime!!)
+            }
         }
     }
 

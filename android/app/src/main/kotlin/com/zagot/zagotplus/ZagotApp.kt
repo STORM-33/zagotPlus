@@ -66,13 +66,14 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
         
         // Force Ukrainian locale
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
-        // Register all tables then start the realtime sync engine
+        // Register all tables then start the realtime sync engine.
+        // Migration must complete before engine starts to avoid pushing
+        // before all unsynced records are in the outbox.
         syncRegistrar.registerAll(syncEngine)
-        // Migrate existing unsynced records to outbox (one-time, runs on background thread)
         CoroutineScope(Dispatchers.IO).launch {
             syncMigrationHelper.migrateIfNeeded()
+            syncEngine.start()
         }
-        syncEngine.start()
         
         // Initialize performance debugging in debug builds
 //        if (BuildConfig.DEBUG) {

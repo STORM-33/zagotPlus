@@ -8,6 +8,8 @@ data class SyncTableConfig(
     val primaryKey: String = "id",
     val timestampColumn: String = "server_updated_at",
     val softDeleteColumn: String? = "deleted_at",
+    /** When true, always pull ALL records (no incremental since filter). */
+    val fullPull: Boolean = false,
     val conflictResolver: ConflictResolver = LastWriteWins,
     /** Callback to apply pulled/buffered records to Room via UPSERT. */
     val applyToRoom: (suspend (List<Record>) -> Unit)? = null,

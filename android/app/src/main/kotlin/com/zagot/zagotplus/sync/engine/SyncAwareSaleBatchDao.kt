@@ -33,9 +33,9 @@ class SyncAwareSaleBatchDao @Inject constructor(
     }
 
     override suspend fun upsertAll(batches: List<SaleBatchEntity>) {
+        // Passthrough only — upsertAll is used by applyToRoom (raw DAO path).
+        // Must NOT create outbox entries to avoid pushing pulled records back.
         dao.upsertAll(batches)
-        batches.forEach { outboxDao.insert(outboxEntry(it, "INSERT")) }
-        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun update(batch: SaleBatchEntity) {
