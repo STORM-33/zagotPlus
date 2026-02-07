@@ -57,9 +57,16 @@ class AndroidNetworkMonitor @Inject constructor(
 
         override fun onLost(network: Network) {
             Log.d(TAG, "onLost: $network")
-            // Immediate offline — cancel any pending debounce
-            cancelDebounce()
-            _isConnected.value = false
+            // onLost fires per-network, not when ALL networks are gone.
+            // Only go offline if no other network is available.
+            val activeNetwork = connectivityManager.activeNetwork
+            if (activeNetwork == null) {
+                cancelDebounce()
+                _isConnected.value = false
+            } else {
+                Log.d(TAG, "Another network still active ($activeNetwork) — restarting debounce")
+                startDebounce()
+            }
         }
 
         override fun onUnavailable() {
