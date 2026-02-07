@@ -16,6 +16,7 @@ import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
 import com.zagot.zagotplus.sync.SyncManager
+import com.zagot.zagotplus.sync.engine.SyncEngine
 import dagger.hilt.android.HiltAndroidApp
 import java.util.Locale
 import javax.inject.Inject
@@ -28,6 +29,9 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var syncManager: SyncManager
+
+    @Inject
+    lateinit var syncEngine: SyncEngine
 
     @Inject
     lateinit var mainThreadDebugger: MainThreadDebugger
@@ -55,8 +59,10 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
         
         // Force Ukrainian locale
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
-        // Initialize periodic background sync
+        // Initialize periodic background sync (legacy — kept alongside new engine)
         syncManager.initializePeriodicSync()
+        // Start the new realtime sync engine
+        syncEngine.start()
         
         // Initialize performance debugging in debug builds
 //        if (BuildConfig.DEBUG) {

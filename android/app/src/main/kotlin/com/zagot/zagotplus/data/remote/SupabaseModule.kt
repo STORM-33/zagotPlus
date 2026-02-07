@@ -8,6 +8,7 @@ import dagger.hilt.components.SingletonComponent
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.github.jan.supabase.storage.Storage
 import kotlinx.serialization.json.Json
@@ -38,6 +39,7 @@ object SupabaseModule {
             })
             install(Postgrest)
             install(Storage)
+            install(Realtime)
             // TODO: Add GoTrue when auth is properly configured
             // install(GoTrue) { ... }
         }

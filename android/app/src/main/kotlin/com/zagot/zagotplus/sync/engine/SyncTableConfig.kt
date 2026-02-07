@@ -6,9 +6,11 @@ package com.zagot.zagotplus.sync.engine
 data class SyncTableConfig(
     val tableName: String,
     val primaryKey: String = "id",
-    val timestampColumn: String = "updated_at",
+    val timestampColumn: String = "server_updated_at",
     val softDeleteColumn: String? = "deleted_at",
     val conflictResolver: ConflictResolver = LastWriteWins,
+    /** Callback to apply pulled/buffered records to Room via UPSERT. */
+    val applyToRoom: (suspend (List<Record>) -> Unit)? = null,
 )
 
 /**
