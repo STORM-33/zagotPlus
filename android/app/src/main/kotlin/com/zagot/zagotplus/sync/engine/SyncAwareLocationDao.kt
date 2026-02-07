@@ -17,21 +17,25 @@ import javax.inject.Singleton
 class SyncAwareLocationDao @Inject constructor(
     @RawDao private val dao: LocationDao,
     private val outboxDao: SyncOutboxDao,
+    private val syncEngine: SyncEngine,
 ) : LocationDao by dao {
 
     override suspend fun insert(location: LocationEntity) {
         dao.insert(location)
         outboxDao.insert(outboxEntry(location, "INSERT"))
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun insertAll(locations: List<LocationEntity>) {
         dao.insertAll(locations)
         locations.forEach { outboxDao.insert(outboxEntry(it, "INSERT")) }
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun update(location: LocationEntity) {
         dao.update(location)
         outboxDao.insert(outboxEntry(location, "UPDATE"))
+        syncEngine.notifyOutboxChanged()
     }
 
     private fun outboxEntry(entity: LocationEntity, operation: String) = SyncOutboxEntity(

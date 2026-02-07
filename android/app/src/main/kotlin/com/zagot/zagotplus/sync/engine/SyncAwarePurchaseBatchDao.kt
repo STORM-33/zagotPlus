@@ -17,26 +17,31 @@ import javax.inject.Singleton
 class SyncAwarePurchaseBatchDao @Inject constructor(
     @RawDao private val dao: PurchaseBatchDao,
     private val outboxDao: SyncOutboxDao,
+    private val syncEngine: SyncEngine,
 ) : PurchaseBatchDao by dao {
 
     override suspend fun insert(batch: PurchaseBatchEntity) {
         dao.insert(batch)
         outboxDao.insert(outboxEntry(batch, "INSERT"))
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun insertAll(batches: List<PurchaseBatchEntity>) {
         dao.insertAll(batches)
         batches.forEach { outboxDao.insert(outboxEntry(it, "INSERT")) }
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun upsertAll(batches: List<PurchaseBatchEntity>) {
         dao.upsertAll(batches)
         batches.forEach { outboxDao.insert(outboxEntry(it, "INSERT")) }
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun update(batch: PurchaseBatchEntity) {
         dao.update(batch)
         outboxDao.insert(outboxEntry(batch, "UPDATE"))
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun markVoided(id: UUID, voidedAt: Long, deviceId: String): Int {
@@ -44,6 +49,7 @@ class SyncAwarePurchaseBatchDao @Inject constructor(
         if (result > 0) {
             val entity = dao.getById(id) ?: return result
             outboxDao.insert(outboxEntry(entity, "UPDATE"))
+            syncEngine.notifyOutboxChanged()
         }
         return result
     }

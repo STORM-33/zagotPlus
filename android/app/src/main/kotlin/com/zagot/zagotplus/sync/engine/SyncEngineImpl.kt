@@ -37,6 +37,12 @@ interface SyncEngine {
 
     /** Register a table for syncing. Must be called before start(). */
     fun registerTable(config: SyncTableConfig)
+
+    /**
+     * Notify the engine that a new outbox entry was created.
+     * When LIVE, triggers an immediate push attempt.
+     */
+    fun notifyOutboxChanged()
 }
 
 /**
@@ -68,12 +74,15 @@ class SyncEngineImpl @Inject constructor(
         private const val TAG = "SyncEngine"
         /** Pruning threshold: keep synced entries for 30 minutes. */
         private const val OUTBOX_PRUNE_RETENTION_MS = 30 * 60 * 1_000L
+        /** Debounce for LIVE push to batch rapid successive writes. */
+        private const val LIVE_PUSH_DEBOUNCE_MS = 200L
     }
 
     private val registeredTables = mutableListOf<SyncTableConfig>()
     private var engineScope: CoroutineScope? = null
     private var networkJob: Job? = null
     private var catchUpJob: Job? = null
+    private var livePushJob: Job? = null
 
     override val state: StateFlow<SyncState> get() = stateMachine.state
     override val syncLog: StateFlow<List<SyncLogEntry>> get() = stateMachine.syncLog
@@ -81,6 +90,22 @@ class SyncEngineImpl @Inject constructor(
     override fun registerTable(config: SyncTableConfig) {
         registeredTables.add(config)
         Log.d(TAG, "Registered table: ${config.tableName}")
+    }
+
+    override fun notifyOutboxChanged() {
+        val scope = engineScope ?: return
+        if (stateMachine.state.value != SyncState.LIVE) return
+
+        // Debounce: cancel previous pending push, schedule a new one
+        livePushJob?.cancel()
+        livePushJob = scope.launch {
+            delay(LIVE_PUSH_DEBOUNCE_MS)
+            try {
+                pushCoordinator.pushPending(remoteClient, registeredTables)
+            } catch (e: Exception) {
+                Log.e(TAG, "LIVE push failed: ${e.message}")
+            }
+        }
     }
 
     override fun start() {

@@ -16,21 +16,25 @@ import javax.inject.Singleton
 class SyncAwareProductDao @Inject constructor(
     @RawDao private val dao: ProductDao,
     private val outboxDao: SyncOutboxDao,
+    private val syncEngine: SyncEngine,
 ) : ProductDao by dao {
 
     override suspend fun insert(product: ProductEntity) {
         dao.insert(product)
         outboxDao.insert(outboxEntry(product, "INSERT"))
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun insertAll(products: List<ProductEntity>) {
         dao.insertAll(products)
         products.forEach { outboxDao.insert(outboxEntry(it, "INSERT")) }
+        syncEngine.notifyOutboxChanged()
     }
 
     override suspend fun update(product: ProductEntity) {
         dao.update(product)
         outboxDao.insert(outboxEntry(product, "UPDATE"))
+        syncEngine.notifyOutboxChanged()
     }
 
     private fun outboxEntry(entity: ProductEntity, operation: String) = SyncOutboxEntity(
