@@ -23,13 +23,25 @@ interface ConflictResolver {
 }
 
 /**
- * Last-Write-Wins: higher updated_at wins, tie → server wins.
+ * Last-Write-Wins: higher timestamp wins, tie → server wins.
+ *
+ * Uses [timestampKey] to look up the comparison field — defaults to
+ * "server_updated_at" matching SyncTableConfig.timestampColumn.
  */
-object LastWriteWins : ConflictResolver {
+class LastWriteWins(
+    private val timestampKey: String = "server_updated_at",
+) : ConflictResolver {
     override fun resolve(local: Map<String, Any?>, remote: Map<String, Any?>): Map<String, Any?> {
-        val localTs = local["updated_at"] as? Long ?: 0L
-        val remoteTs = remote["updated_at"] as? Long ?: 0L
+        val localTs = local[timestampKey] as? Long ?: 0L
+        val remoteTs = remote[timestampKey] as? Long ?: 0L
         // Tie → server (remote) wins per spec
         return if (localTs > remoteTs) local else remote
+    }
+
+    companion object : ConflictResolver {
+        /** Default singleton using "server_updated_at". */
+        private val DEFAULT = LastWriteWins("server_updated_at")
+        override fun resolve(local: Map<String, Any?>, remote: Map<String, Any?>): Map<String, Any?> =
+            DEFAULT.resolve(local, remote)
     }
 }

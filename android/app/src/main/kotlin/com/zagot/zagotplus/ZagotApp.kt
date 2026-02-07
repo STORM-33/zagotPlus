@@ -59,9 +59,7 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
         
         // Force Ukrainian locale
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
-        // Initialize periodic background sync (legacy — kept alongside new engine)
-        syncManager.initializePeriodicSync()
-        // Start the new realtime sync engine
+        // Start the realtime sync engine (replaces legacy periodic sync)
         syncEngine.start()
         
         // Initialize performance debugging in debug builds

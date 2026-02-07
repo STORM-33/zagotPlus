@@ -8,14 +8,13 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.RealtimeChannel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,6 +37,7 @@ class SupabaseRealtimeChannel @Inject constructor(
     override val events: SharedFlow<RealtimeChangeEvent> = _events.asSharedFlow()
 
     private var channel: RealtimeChannel? = null
+    private val flowJobs = mutableListOf<Job>()
 
     override suspend fun subscribe(tables: List<String>) {
         Log.d(TAG, "Subscribing to realtime for tables: $tables")
@@ -45,24 +45,36 @@ class SupabaseRealtimeChannel @Inject constructor(
         val ch = supabaseClient.channel("sync-engine")
         this.channel = ch
 
-        // Subscribe to postgres changes for each table
+        ch.subscribe()
+        Log.d(TAG, "Subscribed to realtime channel")
+    }
+
+    /**
+     * Start collecting events from the channel into the SharedFlow.
+     * Must be called after subscribe with a parent scope that owns the lifecycle.
+     */
+    fun startCollecting(tables: List<String>, scope: CoroutineScope) {
+        val ch = channel ?: return
+        flowJobs.forEach { it.cancel() }
+        flowJobs.clear()
+
         for (table in tables) {
-            ch.postgresChangeFlow<PostgresAction>(schema = "public") {
+            val job = ch.postgresChangeFlow<PostgresAction>(schema = "public") {
                 this.table = table
             }.onEach { action ->
                 val event = mapAction(table, action)
                 if (event != null) {
                     _events.tryEmit(event)
                 }
-            }.launchIn(CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+            }.launchIn(scope)
+            flowJobs.add(job)
         }
-
-        ch.subscribe()
-        Log.d(TAG, "Subscribed to realtime channel")
     }
 
     override suspend fun unsubscribe() {
         Log.d(TAG, "Unsubscribing from realtime")
+        flowJobs.forEach { it.cancel() }
+        flowJobs.clear()
         channel?.unsubscribe()
         channel = null
     }
@@ -92,23 +104,6 @@ class SupabaseRealtimeChannel @Inject constructor(
     }
 
     private fun extractRecord(jsonMap: Map<String, JsonElement>): Record {
-        return jsonMap.mapValues { (_, v) -> jsonElementToAny(v) }
-    }
-
-    private fun jsonElementToAny(element: JsonElement): Any? {
-        return when (element) {
-            is JsonPrimitive -> {
-                when {
-                    element.isString -> element.content
-                    element.content == "null" -> null
-                    element.content == "true" -> true
-                    element.content == "false" -> false
-                    element.content.contains(".") -> element.content.toDoubleOrNull()
-                    else -> element.content.toLongOrNull() ?: element.content
-                }
-            }
-            is JsonNull -> null
-            else -> element.toString()
-        }
+        return jsonMap.mapValues { (_, v) -> JsonUtil.jsonElementToAny(v) }
     }
 }

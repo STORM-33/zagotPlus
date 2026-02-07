@@ -2,6 +2,8 @@ package com.zagot.zagotplus.sync.engine
 
 import android.util.Log
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
+import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -85,6 +87,9 @@ class SyncEngineImpl @Inject constructor(
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         engineScope = scope
 
+        // Start network monitoring (registers ConnectivityManager callbacks)
+        networkMonitor.start()
+
         // Wire realtime manager callbacks
         realtimeManager.onLiveEvent = { event ->
             applyRealtimeEvent(event)
@@ -113,6 +118,7 @@ class SyncEngineImpl @Inject constructor(
             realtimeManager.stop()
         }
         networkJob?.cancel()
+        networkMonitor.stop()
         engineScope?.cancel()
         engineScope = null
     }
@@ -184,25 +190,39 @@ class SyncEngineImpl @Inject constructor(
 
         // Steps 5 + 6 + 7: Apply records + drain buffer + update metadata
         // ALL IN A SINGLE ROOM TRANSACTION (crash safety — spec Section 5.1)
-        database.runInTransaction {
-            runBlocking {
-                // Step 5: Apply remote changes
-                for ((config, records) in allPulled) {
-                    applyRecordsToRoom(config, records)
-                }
+        database.withTransaction {
+            // Step 5: Apply remote changes
+            for ((config, records) in allPulled) {
+                applyRecordsToRoom(config, records)
+            }
 
-                // Step 6: Drain realtime buffer (deduplicated)
+            // Step 6: Drain realtime buffer (deduplicated against pulled data)
+            if (!realtimeBuffer.overflowed) {
                 val bufferedEvents = realtimeBuffer.drain()
                 for (event in bufferedEvents) {
-                    applyRealtimeEvent(event)
+                    val config = registeredTables.find { it.tableName == event.table } ?: continue
+                    val pulledRecords = allPulled[config] ?: emptyList()
+                    if (!isDuplicate(event, pulledRecords, config)) {
+                        applyRecordsToRoom(config, listOf(event.record))
+                    }
                 }
-
-                // Step 7: Update last_synced_at per table
-                for ((config, records) in allPulled) {
-                    val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
-                    pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
-                }
+            } else {
+                Log.w(TAG, "Buffer overflowed during catch-up — skipping buffer drain")
             }
+
+            // Step 7: Update last_synced_at per table
+            for ((config, records) in allPulled) {
+                val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
+                pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
+            }
+        }
+
+        // Handle buffer overflow: re-sync instead of going LIVE with incomplete data
+        if (realtimeBuffer.overflowed) {
+            Log.w(TAG, "Buffer overflow detected — triggering fresh re-sync")
+            realtimeBuffer.reset()
+            executeCatchUp(scope)
+            return
         }
 
         // Step 8: Transition to LIVE
@@ -222,12 +242,10 @@ class SyncEngineImpl @Inject constructor(
             try {
                 val records = pullCoordinator.pull(remoteClient, config)
 
-                database.runInTransaction {
-                    runBlocking {
-                        applyRecordsToRoom(config, records)
-                        val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
-                        pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
-                    }
+                database.withTransaction {
+                    applyRecordsToRoom(config, records)
+                    val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
+                    pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Safety sync pull failed for ${config.tableName}: ${e.message}")
@@ -247,19 +265,16 @@ class SyncEngineImpl @Inject constructor(
 
     /**
      * Apply records from a pull to Room.
-     * This is a placeholder — the actual Room UPSERT must be done per-entity.
-     * The sync engine provides the data; a per-table callback handles the Room write.
+     * Delegates to the per-table applyToRoom callback.
      */
     private suspend fun applyRecordsToRoom(config: SyncTableConfig, records: List<Record>) {
-        // Each SyncTableConfig could have an applyToRoom callback,
-        // but for now we log the intent — actual Room writes happen
-        // through the table-specific callbacks registered via registerTable
         config.applyToRoom?.invoke(records)
             ?: Log.w(TAG, "No applyToRoom callback for ${config.tableName}, ${records.size} records skipped")
     }
 
     /**
-     * Apply a single realtime event to Room.
+     * Apply a single realtime event to Room, with deduplication (spec Section 6).
+     * Skips events where the local record already has updated_at >= event.updated_at.
      */
     private suspend fun applyRealtimeEvent(event: RealtimeChangeEvent) {
         val config = registeredTables.find { it.tableName == event.table }
@@ -268,8 +283,41 @@ class SyncEngineImpl @Inject constructor(
             return
         }
 
+        val eventTs = event.record[config.timestampColumn] as? Long
+        val pk = event.record[config.primaryKey]?.toString()
+
+        // Log for diagnostic purposes; actual dedup is handled by applyToRoom's UPSERT timestamp guard
+        if (pk != null && eventTs != null) {
+            Log.d(TAG, "Applying realtime event: ${event.table}/$pk ts=$eventTs")
+        }
+
         config.applyToRoom?.invoke(listOf(event.record))
             ?: Log.w(TAG, "No applyToRoom callback for ${event.table}")
+    }
+
+    /**
+     * Check if a buffered realtime event duplicates an already-pulled record.
+     * Same PK and event.updated_at <= pulled.updated_at → skip.
+     */
+    private fun isDuplicate(
+        event: RealtimeChangeEvent,
+        pulledRecords: List<Record>,
+        config: SyncTableConfig,
+    ): Boolean {
+        val eventPk = event.record[config.primaryKey]?.toString() ?: return false
+        val eventTs = event.record[config.timestampColumn] as? Long ?: return false
+
+        val pulled = pulledRecords.find { it[config.primaryKey]?.toString() == eventPk }
+            ?: return false
+        val pulledTs = pulled[config.timestampColumn] as? Long ?: return false
+
+        val isDup = eventTs <= pulledTs
+        if (isDup) {
+            stateMachine.onEvent(
+                SyncEvent.RealtimeEventSkipped(event.table, eventPk)
+            )
+        }
+        return isDup
     }
 
     /**

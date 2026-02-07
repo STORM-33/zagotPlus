@@ -6,8 +6,6 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,7 +43,7 @@ class SupabaseSyncRemoteClient @Inject constructor(
             .decodeList()
 
         val records = jsonRecords.map { jsonMap ->
-            jsonMap.mapValues { (_, v) -> jsonElementToAny(v) }
+            jsonMap.mapValues { (_, v) -> JsonUtil.jsonElementToAny(v) }
         }
 
         Log.d(TAG, "Pulled ${records.size} records from $table")
@@ -57,38 +55,11 @@ class SupabaseSyncRemoteClient @Inject constructor(
         Log.d(TAG, "Pushing ${records.size} records to $table")
 
         val jsonRecords = records.map { record ->
-            record.mapValues { (_, v) -> anyToJsonElement(v) }
+            record.mapValues { (_, v) -> JsonUtil.anyToJsonElement(v) }
         }
 
         supabaseClient.postgrest[table].upsert(jsonRecords, onConflict = primaryKey)
 
         Log.d(TAG, "Pushed ${records.size} records to $table")
-    }
-
-    private fun jsonElementToAny(element: JsonElement): Any? {
-        return when (element) {
-            is JsonPrimitive -> {
-                when {
-                    element.isString -> element.content
-                    element.content == "null" -> null
-                    element.content == "true" -> true
-                    element.content == "false" -> false
-                    element.content.contains(".") -> element.content.toDoubleOrNull()
-                    else -> element.content.toLongOrNull() ?: element.content
-                }
-            }
-            is JsonNull -> null
-            else -> element.toString()
-        }
-    }
-
-    private fun anyToJsonElement(value: Any?): JsonElement {
-        return when (value) {
-            null -> JsonNull
-            is String -> JsonPrimitive(value)
-            is Number -> JsonPrimitive(value)
-            is Boolean -> JsonPrimitive(value)
-            else -> JsonPrimitive(value.toString())
-        }
     }
 }

@@ -1,7 +1,14 @@
 package com.zagot.zagotplus.sync.engine
 
 import android.util.Log
+import io.github.jan.supabase.exceptions.BadRequestRestException
+import io.github.jan.supabase.exceptions.NotFoundRestException
+import io.github.jan.supabase.exceptions.RestException
+import io.github.jan.supabase.exceptions.UnauthorizedRestException
+import io.github.jan.supabase.exceptions.UnknownRestException
 import kotlinx.coroutines.delay
+import java.io.IOException
+import java.net.SocketTimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -162,8 +169,32 @@ class PushCoordinator @Inject constructor(
 
     /**
      * Classify a push error per spec Section 12.
+     *
+     * Checks exception types first (RestException with status code, IO errors),
+     * then falls back to message parsing for untyped exceptions.
      */
     fun classifyError(e: Exception): PushErrorCategory {
+        // Check specific RestException subclasses (supabase-kt 2.0.3 sealed hierarchy)
+        when (e) {
+            is UnauthorizedRestException -> return PushErrorCategory.AUTH
+            is BadRequestRestException -> return PushErrorCategory.TERMINAL
+            is NotFoundRestException -> return PushErrorCategory.TERMINAL
+            is UnknownRestException -> {
+                // UnknownRestException covers 409, 429, 5xx — check message for status
+                val msg = e.message?.lowercase() ?: ""
+                return when {
+                    msg.contains("409") || msg.contains("conflict") -> PushErrorCategory.CONFLICT
+                    msg.contains("429") || msg.contains("too many") -> PushErrorCategory.RATE_LIMIT
+                    else -> PushErrorCategory.TRANSIENT
+                }
+            }
+            is RestException -> return PushErrorCategory.TRANSIENT
+        }
+        if (e is SocketTimeoutException || e is IOException) {
+            return PushErrorCategory.TRANSIENT
+        }
+
+        // Fallback: parse message for untyped exceptions
         val message = e.message?.lowercase() ?: ""
         return when {
             message.contains("401") || message.contains("unauthorized") -> PushErrorCategory.AUTH
@@ -176,26 +207,5 @@ class PushCoordinator @Inject constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun parsePayload(json: String): Record {
-        // Simple JSON to Map parser — we use kotlinx.serialization in the real app
-        return kotlinx.serialization.json.Json.decodeFromString<Map<String, kotlinx.serialization.json.JsonElement>>(json)
-            .mapValues { (_, v) -> jsonElementToAny(v) }
-    }
-
-    private fun jsonElementToAny(element: kotlinx.serialization.json.JsonElement): Any? {
-        return when (element) {
-            is kotlinx.serialization.json.JsonPrimitive -> {
-                when {
-                    element.isString -> element.content
-                    element.content == "null" -> null
-                    element.content == "true" -> true
-                    element.content == "false" -> false
-                    element.content.contains(".") -> element.content.toDoubleOrNull()
-                    else -> element.content.toLongOrNull() ?: element.content
-                }
-            }
-            is kotlinx.serialization.json.JsonNull -> null
-            else -> element.toString()
-        }
-    }
+    private fun parsePayload(json: String): Record = JsonUtil.parsePayload(json)
 }

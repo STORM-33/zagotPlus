@@ -77,7 +77,7 @@ class AndroidNetworkMonitor @Inject constructor(
         }
     }
 
-    fun start() {
+    override fun start() {
         if (registered) return
         registered = true
 
@@ -96,7 +96,7 @@ class AndroidNetworkMonitor @Inject constructor(
         }
     }
 
-    fun stop() {
+    override fun stop() {
         if (!registered) return
         registered = false
         cancelDebounce()

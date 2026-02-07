@@ -71,25 +71,5 @@ class ConflictReconciler @Inject constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun parsePayload(json: String): Record {
-        return kotlinx.serialization.json.Json.decodeFromString<Map<String, kotlinx.serialization.json.JsonElement>>(json)
-            .mapValues { (_, v) -> jsonElementToAny(v) }
-    }
-
-    private fun jsonElementToAny(element: kotlinx.serialization.json.JsonElement): Any? {
-        return when (element) {
-            is kotlinx.serialization.json.JsonPrimitive -> {
-                when {
-                    element.isString -> element.content
-                    element.content == "null" -> null
-                    element.content == "true" -> true
-                    element.content == "false" -> false
-                    element.content.contains(".") -> element.content.toDoubleOrNull()
-                    else -> element.content.toLongOrNull() ?: element.content
-                }
-            }
-            is kotlinx.serialization.json.JsonNull -> null
-            else -> element.toString()
-        }
-    }
+    private fun parsePayload(json: String): Record = JsonUtil.parsePayload(json)
 }
