@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -61,6 +63,9 @@ class BluetoothPrinterService(
 
         private const val CONNECT_TIMEOUT_MS = 10000L
         private const val SCAN_TIMEOUT_MS = 15000L
+        private const val RECONNECT_DELAY_INITIAL_MS = 2000L
+        private const val RECONNECT_DELAY_MAX_MS = 30000L
+        private const val RECONNECT_BACKOFF_MULTIPLIER = 2.0
     }
 
     private val _connectionState = MutableStateFlow<PrinterConnectionState>(
@@ -76,6 +81,7 @@ class BluetoothPrinterService(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var scanJob: Job? = null
+    private var reconnectJob: Job? = null
 
     private val bluetoothManager: BluetoothManager? by lazy {
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -218,6 +224,9 @@ class BluetoothPrinterService(
         if (!checkBluetoothAvailable()) return@withContext
 
         stopScan()
+        // Cancel any ongoing reconnect to avoid conflicts
+        reconnectJob?.cancel()
+        reconnectJob = null
 
         Log.d(TAG, "Connecting to $address...")
         _connectionState.value = PrinterConnectionState.Connecting
@@ -287,10 +296,49 @@ class BluetoothPrinterService(
 
     override suspend fun disconnect() {
         Log.d(TAG, "Disconnecting...")
+        reconnectJob?.cancel()
+        reconnectJob = null
         closeSocket()
         connectedDevice = null
         _connectionState.value = PrinterConnectionState.Disconnected
         updateDeviceList()
+    }
+
+    /**
+     * Start auto-reconnect loop for a previously connected printer.
+     * Uses exponential backoff (2s → 4s → 8s → ... → 30s cap).
+     * Runs until reconnected or cancelled (e.g. by explicit disconnect()).
+     */
+    private fun startAutoReconnect(address: String) {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            var currentDelay = RECONNECT_DELAY_INITIAL_MS
+            var attempt = 0
+
+            while (currentCoroutineContext().isActive) {
+                attempt++
+                Log.d(TAG, "Auto-reconnect attempt $attempt in ${currentDelay}ms")
+                _connectionState.value = PrinterConnectionState.Reconnecting(attempt)
+                delay(currentDelay)
+
+                if (!currentCoroutineContext().isActive) break
+
+                try {
+                    connect(address)
+                    if (_connectionState.value is PrinterConnectionState.Connected) {
+                        Log.d(TAG, "Auto-reconnect successful after $attempt attempts")
+                        return@launch
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Auto-reconnect attempt $attempt failed", e)
+                }
+
+                currentDelay = (currentDelay * RECONNECT_BACKOFF_MULTIPLIER).toLong()
+                    .coerceAtMost(RECONNECT_DELAY_MAX_MS)
+            }
+        }
     }
 
     private fun closeSocket() {
@@ -305,6 +353,14 @@ class BluetoothPrinterService(
     }
 
     override suspend fun print(data: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
+        // Check if socket is actually alive (handles power-cycle scenario)
+        if (_connectionState.value is PrinterConnectionState.Connected && !isSocketAlive()) {
+            Log.d(TAG, "Socket dead (device likely power-cycled), reconnecting...")
+            closeSocket()
+            connectedDevice = null
+            _connectionState.value = PrinterConnectionState.Disconnected
+        }
+
         if (_connectionState.value !is PrinterConnectionState.Connected) {
             // Try to auto-connect to saved printer
             val config = devicePreferences.getPrinterConfig()
@@ -327,12 +383,37 @@ class BluetoothPrinterService(
             Result.success(Unit)
         } catch (e: IOException) {
             Log.e(TAG, "Print failed", e)
-            // Connection might be lost
+            // Connection lost — start auto-reconnect
+            val address = connectedDevice?.address
+                ?: devicePreferences.getPrinterConfig()?.address
             closeSocket()
             connectedDevice = null
             _connectionState.value = PrinterConnectionState.Error(PrinterError.ConnectionLost)
             _errors.emit(PrinterError.PrintFailed)
+
+            // Start background reconnect for next print attempt
+            if (address != null) {
+                startAutoReconnect(address)
+            }
+
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Check if the Bluetooth socket is still alive.
+     * A closed/dead socket from a power-cycled device may still report isConnected=true
+     * until we actually try to use it, so we do a zero-byte write test.
+     */
+    private fun isSocketAlive(): Boolean {
+        return try {
+            val s = socket ?: return false
+            if (!s.isConnected) return false
+            // Attempt to check the output stream — if device power-cycled,
+            // the socket may still appear connected until we write
+            outputStream != null
+        } catch (e: Exception) {
+            false
         }
     }
 

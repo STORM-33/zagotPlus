@@ -78,6 +78,7 @@ fun PrinterConfigDialog(
 
     val isScanning = connectionState == PrinterConnectionState.Scanning
     val isConnecting = connectionState == PrinterConnectionState.Connecting
+            || connectionState is PrinterConnectionState.Reconnecting
     val isConnected = connectionState is PrinterConnectionState.Connected
 
     // Permission handling
@@ -148,6 +149,14 @@ fun PrinterConfigDialog(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(text = "Підключення...")
+                            }
+                            is PrinterConnectionState.Reconnecting -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Перепідключення (спроба ${state.attempt})...")
                             }
                             PrinterConnectionState.Scanning -> {
                                 CircularProgressIndicator(

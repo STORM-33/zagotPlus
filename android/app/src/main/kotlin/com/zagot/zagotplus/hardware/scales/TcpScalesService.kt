@@ -2,6 +2,7 @@ package com.zagot.zagotplus.hardware.scales
 
 import android.util.Log
 import com.zagot.zagotplus.data.preferences.DevicePreferences
+import com.zagot.zagotplus.hardware.scales.protocol.DniprovesyProtocol
 import com.zagot.zagotplus.hardware.scales.protocol.GenericAsciiProtocol
 import com.zagot.zagotplus.hardware.scales.protocol.MettlerToledoProtocol
 import com.zagot.zagotplus.hardware.scales.protocol.ScalesProtocol
@@ -56,8 +57,9 @@ class TcpScalesService(
         private const val DEFAULT_PORT = 8899
         private const val CONNECT_TIMEOUT_MS = 5000
         private const val READ_TIMEOUT_MS = 3000
-        private const val RECONNECT_DELAY_MS = 2000L
-        private const val MAX_RECONNECT_ATTEMPTS = 5
+        private const val RECONNECT_DELAY_INITIAL_MS = 2000L
+        private const val RECONNECT_DELAY_MAX_MS = 30000L
+        private const val RECONNECT_BACKOFF_MULTIPLIER = 2.0
         private const val BUFFER_SIZE = 256
     }
 
@@ -72,13 +74,17 @@ class TcpScalesService(
     private val _errors = MutableSharedFlow<ScalesError>()
     override val errors: SharedFlow<ScalesError> = _errors.asSharedFlow()
 
+    private val _debugLog = MutableSharedFlow<String>(replay = 50, extraBufferCapacity = 100)
+    override val debugLog: SharedFlow<String> = _debugLog.asSharedFlow()
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var connectionJob: Job? = null
     private var socket: Socket? = null
     private var outputStream: OutputStream? = null
 
-    // Protocol detection - try Mettler Toledo first, then fall back to Generic ASCII
+    // Protocol detection - try Dniprovesy first (actual hardware), then Mettler Toledo, then Generic ASCII
     private val protocols: List<ScalesProtocol> = listOf(
+        DniprovesyProtocol(),
         MettlerToledoProtocol(),
         GenericAsciiProtocol()
     )
@@ -94,8 +100,9 @@ class TcpScalesService(
 
     override suspend fun connect() {
         if (_connectionState.value is ScalesConnectionState.Connected ||
-            _connectionState.value is ScalesConnectionState.Connecting) {
-            Log.d(TAG, "Already connected or connecting, skipping")
+            _connectionState.value is ScalesConnectionState.Connecting ||
+            _connectionState.value is ScalesConnectionState.Reconnecting) {
+            Log.d(TAG, "Already connected, connecting, or reconnecting — skipping")
             return
         }
 
@@ -107,19 +114,27 @@ class TcpScalesService(
 
     private suspend fun connectWithRetry() {
         var attempt = 0
+        var currentDelay = RECONNECT_DELAY_INITIAL_MS
 
-        while (attempt < MAX_RECONNECT_ATTEMPTS && currentCoroutineContext().isActive) {
+        while (currentCoroutineContext().isActive) {
             attempt++
 
             if (attempt > 1) {
-                _connectionState.value = ScalesConnectionState.Reconnecting(attempt, MAX_RECONNECT_ATTEMPTS)
-                delay(RECONNECT_DELAY_MS)
+                _connectionState.value = ScalesConnectionState.Reconnecting(attempt)
+                Log.d(TAG, "Reconnecting in ${currentDelay}ms (attempt $attempt)")
+                delay(currentDelay)
+                // Exponential backoff with cap
+                currentDelay = (currentDelay * RECONNECT_BACKOFF_MULTIPLIER).toLong()
+                    .coerceAtMost(RECONNECT_DELAY_MAX_MS)
             } else {
                 _connectionState.value = ScalesConnectionState.Connecting
             }
 
             try {
                 if (establishConnection()) {
+                    // Reset backoff on successful connection
+                    attempt = 0
+                    currentDelay = RECONNECT_DELAY_INITIAL_MS
                     readLoop()
                     // If readLoop exits normally (without exception), connection was closed
                     Log.d(TAG, "Read loop exited, will reconnect")
@@ -134,16 +149,13 @@ class TcpScalesService(
 
             closeSocket()
         }
-
-        // Max attempts reached
-        _connectionState.value = ScalesConnectionState.Error(ScalesError.ConnectionFailed)
-        _errors.emit(ScalesError.ConnectionFailed)
     }
 
     private suspend fun establishConnection(): Boolean = withContext(Dispatchers.IO) {
         try {
             val cfg = config
             Log.d(TAG, "Connecting to ${cfg.ipAddress}:${cfg.port}")
+            _debugLog.emit("[CONN] Connecting to ${cfg.ipAddress}:${cfg.port}...")
 
             socket = Socket().apply {
                 soTimeout = READ_TIMEOUT_MS
@@ -153,6 +165,7 @@ class TcpScalesService(
             outputStream = socket?.getOutputStream()
 
             _connectionState.value = ScalesConnectionState.Connected("${cfg.ipAddress}:${cfg.port}")
+            _debugLog.emit("[CONN] Connected successfully")
             Log.d(TAG, "Connected successfully")
 
             // Send initial weight request if protocol supports it
@@ -161,10 +174,12 @@ class TcpScalesService(
             true
         } catch (e: SocketTimeoutException) {
             Log.e(TAG, "Connection timeout", e)
+            _debugLog.emit("[ERR] Connection timeout")
             _errors.emit(ScalesError.Timeout)
             false
         } catch (e: IOException) {
             Log.e(TAG, "Connection failed", e)
+            _debugLog.emit("[ERR] Connection failed: ${e.message}")
             _errors.emit(ScalesError.NetworkError(e.message ?: "Connection failed"))
             false
         }
@@ -186,6 +201,14 @@ class TcpScalesService(
 
                     if (bytesRead > 0) {
                         val data = buffer.copyOfRange(0, bytesRead)
+                        val hex = data.joinToString(" ") { "%02X".format(it) }
+                        val ascii = data.map { b ->
+                            val c = b.toInt().toChar()
+                            if (c.isISOControl()) '.' else c
+                        }.joinToString("")
+                        _debugLog.emit("[RX] HEX: $hex")
+                        _debugLog.emit("[RX] ASC: $ascii")
+
                         val text = data.toString(Charsets.US_ASCII)
                         messageBuffer.append(text)
 
@@ -201,6 +224,7 @@ class TcpScalesService(
         } catch (e: IOException) {
             if (currentCoroutineContext().isActive) {
                 Log.e(TAG, "Read error", e)
+                _debugLog.emit("[ERR] Read error: ${e.message}")
                 _connectionState.value = ScalesConnectionState.Error(ScalesError.ConnectionLost)
                 _errors.emit(ScalesError.ConnectionLost)
             }
@@ -208,14 +232,12 @@ class TcpScalesService(
     }
 
     private suspend fun processBuffer(buffer: StringBuilder) {
-        // Look for complete messages (terminated by \r\n or \n)
+        // Strategy 1: Look for newline-terminated messages (\r\n or \n)
         while (true) {
             val newlineIndex = buffer.indexOfAny(charArrayOf('\n', '\r'))
             if (newlineIndex == -1) break
 
-            // Extract message up to newline
             var endIndex = newlineIndex
-            // Skip \r\n combination
             if (endIndex + 1 < buffer.length && buffer[endIndex] == '\r' && buffer[endIndex + 1] == '\n') {
                 endIndex++
             }
@@ -224,6 +246,37 @@ class TcpScalesService(
             buffer.delete(0, endIndex + 1)
 
             if (message.isNotEmpty()) {
+                parseAndEmitWeight(message)
+            }
+        }
+
+        // Strategy 2: Handle '='-delimited messages (Dniprovesy protocol - no newlines)
+        // Split on '=' as message start marker
+        while (buffer.length > 1) {
+            val firstEq = buffer.indexOf('=')
+            if (firstEq == -1) break
+
+            // Discard garbage before first '='
+            if (firstEq > 0) {
+                buffer.delete(0, firstEq)
+            }
+
+            // Look for next '=' which marks the start of the following message
+            val nextEq = buffer.indexOf('=', 1)
+            if (nextEq == -1) {
+                // No next '=' yet - could be incomplete message, wait for more data
+                // But if buffer is long enough for a complete Dniprovesy message (8 bytes), process it
+                if (buffer.length >= 8) {
+                    val message = buffer.substring(0, 8)
+                    buffer.delete(0, 8)
+                    parseAndEmitWeight(message)
+                } else {
+                    break // Wait for more data
+                }
+            } else {
+                // Extract message between two '=' markers
+                val message = buffer.substring(0, nextEq)
+                buffer.delete(0, nextEq)
                 parseAndEmitWeight(message)
             }
         }
@@ -243,18 +296,23 @@ class TcpScalesService(
             val reading = protocol.parseReading(data)
             if (reading != null) {
                 activeProtocol = protocol
+                _debugLog.emit("[PARSE] OK (${protocol.name}): ${reading.weightKg} kg, stable=${reading.isStable}")
                 _weightReadings.emit(reading)
                 return
             }
         }
 
         // No protocol matched - log for debugging
+        val hex = data.joinToString(" ") { "%02X".format(it) }
+        _debugLog.emit("[PARSE] FAIL: \"$rawMessage\" | HEX: $hex")
         Log.w(TAG, "Could not parse weight from: $rawMessage")
     }
 
     private suspend fun sendWeightRequest() {
         try {
             val command = activeProtocol.buildRequestCommand() ?: return
+            val hex = command.joinToString(" ") { "%02X".format(it) }
+            _debugLog.emit("[TX] HEX: $hex")
             outputStream?.write(command)
             outputStream?.flush()
         } catch (e: IOException) {
@@ -264,10 +322,12 @@ class TcpScalesService(
 
     override suspend fun disconnect() {
         Log.d(TAG, "Disconnecting...")
+        _debugLog.emit("[CONN] Disconnecting...")
         connectionJob?.cancel()
         connectionJob = null
         closeSocket()
         _connectionState.value = ScalesConnectionState.Disconnected
+        _debugLog.emit("[CONN] Disconnected")
     }
 
     private fun closeSocket() {
@@ -321,6 +381,20 @@ class TcpScalesService(
     override fun isConfigured(): Boolean {
         val cfg = devicePreferences.getScalesConfig()
         return cfg != null && cfg.ipAddress.isNotBlank()
+    }
+
+    override suspend fun sendRawCommand(command: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val bytes = command.toByteArray(Charsets.US_ASCII)
+            val hex = bytes.joinToString(" ") { "%02X".format(it) }
+            _debugLog.emit("[TX-RAW] \"$command\" | HEX: $hex")
+            outputStream?.write(bytes)
+            outputStream?.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            _debugLog.emit("[ERR] Send failed: ${e.message}")
+            Result.failure(e)
+        }
     }
 }
 

@@ -8,5 +8,6 @@ sealed class PrinterConnectionState {
     data object Scanning : PrinterConnectionState()
     data object Connecting : PrinterConnectionState()
     data class Connected(val device: BluetoothDeviceInfo) : PrinterConnectionState()
+    data class Reconnecting(val attempt: Int) : PrinterConnectionState()
     data class Error(val error: PrinterError) : PrinterConnectionState()
 }
