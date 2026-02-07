@@ -1,4 +1,4 @@
-package com.zagot.zagotplus.sync
+package com.zagot.zagotplus.sync.legacy
 
 import com.zagot.zagotplus.data.remote.dto.CashOperationDto
 import com.zagot.zagotplus.data.remote.dto.ExpenseCategoryDto

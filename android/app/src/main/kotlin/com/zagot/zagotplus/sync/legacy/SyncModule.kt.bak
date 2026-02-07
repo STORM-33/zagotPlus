@@ -1,4 +1,4 @@
-package com.zagot.zagotplus.sync
+package com.zagot.zagotplus.sync.legacy
 
 import dagger.Binds
 import dagger.Module
