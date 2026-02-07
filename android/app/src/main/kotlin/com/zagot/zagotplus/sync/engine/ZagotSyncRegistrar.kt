@@ -33,13 +33,13 @@ import javax.inject.Singleton
  */
 @Singleton
 class ZagotSyncRegistrar @Inject constructor(
-    private val locationDao: LocationDao,
-    private val productDao: ProductDao,
-    private val expenseCategoryDao: ExpenseCategoryDao,
-    private val purchaseBatchDao: PurchaseBatchDao,
-    private val saleBatchDao: SaleBatchDao,
-    private val transactionDao: TransactionDao,
-    private val cashOperationDao: CashOperationDao,
+    @RawDao private val locationDao: LocationDao,
+    @RawDao private val productDao: ProductDao,
+    @RawDao private val expenseCategoryDao: ExpenseCategoryDao,
+    @RawDao private val purchaseBatchDao: PurchaseBatchDao,
+    @RawDao private val saleBatchDao: SaleBatchDao,
+    @RawDao private val transactionDao: TransactionDao,
+    @RawDao private val cashOperationDao: CashOperationDao,
 ) {
     companion object {
         private const val TAG = "ZagotSyncRegistrar"

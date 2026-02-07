@@ -11,6 +11,7 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.zagotplus.sync.engine.RawDao
 import com.zagot.zagotplus.sync.engine.SyncMetadataDao
 import com.zagot.zagotplus.sync.engine.SyncOutboxDao
 import dagger.Module
@@ -69,9 +70,11 @@ object DatabaseModule {
 
     /**
      * Provides LocationDao from database.
+     * Qualified with @RawDao — the unqualified binding is the SyncAware wrapper.
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideLocationDao(database: ZagotDatabase): LocationDao {
         return database.locationDao()
     }
@@ -81,6 +84,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideProductDao(database: ZagotDatabase): ProductDao {
         return database.productDao()
     }
@@ -90,6 +94,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideTransactionDao(database: ZagotDatabase): TransactionDao {
         return database.transactionDao()
     }
@@ -99,6 +104,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun providePurchaseBatchDao(database: ZagotDatabase): PurchaseBatchDao {
         return database.purchaseBatchDao()
     }
@@ -108,6 +114,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideSaleBatchDao(database: ZagotDatabase): SaleBatchDao {
         return database.saleBatchDao()
     }
@@ -117,6 +124,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideExpenseCategoryDao(database: ZagotDatabase): ExpenseCategoryDao {
         return database.expenseCategoryDao()
     }
@@ -126,6 +134,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideCashOperationDao(database: ZagotDatabase): CashOperationDao {
         return database.cashOperationDao()
     }
