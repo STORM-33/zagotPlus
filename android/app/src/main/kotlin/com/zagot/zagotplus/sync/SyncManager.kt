@@ -1,6 +1,6 @@
 package com.zagot.zagotplus.sync
 
-import com.zagot.zagotplus.sync.engine.SyncEngine
+import com.zagot.zagotplus.sync.engine.api.SyncEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

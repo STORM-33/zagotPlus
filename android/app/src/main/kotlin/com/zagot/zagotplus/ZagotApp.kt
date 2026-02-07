@@ -15,9 +15,9 @@ import com.zagot.zagotplus.debug.CrashLogger
 import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
-import com.zagot.zagotplus.sync.engine.SyncEngine
-import com.zagot.zagotplus.sync.engine.SyncMigrationHelper
-import com.zagot.zagotplus.sync.engine.ZagotSyncRegistrar
+import com.zagot.zagotplus.sync.engine.api.SyncEngine
+import com.zagot.zagotplus.sync.engine.api.ZagotSyncRegistrar
+import com.zagot.zagotplus.sync.engine.db.SyncMigrationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

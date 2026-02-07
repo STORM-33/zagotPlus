@@ -11,9 +11,9 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
-import com.zagot.zagotplus.sync.engine.RawDao
-import com.zagot.zagotplus.sync.engine.SyncMetadataDao
-import com.zagot.zagotplus.sync.engine.SyncOutboxDao
+import com.zagot.zagotplus.sync.engine.db.SyncMetadataDao
+import com.zagot.zagotplus.sync.engine.db.SyncOutboxDao
+import com.zagot.zagotplus.sync.engine.util.RawDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

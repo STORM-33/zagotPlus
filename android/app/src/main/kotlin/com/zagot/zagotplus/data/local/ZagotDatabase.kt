@@ -20,10 +20,10 @@ import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
-import com.zagot.zagotplus.sync.engine.SyncMetadataDao
-import com.zagot.zagotplus.sync.engine.SyncMetadataEntity
-import com.zagot.zagotplus.sync.engine.SyncOutboxDao
-import com.zagot.zagotplus.sync.engine.SyncOutboxEntity
+import com.zagot.zagotplus.sync.engine.db.SyncMetadataDao
+import com.zagot.zagotplus.sync.engine.db.SyncMetadataEntity
+import com.zagot.zagotplus.sync.engine.db.SyncOutboxDao
+import com.zagot.zagotplus.sync.engine.db.SyncOutboxEntity
 
 /**
  * Room database for Zagot+ application.

@@ -1,7 +1,7 @@
 package com.zagot.zagotplus.sync
 
-import com.zagot.zagotplus.sync.engine.SyncEngine
-import com.zagot.zagotplus.sync.engine.SyncState
+import com.zagot.zagotplus.sync.engine.api.SyncEngine
+import com.zagot.zagotplus.sync.engine.state.SyncState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Instant
