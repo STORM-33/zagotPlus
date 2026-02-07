@@ -142,7 +142,7 @@ dependencies {
     implementation(libs.supabase.realtime.kt)
     implementation(libs.supabase.storage.kt)
     implementation(libs.supabase.gotrue.kt)
-    implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.okhttp)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

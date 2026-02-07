@@ -112,7 +112,7 @@ supabase-postgrest-kt = { group = "io.github.jan-tennert.supabase", name = "post
 supabase-realtime-kt = { group = "io.github.jan-tennert.supabase", name = "realtime-kt", version.ref = "supabase" }
 supabase-storage-kt = { group = "io.github.jan-tennert.supabase", name = "storage-kt", version.ref = "supabase" }
 supabase-gotrue-kt = { group = "io.github.jan-tennert.supabase", name = "gotrue-kt", version.ref = "supabase" }
-ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }

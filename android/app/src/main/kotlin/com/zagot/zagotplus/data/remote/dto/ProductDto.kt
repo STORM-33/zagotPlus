@@ -71,5 +71,20 @@ data class ProductDto(
             createdAt = entity.createdAt.toString(),
             imageUri = entity.imageUri
         )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): ProductDto = ProductDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            name = record["name"] as String,
+            defaultBuyPrice = record["default_buy_price"]?.toString(),
+            defaultSellPrice = record["default_sell_price"]?.toString(),
+            isActive = record["is_active"] as Boolean,
+            createdAt = record["created_at"] as String,
+            imageUri = record["image_uri"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
+        )
     }
 }

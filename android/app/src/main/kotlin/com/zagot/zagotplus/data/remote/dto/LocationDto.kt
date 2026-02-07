@@ -58,5 +58,18 @@ data class LocationDto(
             syncedAt = entity.syncedAt?.toString(),
             deviceId = entity.deviceId
         )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): LocationDto = LocationDto(
+            id = record["id"] as String,
+            name = record["name"] as String,
+            type = record["type"] as String,
+            createdAt = record["created_at"] as String,
+            localId = record["local_id"] as? String,
+            syncedAt = record["synced_at"] as? String,
+            deviceId = record["device_id"] as? String,
+        )
     }
 }

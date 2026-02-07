@@ -106,5 +106,27 @@ data class PurchaseBatchDto(
             voidedAt = entity.voidedAt?.toString(),
             voidedByDeviceId = entity.voidedByDeviceId
         )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): PurchaseBatchDto = PurchaseBatchDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            locationId = record["location_id"] as? String,
+            notes = record["notes"] as? String,
+            totalWeightKg = record["total_weight_kg"]?.toString(),
+            totalAmount = record["total_amount"]?.toString(),
+            itemCount = (record["item_count"] as? Number)?.toInt(),
+            deviceId = record["device_id"] as? String,
+            createdAt = record["created_at"] as String,
+            syncedAt = record["synced_at"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
+            isVoided = record["is_voided"] as? Boolean ?: false,
+            correctsBatchId = record["corrects_batch_id"] as? String,
+            correctionReason = record["correction_reason"] as? String,
+            voidedAt = record["voided_at"] as? String,
+            voidedByDeviceId = record["voided_by_device_id"] as? String,
+        )
     }
 }

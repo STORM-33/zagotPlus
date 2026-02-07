@@ -95,5 +95,25 @@ data class CashOperationDto(
             isTransfer = entity.isTransfer,
             transferPairId = entity.transferPairId
         )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): CashOperationDto = CashOperationDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            locationId = record["location_id"] as? String,
+            type = record["type"] as String,
+            amount = record["amount"]?.toString() ?: "0",
+            categoryId = record["category_id"] as? String,
+            batchId = record["batch_id"] as? String,
+            notes = record["notes"] as? String,
+            deviceId = record["device_id"] as? String,
+            createdAt = record["created_at"] as String,
+            syncedAt = record["synced_at"] as? String,
+            isTransfer = record["is_transfer"] as? Boolean ?: false,
+            transferPairId = record["transfer_pair_id"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
+        )
     }
 }
