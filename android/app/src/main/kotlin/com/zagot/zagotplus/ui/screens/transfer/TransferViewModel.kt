@@ -181,27 +181,39 @@ class TransferViewModel @Inject constructor(
                 allProducts = productRepository.getActiveProducts().first()
                 
                 // Load inventory for source location with product details
-                loadInventoryForLocation(sourceLocationId ?: UUID.randomUUID())
-                
-                // Wait for inventory to be loaded
-                val currentState = _uiState.value
+                val effectiveSourceId = sourceLocationId ?: UUID.randomUUID()
+                loadInventoryForLocation(effectiveSourceId)
                 
                 // Find prefilled product if specified
                 var selectedProduct: Product? = null
                 var selectedAvailableStock = BigDecimal.ZERO
-                var screenState = TransferScreenState.PRODUCT_GRID
                 
                 prefilledProductId?.let { idStr ->
                     try {
                         val productId = UUID.fromString(idStr)
-                        val inventoryWithProduct = currentState.inventoryItems.find { it.product.id == productId }
-                            ?: _uiState.value.inventoryItems.find { it.product.id == productId }
-                        inventoryWithProduct?.let {
-                            selectedProduct = it.product
-                            selectedAvailableStock = it.inventory.totalWeightKg
-                            screenState = TransferScreenState.WEIGHT_ENTRY
+                        // Find product from allProducts (always loaded) rather than inventoryItems
+                        // (which load asynchronously via loadInventoryForLocation)
+                        val product = allProducts.find { it.id == productId }
+                        if (product != null) {
+                            selectedProduct = product
+                            // Get current stock from inventory query directly
+                            val inventory = transactionRepository
+                                .getInventoryByLocation(effectiveSourceId).first()
+                            selectedAvailableStock = inventory
+                                .find { it.productId == productId }
+                                ?.totalWeightKg ?: BigDecimal.ZERO
                         }
                     } catch (_: Exception) { /* Invalid UUID */ }
+                }
+                
+                // Determine starting screen state:
+                // - If destination is missing → LOCATIONS (to pick destination)
+                // - If destination known + product known → WEIGHT_ENTRY
+                // - If destination known + no product → PRODUCT_GRID
+                val screenState = when {
+                    destinationLocation == null -> TransferScreenState.LOCATIONS
+                    selectedProduct != null -> TransferScreenState.WEIGHT_ENTRY
+                    else -> TransferScreenState.PRODUCT_GRID
                 }
                 
                 _uiState.update {
@@ -293,8 +305,15 @@ class TransferViewModel @Inject constructor(
         val state = _uiState.value
         if (state.sourceLocation == null || state.destinationLocation == null) return
         
-        _uiState.update {
-            it.copy(screenState = TransferScreenState.PRODUCT_GRID)
+        // If product was prefilled (from inventory), skip the grid
+        if (state.selectedProduct != null && prefilledProductId != null) {
+            _uiState.update {
+                it.copy(screenState = TransferScreenState.WEIGHT_ENTRY)
+            }
+        } else {
+            _uiState.update {
+                it.copy(screenState = TransferScreenState.PRODUCT_GRID)
+            }
         }
     }
 
