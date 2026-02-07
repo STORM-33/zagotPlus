@@ -16,7 +16,11 @@ import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
 import com.zagot.zagotplus.sync.engine.SyncEngine
+import com.zagot.zagotplus.sync.engine.SyncMigrationHelper
 import com.zagot.zagotplus.sync.engine.ZagotSyncRegistrar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import dagger.hilt.android.HiltAndroidApp
 import java.util.Locale
 import javax.inject.Inject
@@ -32,6 +36,9 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var syncRegistrar: ZagotSyncRegistrar
+
+    @Inject
+    lateinit var syncMigrationHelper: SyncMigrationHelper
 
     @Inject
     lateinit var mainThreadDebugger: MainThreadDebugger
@@ -61,6 +68,10 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
         // Register all tables then start the realtime sync engine
         syncRegistrar.registerAll(syncEngine)
+        // Migrate existing unsynced records to outbox (one-time, runs on background thread)
+        CoroutineScope(Dispatchers.IO).launch {
+            syncMigrationHelper.migrateIfNeeded()
+        }
         syncEngine.start()
         
         // Initialize performance debugging in debug builds
