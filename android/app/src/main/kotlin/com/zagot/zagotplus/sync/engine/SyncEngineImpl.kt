@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -281,7 +282,7 @@ class SyncEngineImpl @Inject constructor(
             return
         }
 
-        val eventTs = event.record[config.timestampColumn] as? Long
+        val eventTs = event.record[config.timestampColumn] as? String
         val pk = event.record[config.primaryKey]?.toString()
 
         // Log for diagnostic purposes; actual dedup is handled by applyToRoom's UPSERT timestamp guard
@@ -296,6 +297,7 @@ class SyncEngineImpl @Inject constructor(
     /**
      * Check if a buffered realtime event duplicates an already-pulled record.
      * Same PK and event.updated_at <= pulled.updated_at → skip.
+     * Timestamps are ISO-8601 strings from Supabase.
      */
     private fun isDuplicate(
         event: RealtimeChangeEvent,
@@ -303,11 +305,14 @@ class SyncEngineImpl @Inject constructor(
         config: SyncTableConfig,
     ): Boolean {
         val eventPk = event.record[config.primaryKey]?.toString() ?: return false
-        val eventTs = event.record[config.timestampColumn] as? Long ?: return false
+        val eventTsStr = event.record[config.timestampColumn] as? String ?: return false
 
         val pulled = pulledRecords.find { it[config.primaryKey]?.toString() == eventPk }
             ?: return false
-        val pulledTs = pulled[config.timestampColumn] as? Long ?: return false
+        val pulledTsStr = pulled[config.timestampColumn] as? String ?: return false
+
+        val eventTs = try { Instant.parse(eventTsStr).toEpochMilli() } catch (_: Exception) { return false }
+        val pulledTs = try { Instant.parse(pulledTsStr).toEpochMilli() } catch (_: Exception) { return false }
 
         val isDup = eventTs <= pulledTs
         if (isDup) {

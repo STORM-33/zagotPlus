@@ -6,6 +6,7 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.JsonElement
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,12 +32,14 @@ class SupabaseSyncRemoteClient @Inject constructor(
         overlapWindowMs: Long,
     ): List<Record> {
         val effectiveSince = since - overlapWindowMs
-        Log.d(TAG, "Pulling $table where $timestampColumn > $effectiveSince")
+        // Convert epoch millis → ISO-8601 for Supabase timestamp column filter
+        val isoTimestamp = Instant.ofEpochMilli(effectiveSince).toString()
+        Log.d(TAG, "Pulling $table where $timestampColumn > $isoTimestamp (epoch=$effectiveSince)")
 
         val jsonRecords: List<Map<String, JsonElement>> = supabaseClient.postgrest[table]
             .select(Columns.ALL) {
                 filter {
-                    gt(timestampColumn, effectiveSince.toString())
+                    gt(timestampColumn, isoTimestamp)
                 }
                 order(timestampColumn, Order.ASCENDING)
             }

@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.sync.engine
 
 import android.util.Log
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,10 +56,13 @@ class PullCoordinator @Inject constructor(
 
     /**
      * Compute the max updated_at timestamp from a list of pulled records.
-     * Used to update last_synced_at after successful application.
+     * Parses ISO-8601 strings from Supabase into epoch millis for metadata storage.
      */
     fun maxTimestamp(records: List<Record>, timestampColumn: String): Long {
-        return records.maxOfOrNull { (it[timestampColumn] as? Long) ?: 0L } ?: 0L
+        return records.maxOfOrNull { record ->
+            val ts = record[timestampColumn] as? String
+            ts?.let { Instant.parse(it).toEpochMilli() } ?: 0L
+        } ?: 0L
     }
 
     /**
