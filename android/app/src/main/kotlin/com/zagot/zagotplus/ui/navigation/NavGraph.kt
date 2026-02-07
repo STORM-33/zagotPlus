@@ -55,6 +55,7 @@ import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleEntryScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.cash.CashScreen
+import com.zagot.zagotplus.ui.screens.settings.ScalesDebugScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import com.zagot.zagotplus.ui.screens.transfer.TransferScreen
 import androidx.navigation.NavType
@@ -374,7 +375,19 @@ fun NavGraph(
                 SettingsScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToProducts = { navController.navigate(Destination.Products.route) },
+                    onNavigateToScalesDebug = { navController.navigate(Destination.ScalesDebug.route) },
                     authPreferences = authPreferences
+                )
+            }
+            composable(
+                route = Destination.ScalesDebug.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
+                ScalesDebugScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             composable(

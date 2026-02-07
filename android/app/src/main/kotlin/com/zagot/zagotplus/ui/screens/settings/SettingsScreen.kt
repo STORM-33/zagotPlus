@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Hardware
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
@@ -77,6 +78,7 @@ import java.time.format.DateTimeFormatter
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToProducts: () -> Unit,
+    onNavigateToScalesDebug: () -> Unit,
     authPreferences: AuthPreferences,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
@@ -532,6 +534,7 @@ fun SettingsScreen(
                                 text = when (val state = uiState.printerConnectionState) {
                                     is PrinterConnectionState.Connected -> state.device.name
                                     is PrinterConnectionState.Connecting -> "Підключення..."
+                                    is PrinterConnectionState.Reconnecting -> "Перепідключення..."
                                     is PrinterConnectionState.Scanning -> "Пошук..."
                                     is PrinterConnectionState.Error -> "Помилка"
                                     PrinterConnectionState.Disconnected -> uiState.printerConfig?.name ?: "Не налаштовано"
@@ -548,6 +551,45 @@ fun SettingsScreen(
                     Icon(
                         imageVector = Icons.Filled.ChevronRight,
                         contentDescription = "Налаштувати принтер",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Scales debug screen
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToScalesDebug() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.BugReport,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Діагностика ваг",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "Перегляд сирих даних з ваг",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = "Діагностика ваг",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

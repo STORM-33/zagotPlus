@@ -38,6 +38,9 @@ class MockScalesService : ScalesService {
     private val _errors = MutableSharedFlow<ScalesError>()
     override val errors: SharedFlow<ScalesError> = _errors.asSharedFlow()
 
+    private val _debugLog = MutableSharedFlow<String>(replay = 50, extraBufferCapacity = 100)
+    override val debugLog: SharedFlow<String> = _debugLog.asSharedFlow()
+
     private var simulationJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -81,6 +84,11 @@ class MockScalesService : ScalesService {
     }
 
     override fun isConfigured(): Boolean = true
+
+    override suspend fun sendRawCommand(command: String): Result<Unit> {
+        _debugLog.emit("[TX-RAW] \"$command\" (mock)")
+        return Result.success(Unit)
+    }
 
     private fun startSimulation() {
         simulationJob = scope.launch {

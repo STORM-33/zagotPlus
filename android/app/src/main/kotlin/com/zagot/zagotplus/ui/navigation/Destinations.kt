@@ -151,6 +151,12 @@ sealed class Destination(
         title = "Налаштування",
         icon = Icons.Filled.Settings
     )
+
+    data object ScalesDebug : Destination(
+        route = "scales_debug",
+        title = "Діагностика ваг",
+        icon = Icons.Filled.Settings
+    )
     
     data object Transfer : Destination(
         route = "transfer",

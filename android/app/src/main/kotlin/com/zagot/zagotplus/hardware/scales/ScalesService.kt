@@ -16,6 +16,9 @@ interface ScalesService {
     /** Stream of errors */
     val errors: SharedFlow<ScalesError>
 
+    /** Debug log stream - raw data and connection events for diagnostics */
+    val debugLog: SharedFlow<String>
+
     /** Attempt to connect to configured scales */
     suspend fun connect()
 
@@ -30,4 +33,7 @@ interface ScalesService {
 
     /** Check if scales are configured */
     fun isConfigured(): Boolean
+
+    /** Send raw command string to scales (for debugging) */
+    suspend fun sendRawCommand(command: String): Result<Unit>
 }
