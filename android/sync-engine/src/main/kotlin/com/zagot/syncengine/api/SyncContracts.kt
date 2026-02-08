@@ -31,12 +31,16 @@ interface SyncRemoteClient {
      * (PullCoordinator subtracts the window before calling this method).
      * [overlapWindowMs] is passed for informational purposes only and
      * MUST NOT be subtracted again by implementations.
+     *
+     * @param limit max records to return (pagination page size). Implementations
+     *   MUST respect this to enable cursor-based pagination in [PullCoordinator].
      */
     suspend fun pull(
         table: String,
         timestampColumn: String,
         since: Long,
         overlapWindowMs: Long = 0L,
+        limit: Int = 1000,
     ): List<Record>
 
     /** Push (upsert) records to [table], keyed on [primaryKey]. */

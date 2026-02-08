@@ -33,11 +33,12 @@ class SupabaseSyncRemoteClient @Inject constructor(
         timestampColumn: String,
         since: Long,
         overlapWindowMs: Long,
+        limit: Int,
     ): List<Record> {
         // Overlap window already subtracted by PullCoordinator — use since directly.
         // Convert epoch millis → ISO-8601 for Supabase timestamp column filter.
         val isoTimestamp = Instant.ofEpochMilli(since).toString()
-        Log.d(TAG, "Pulling $table where $timestampColumn > $isoTimestamp (epoch=$since)")
+        Log.d(TAG, "Pulling $table where $timestampColumn > $isoTimestamp (epoch=$since, limit=$limit)")
 
         val jsonRecords: List<Map<String, JsonElement>> = supabaseClient.postgrest[table]
             .select(Columns.ALL) {
@@ -45,6 +46,7 @@ class SupabaseSyncRemoteClient @Inject constructor(
                     gt(timestampColumn, isoTimestamp)
                 }
                 order(timestampColumn, Order.ASCENDING)
+                limit(count = limit.toLong())
             }
             .decodeList()
 

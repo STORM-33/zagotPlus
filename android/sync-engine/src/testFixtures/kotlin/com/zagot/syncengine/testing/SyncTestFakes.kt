@@ -47,12 +47,19 @@ class FakeSupabaseClient : SyncRemoteClient {
         timestampColumn: String,
         since: Long,
         overlapWindowMs: Long,
+        limit: Int,
     ): List<Record> {
         maybeFail()
-        return remoteTables[table]?.filter { record ->
-            val ts = record[timestampColumn] as? Long ?: 0L
-            ts > since
-        } ?: emptyList()
+        return remoteTables[table]
+            ?.filter { record ->
+                val ts = record[timestampColumn] as? Long ?: 0L
+                ts > since
+            }
+            ?.sortedBy { record ->
+                (record[timestampColumn] as? Long) ?: 0L
+            }
+            ?.take(limit)
+            ?: emptyList()
     }
 
     override suspend fun push(table: String, primaryKey: String, records: List<Record>) {

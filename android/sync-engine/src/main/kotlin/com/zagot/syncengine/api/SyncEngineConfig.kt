@@ -15,6 +15,9 @@ data class SyncEngineConfig(
     /** Max records per push HTTP request. Prevents oversized payloads. */
     val pushBatchSize: Int = 200,
 
+    /** Max records per pull HTTP request. Drives cursor-based pagination. */
+    val pullPageSize: Int = 1000,
+
     /** Max retries for catch-up when realtime buffer overflows repeatedly. */
     val maxCatchUpRetries: Int = 3,
 

@@ -133,6 +133,7 @@ class SyncEngineImpl @Inject constructor(
         Log.d(TAG, "Starting SyncEngine with ${registeredTables.size} tables, config=$config")
         started = true
         pushCoordinator.pushBatchSize = config.pushBatchSize
+        pullCoordinator.pullPageSize = config.pullPageSize
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         engineScope = scope
 
