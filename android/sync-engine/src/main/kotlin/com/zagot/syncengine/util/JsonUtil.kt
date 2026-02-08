@@ -2,8 +2,10 @@ package com.zagot.syncengine.util
 
 import com.zagot.syncengine.api.Record
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -21,6 +23,7 @@ object JsonUtil {
 
     /**
      * Convert a [JsonElement] to a native Kotlin type.
+     * Recursively handles arrays and objects (for JSONB columns with nested data).
      */
     fun jsonElementToAny(element: JsonElement): Any? {
         return when (element) {
@@ -34,12 +37,14 @@ object JsonUtil {
                     else -> element.content.toLongOrNull() ?: element.content
                 }
             }
-            else -> element.toString()
+            is JsonArray -> element.map { jsonElementToAny(it) }
+            is JsonObject -> element.mapValues { (_, v) -> jsonElementToAny(v) }
         }
     }
 
     /**
      * Convert a native value to a [JsonElement] for serialization.
+     * Recursively handles lists and maps (for JSONB columns with nested data).
      */
     fun anyToJsonElement(value: Any?): JsonElement {
         return when (value) {
@@ -47,6 +52,10 @@ object JsonUtil {
             is String -> JsonPrimitive(value)
             is Number -> JsonPrimitive(value)
             is Boolean -> JsonPrimitive(value)
+            is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
+            is Map<*, *> -> JsonObject(value.entries.associate { (k, v) ->
+                k.toString() to anyToJsonElement(v)
+            })
             else -> JsonPrimitive(value.toString())
         }
     }

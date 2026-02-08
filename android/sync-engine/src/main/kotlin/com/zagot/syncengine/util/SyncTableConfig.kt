@@ -1,6 +1,7 @@
 package com.zagot.syncengine.util
 
 import com.zagot.syncengine.api.Record
+import java.time.Instant
 
 /**
  * Configuration for a table registered for sync (spec Section 11).
@@ -35,13 +36,15 @@ interface ConflictResolver {
  *
  * Uses [timestampKey] to look up the comparison field — defaults to
  * "server_updated_at" matching SyncTableConfig.timestampColumn.
+ *
+ * Handles both ISO-8601 strings (from Supabase pulls) and epoch millis (Long).
  */
 class LastWriteWins(
     private val timestampKey: String = "server_updated_at",
 ) : ConflictResolver {
     override fun resolve(local: Map<String, Any?>, remote: Map<String, Any?>): Map<String, Any?> {
-        val localTs = local[timestampKey] as? Long ?: 0L
-        val remoteTs = remote[timestampKey] as? Long ?: 0L
+        val localTs = parseTimestamp(local[timestampKey])
+        val remoteTs = parseTimestamp(remote[timestampKey])
         // Tie → server (remote) wins per spec
         return if (localTs > remoteTs) local else remote
     }
@@ -51,5 +54,20 @@ class LastWriteWins(
         private val DEFAULT = LastWriteWins("server_updated_at")
         override fun resolve(local: Map<String, Any?>, remote: Map<String, Any?>): Map<String, Any?> =
             DEFAULT.resolve(local, remote)
+
+        /**
+         * Parse a timestamp value that may be an ISO-8601 string, a Long, or null.
+         * Returns epoch millis, or 0L if unparseable.
+         */
+        fun parseTimestamp(value: Any?): Long = when (value) {
+            is Long -> value
+            is Number -> value.toLong()
+            is String -> try {
+                Instant.parse(value).toEpochMilli()
+            } catch (_: Exception) {
+                0L
+            }
+            else -> 0L
+        }
     }
 }

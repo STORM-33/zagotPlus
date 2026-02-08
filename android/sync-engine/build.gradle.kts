@@ -8,6 +8,7 @@ plugins {
 
 android {
     namespace = "com.zagot.syncengine"
+    testFixtures { enable = true }
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {

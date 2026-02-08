@@ -2,7 +2,7 @@ package com.zagot.zagotplus.sync.engine
 
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
-import com.zagot.syncengine.network.FakeNetworkMonitor
+import com.zagot.syncengine.testing.FakeNetworkMonitor
 import com.zagot.syncengine.state.SyncEvent
 import com.zagot.syncengine.state.SyncState
 import com.zagot.syncengine.state.SyncStateMachine

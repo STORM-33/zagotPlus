@@ -1,7 +1,7 @@
 package com.zagot.zagotplus.sync.engine
 
 import com.google.common.truth.Truth.assertThat
-import com.zagot.syncengine.api.FakeSupabaseClient
+import com.zagot.syncengine.testing.FakeSupabaseClient
 import com.zagot.syncengine.dao.PullCoordinator
 import com.zagot.syncengine.db.SyncMetadataDao
 import com.zagot.syncengine.db.SyncMetadataEntity

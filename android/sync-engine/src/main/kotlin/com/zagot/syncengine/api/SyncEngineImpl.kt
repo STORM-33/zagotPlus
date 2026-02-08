@@ -95,6 +95,7 @@ class SyncEngineImpl @Inject constructor(
     }
 
     private val registeredTables = mutableListOf<SyncTableConfig>()
+    @Volatile private var started = false
     private var engineScope: CoroutineScope? = null
     private var networkJob: Job? = null
     private var catchUpJob: Job? = null
@@ -107,6 +108,7 @@ class SyncEngineImpl @Inject constructor(
     override val syncLog: StateFlow<List<SyncLogEntry>> get() = stateMachine.syncLog
 
     override fun registerTable(config: SyncTableConfig) {
+        check(!started) { "Cannot register tables after start() — call registerTable() before start()" }
         registeredTables.add(config)
         Log.d(TAG, "Registered table: ${config.tableName}")
     }
@@ -134,6 +136,7 @@ class SyncEngineImpl @Inject constructor(
         }
 
         Log.d(TAG, "Starting SyncEngine with ${registeredTables.size} tables")
+        started = true
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         engineScope = scope
 
@@ -181,13 +184,17 @@ class SyncEngineImpl @Inject constructor(
     override fun stop() {
         Log.d(TAG, "Stopping SyncEngine")
         cancelCatchUp()
-        engineScope?.launch {
+        // Stop realtime synchronously before cancelling scope.
+        // Using runBlocking is safe here — stop() is called from lifecycle callbacks
+        // (not from a coroutine), and realtimeManager.stop() just unsubscribes the channel.
+        runBlocking {
             realtimeManager.stop()
         }
         networkJob?.cancel()
         networkMonitor.stop()
         engineScope?.cancel()
         engineScope = null
+        started = false
     }
 
     override suspend fun syncNow() {
@@ -311,28 +318,48 @@ class SyncEngineImpl @Inject constructor(
 
     /**
      * Execute a safety sync (spec Section 9).
-     * Same pull logic as catch-up but without buffer/drain (already LIVE).
+     * Pull → reconcile conflicts → apply → push → prune.
      * Guarded by [syncMutex] to prevent overlap with catch-up.
      */
     suspend fun executeSyncCycle() = syncMutex.withLock {
         Log.d(TAG, "Executing safety sync cycle")
         stateMachine.onEvent(SyncEvent.SafetySync)
 
+        // Pull all tables first, then reconcile, then apply — same order as catch-up
+        val allPulled = mutableMapOf<SyncTableConfig, List<Record>>()
         for (config in registeredTables) {
             try {
                 val records = pullCoordinator.pull(remoteClient, config)
+                allPulled[config] = records
+            } catch (e: Exception) {
+                Log.e(TAG, "Safety sync pull failed for ${config.tableName}: ${e.message}")
+            }
+        }
 
+        // Reconcile conflicts before applying (prevents overwriting local changes)
+        for ((config, records) in allPulled) {
+            try {
+                conflictReconciler.reconcile(records, config)
+            } catch (e: Exception) {
+                Log.e(TAG, "Safety sync reconcile failed for ${config.tableName}: ${e.message}")
+            }
+        }
+
+        // Apply pulled records to Room
+        for (config in registeredTables) {
+            val records = allPulled[config] ?: continue
+            try {
                 database.withTransaction {
                     applyRecordsToRoom(config, records)
                     val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
                     pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Safety sync pull failed for ${config.tableName}: ${e.message}")
+                Log.e(TAG, "Safety sync apply failed for ${config.tableName}: ${e.message}")
             }
         }
 
-        // Push any pending outbox entries
+        // Push any pending outbox entries (losers already marked synced by reconciler)
         try {
             pushCoordinator.pushPending(remoteClient, registeredTables)
         } catch (e: Exception) {

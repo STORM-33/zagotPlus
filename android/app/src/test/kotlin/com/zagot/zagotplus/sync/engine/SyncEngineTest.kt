@@ -2,10 +2,10 @@ package com.zagot.zagotplus.sync.engine
 
 import com.google.common.truth.Truth.assertThat
 import com.zagot.syncengine.api.ChangeOperation
-import com.zagot.syncengine.api.FakeRealtimeChannel
-import com.zagot.syncengine.api.FakeSupabaseClient
+import com.zagot.syncengine.testing.FakeRealtimeChannel
+import com.zagot.syncengine.testing.FakeSupabaseClient
 import com.zagot.syncengine.api.RealtimeChangeEvent
-import com.zagot.syncengine.network.FakeNetworkMonitor
+import com.zagot.syncengine.testing.FakeNetworkMonitor
 import com.zagot.syncengine.realtime.RealtimeBuffer
 import com.zagot.syncengine.state.SyncEvent
 import com.zagot.syncengine.state.SyncState
