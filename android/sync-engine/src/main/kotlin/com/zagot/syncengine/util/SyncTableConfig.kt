@@ -21,6 +21,10 @@ data class SyncTableConfig(
  * Conflict resolution strategy (spec Section 7).
  * Default is LWW baked into UPSERT logic. Custom resolvers only invoked
  * when explicitly registered — not on the hot path for bulk operations.
+ *
+ * CONTRACT: Implementations MUST return one of the two input instances
+ * (either [local] or [remote]) — not a newly constructed map.
+ * The caller uses identity comparison (===) to determine which side won.
  */
 interface ConflictResolver {
     fun resolve(local: Map<String, Any?>, remote: Map<String, Any?>): Map<String, Any?>

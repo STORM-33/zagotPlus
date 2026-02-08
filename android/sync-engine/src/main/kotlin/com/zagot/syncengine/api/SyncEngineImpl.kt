@@ -23,6 +23,8 @@ import com.zagot.syncengine.util.SyncTableConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -88,6 +90,8 @@ class SyncEngineImpl @Inject constructor(
         private const val OUTBOX_PRUNE_RETENTION_MS = 30 * 60 * 1_000L
         /** Debounce for LIVE push to batch rapid successive writes. */
         private const val LIVE_PUSH_DEBOUNCE_MS = 200L
+        /** Max retries for catch-up when buffer overflows repeatedly. */
+        private const val MAX_CATCHUP_RETRIES = 3
     }
 
     private val registeredTables = mutableListOf<SyncTableConfig>()
@@ -95,6 +99,9 @@ class SyncEngineImpl @Inject constructor(
     private var networkJob: Job? = null
     private var catchUpJob: Job? = null
     private var livePushJob: Job? = null
+
+    /** Guards concurrent access to sync operations (catch-up vs safety sync). */
+    private val syncMutex = Mutex()
 
     override val state: StateFlow<SyncState> get() = stateMachine.state
     override val syncLog: StateFlow<List<SyncLogEntry>> get() = stateMachine.syncLog
@@ -152,7 +159,9 @@ class SyncEngineImpl @Inject constructor(
             applyRealtimeEvent(event)
         }
 
-        // Monitor network state and drive state machine
+        // Monitor network state and drive state machine.
+        // collectLatest cancels the previous lambda on new emissions,
+        // so startCatchUp is automatically cancelled on connectivity loss.
         networkJob = scope.launch {
             networkMonitor.isConnected.collectLatest { connected ->
                 if (connected) {
@@ -162,7 +171,8 @@ class SyncEngineImpl @Inject constructor(
                 } else {
                     Log.d(TAG, "Network lost")
                     stateMachine.onEvent(SyncEvent.ConnectivityLost)
-                    cancelCatchUp()
+                    // No explicit cancelCatchUp() needed — collectLatest already
+                    // cancelled the previous coroutine before entering this block.
                 }
             }
         }
@@ -183,8 +193,13 @@ class SyncEngineImpl @Inject constructor(
     override suspend fun syncNow() {
         Log.d(TAG, "Manual sync requested")
         if (engineScope == null) return
-        if (stateMachine.state.value == SyncState.OFFLINE) {
+        val currentState = stateMachine.state.value
+        if (currentState == SyncState.OFFLINE) {
             Log.w(TAG, "Cannot sync while offline")
+            return
+        }
+        if (currentState == SyncState.CATCHING_UP) {
+            Log.d(TAG, "Skipping safety sync — catch-up in progress")
             return
         }
         executeSyncCycle()
@@ -222,79 +237,84 @@ class SyncEngineImpl @Inject constructor(
      * 6. Drain Realtime buffer
      * 7. Update last_synced_at (all in single Room transaction)
      * 8. Transition to LIVE
+     *
+     * Uses iterative retry (max [MAX_CATCHUP_RETRIES]) on buffer overflow
+     * instead of recursion to prevent stack overflow under pathological write pressure.
      */
-    private suspend fun executeCatchUp(scope: CoroutineScope) {
+    private suspend fun executeCatchUp(scope: CoroutineScope) = syncMutex.withLock {
         val tableNames = registeredTables.map { it.tableName }
 
-        // Step 1: Subscribe to Realtime + buffer
-        realtimeBuffer.reset()
-        realtimeManager.start(realtimeChannel, tableNames, scope)
-
-        // Step 2: Pull remote changes for each table
-        val allPulled = mutableMapOf<SyncTableConfig, List<Record>>()
-        for (config in registeredTables) {
-            val records = pullCoordinator.pull(remoteClient, config)
-            allPulled[config] = records
-        }
-
-        // Step 3: Resolve conflicts
-        for ((config, records) in allPulled) {
-            conflictReconciler.reconcile(records, config)
-        }
-
-        // Step 4: Push remaining outbox entries
-        pushCoordinator.pushPending(remoteClient, registeredTables)
-
-        // Steps 5 + 6 + 7: Apply records + drain buffer + update metadata
-        // ALL IN A SINGLE ROOM TRANSACTION (crash safety — spec Section 5.1)
-        database.withTransaction {
-            // Step 5: Apply remote changes in FK dependency order (registeredTables order)
-            // Using registeredTables instead of allPulled.keys to guarantee FK order,
-            // even though mutableMapOf (LinkedHashMap) currently preserves insertion order.
-            for (config in registeredTables) {
-                val records = allPulled[config] ?: continue
-                applyRecordsToRoom(config, records)
-            }
-
-            // Step 6: Drain realtime buffer (deduplicated against pulled data)
-            if (!realtimeBuffer.overflowed) {
-                val bufferedEvents = realtimeBuffer.drain()
-                for (event in bufferedEvents) {
-                    val config = registeredTables.find { it.tableName == event.table } ?: continue
-                    val pulledRecords = allPulled[config] ?: emptyList()
-                    if (!isDuplicate(event, pulledRecords, config)) {
-                        applyRecordsToRoom(config, listOf(event.record))
-                    }
-                }
-            } else {
-                Log.w(TAG, "Buffer overflowed during catch-up — skipping buffer drain")
-            }
-
-            // Step 7: Update last_synced_at per table
-            for ((config, records) in allPulled) {
-                val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
-                pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
-            }
-        }
-
-        // Handle buffer overflow: re-sync instead of going LIVE with incomplete data
-        if (realtimeBuffer.overflowed) {
-            Log.w(TAG, "Buffer overflow detected — triggering fresh re-sync")
+        for (attempt in 1..MAX_CATCHUP_RETRIES) {
+            // Step 1: Subscribe to Realtime + buffer
             realtimeBuffer.reset()
-            executeCatchUp(scope)
-            return
+            realtimeManager.start(realtimeChannel, tableNames, scope)
+
+            // Step 2: Pull remote changes for each table
+            val allPulled = mutableMapOf<SyncTableConfig, List<Record>>()
+            for (config in registeredTables) {
+                val records = pullCoordinator.pull(remoteClient, config)
+                allPulled[config] = records
+            }
+
+            // Step 3: Resolve conflicts
+            for ((config, records) in allPulled) {
+                conflictReconciler.reconcile(records, config)
+            }
+
+            // Step 4: Push remaining outbox entries
+            pushCoordinator.pushPending(remoteClient, registeredTables)
+
+            // Steps 5 + 6 + 7: Apply records + drain buffer + update metadata
+            // ALL IN A SINGLE ROOM TRANSACTION (crash safety — spec Section 5.1)
+            database.withTransaction {
+                // Step 5: Apply remote changes in FK dependency order (registeredTables order)
+                for (config in registeredTables) {
+                    val records = allPulled[config] ?: continue
+                    applyRecordsToRoom(config, records)
+                }
+
+                // Step 6: Drain realtime buffer (deduplicated against pulled data)
+                if (!realtimeBuffer.overflowed) {
+                    val bufferedEvents = realtimeBuffer.drain()
+                    for (event in bufferedEvents) {
+                        val config = registeredTables.find { it.tableName == event.table } ?: continue
+                        val pulledRecords = allPulled[config] ?: emptyList()
+                        if (!isDuplicate(event, pulledRecords, config)) {
+                            applyRecordsToRoom(config, listOf(event.record))
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Buffer overflowed during catch-up — skipping buffer drain")
+                }
+
+                // Step 7: Update last_synced_at per table
+                for ((config, records) in allPulled) {
+                    val maxTs = pullCoordinator.maxTimestamp(records, config.timestampColumn)
+                    pullCoordinator.updateLastSyncedAt(config.tableName, maxTs)
+                }
+            }
+
+            // If buffer didn't overflow, we're done — go LIVE
+            if (!realtimeBuffer.overflowed) {
+                stateMachine.onEvent(SyncEvent.CatchUpCompleted)
+                Log.d(TAG, "Catch-up completed on attempt $attempt, now LIVE")
+                return
+            }
+
+            Log.w(TAG, "Buffer overflow on attempt $attempt/$MAX_CATCHUP_RETRIES — retrying")
         }
 
-        // Step 8: Transition to LIVE
+        // Exhausted retries — go LIVE anyway with safety sync as backstop
+        Log.e(TAG, "Catch-up failed to drain buffer after $MAX_CATCHUP_RETRIES attempts, going LIVE (safety sync will recover)")
         stateMachine.onEvent(SyncEvent.CatchUpCompleted)
-        Log.d(TAG, "Catch-up completed, now LIVE")
     }
 
     /**
      * Execute a safety sync (spec Section 9).
      * Same pull logic as catch-up but without buffer/drain (already LIVE).
+     * Guarded by [syncMutex] to prevent overlap with catch-up.
      */
-    suspend fun executeSyncCycle() {
+    suspend fun executeSyncCycle() = syncMutex.withLock {
         Log.d(TAG, "Executing safety sync cycle")
         stateMachine.onEvent(SyncEvent.SafetySync)
 
@@ -334,7 +354,8 @@ class SyncEngineImpl @Inject constructor(
 
     /**
      * Apply a single realtime event to Room, with deduplication (spec Section 6).
-     * Skips events where the local record already has updated_at >= event.updated_at.
+     * On FK constraint failure, schedules a retry in a separate coroutine to avoid
+     * blocking the realtime event collection loop.
      */
     private suspend fun applyRealtimeEvent(event: RealtimeChangeEvent) {
         val config = registeredTables.find { it.tableName == event.table }
@@ -350,21 +371,20 @@ class SyncEngineImpl @Inject constructor(
             Log.d(TAG, "Applying realtime event: ${event.table}/$pk ts=$eventTs")
         }
 
-        // Retry with short delay for FK ordering: a transaction event may arrive
-        // before its parent batch event. One retry after 500ms usually suffices.
-        var applied = false
-        for (attempt in 1..2) {
-            try {
-                config.applyToRoom?.invoke(listOf(event.record))
-                    ?: Log.w(TAG, "No applyToRoom callback for ${event.table}")
-                applied = true
-                break
-            } catch (e: android.database.sqlite.SQLiteConstraintException) {
-                if (attempt < 2) {
-                    Log.w(TAG, "FK constraint applying ${event.table}/$pk, retrying in 500ms")
-                    delay(500)
-                } else {
-                    Log.e(TAG, "FK constraint applying ${event.table}/$pk after retry — will be caught by safety sync")
+        try {
+            config.applyToRoom?.invoke(listOf(event.record))
+                ?: Log.w(TAG, "No applyToRoom callback for ${event.table}")
+        } catch (e: android.database.sqlite.SQLiteConstraintException) {
+            // FK constraint — parent record hasn't arrived yet.
+            // Retry in a separate coroutine to not block the realtime event pipeline.
+            Log.w(TAG, "FK constraint applying ${event.table}/$pk, scheduling retry")
+            engineScope?.launch {
+                delay(500)
+                try {
+                    config.applyToRoom?.invoke(listOf(event.record))
+                    Log.d(TAG, "FK retry succeeded for ${event.table}/$pk")
+                } catch (e2: android.database.sqlite.SQLiteConstraintException) {
+                    Log.e(TAG, "FK retry failed for ${event.table}/$pk — will be caught by safety sync")
                 }
             }
         }
@@ -375,7 +395,7 @@ class SyncEngineImpl @Inject constructor(
      * Same PK and event.updated_at <= pulled.updated_at → skip.
      * Timestamps are ISO-8601 strings from Supabase.
      */
-    private fun isDuplicate(
+    private suspend fun isDuplicate(
         event: RealtimeChangeEvent,
         pulledRecords: List<Record>,
         config: SyncTableConfig,

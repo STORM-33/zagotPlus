@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,22 +42,27 @@ class SyncStateMachine @Inject constructor() {
     private val _events = MutableSharedFlow<SyncEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SyncEvent> = _events.asSharedFlow()
 
+    private val mutex = Mutex()
+
     /**
      * Process an event, potentially transitioning to a new state.
-     * Thread-safe: uses StateFlow's atomic compare-and-set semantics.
+     * Thread-safe: Mutex guards the read-compute-write sequence to prevent
+     * concurrent coroutines from reading stale state and computing invalid transitions.
      */
-    fun onEvent(event: SyncEvent) {
-        val current = _state.value
-        val next = resolveTransition(current, event)
+    suspend fun onEvent(event: SyncEvent) {
+        mutex.withLock {
+            val current = _state.value
+            val next = resolveTransition(current, event)
 
-        if (next != null && next != current) {
-            Log.d(TAG, "Transition: $current → $next (event: $event)")
-            _state.value = next
-            logEvent(SyncEvent.StateChange(from = current, to = next))
+            if (next != null && next != current) {
+                Log.d(TAG, "Transition: $current → $next (event: $event)")
+                _state.value = next
+                logEvent(SyncEvent.StateChange(from = current, to = next))
+            }
+
+            logEvent(event)
+            _events.tryEmit(event)
         }
-
-        logEvent(event)
-        _events.tryEmit(event)
     }
 
     /**

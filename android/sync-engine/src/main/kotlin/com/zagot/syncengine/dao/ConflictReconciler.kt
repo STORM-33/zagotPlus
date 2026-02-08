@@ -52,10 +52,12 @@ class ConflictReconciler @Inject constructor(
             // Parse local record from outbox payload
             val localRecord = parsePayload(entry.payload)
 
-            // Run conflict resolution
+            // Run conflict resolution.
+            // Compare by identity (===) since resolvers return one of the input instances.
+            // Structural equality (==) would fail for custom resolvers that construct new maps.
             val winner = config.conflictResolver.resolve(localRecord, remoteRecord)
 
-            val localWins = winner == localRecord
+            val localWins = winner === localRecord
             if (!localWins) {
                 // Remote wins — mark outbox entry as synced (don't push)
                 losers.add(entry.id)

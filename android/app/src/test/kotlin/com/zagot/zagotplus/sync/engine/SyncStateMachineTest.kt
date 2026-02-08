@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.zagot.syncengine.state.SyncEvent
 import com.zagot.syncengine.state.SyncState
 import com.zagot.syncengine.state.SyncStateMachine
+import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 
@@ -27,20 +28,20 @@ class SyncStateMachineTest {
     }
 
     @Test
-    fun `OFFLINE to CATCHING_UP on connectivity restored`() {
+    fun `OFFLINE to CATCHING_UP on connectivity restored`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         assertThat(sm.state.value).isEqualTo(SyncState.CATCHING_UP)
     }
 
     @Test
-    fun `CATCHING_UP to LIVE on catch-up completed`() {
+    fun `CATCHING_UP to LIVE on catch-up completed`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpCompleted)
         assertThat(sm.state.value).isEqualTo(SyncState.LIVE)
     }
 
     @Test
-    fun `full happy path OFFLINE to CATCHING_UP to LIVE`() {
+    fun `full happy path OFFLINE to CATCHING_UP to LIVE`() = runTest {
         assertThat(sm.state.value).isEqualTo(SyncState.OFFLINE)
         sm.onEvent(SyncEvent.ConnectivityRestored)
         assertThat(sm.state.value).isEqualTo(SyncState.CATCHING_UP)
@@ -51,7 +52,7 @@ class SyncStateMachineTest {
     // === Connectivity loss ===
 
     @Test
-    fun `LIVE to OFFLINE on connectivity lost`() {
+    fun `LIVE to OFFLINE on connectivity lost`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpCompleted)
         sm.onEvent(SyncEvent.ConnectivityLost)
@@ -59,14 +60,14 @@ class SyncStateMachineTest {
     }
 
     @Test
-    fun `CATCHING_UP to OFFLINE on connectivity lost`() {
+    fun `CATCHING_UP to OFFLINE on connectivity lost`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.ConnectivityLost)
         assertThat(sm.state.value).isEqualTo(SyncState.OFFLINE)
     }
 
     @Test
-    fun `CATCHING_UP to OFFLINE on catch-up failed`() {
+    fun `CATCHING_UP to OFFLINE on catch-up failed`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpFailed(RuntimeException("test")))
         assertThat(sm.state.value).isEqualTo(SyncState.OFFLINE)
@@ -75,13 +76,13 @@ class SyncStateMachineTest {
     // === Idempotent / no-op ===
 
     @Test
-    fun `connectivity lost while already OFFLINE is no-op`() {
+    fun `connectivity lost while already OFFLINE is no-op`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityLost)
         assertThat(sm.state.value).isEqualTo(SyncState.OFFLINE)
     }
 
     @Test
-    fun `connectivity restored while CATCHING_UP is no-op`() {
+    fun `connectivity restored while CATCHING_UP is no-op`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         assertThat(sm.state.value).isEqualTo(SyncState.CATCHING_UP)
         sm.onEvent(SyncEvent.ConnectivityRestored) // duplicate
@@ -89,7 +90,7 @@ class SyncStateMachineTest {
     }
 
     @Test
-    fun `connectivity restored while LIVE is no-op`() {
+    fun `connectivity restored while LIVE is no-op`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpCompleted)
         sm.onEvent(SyncEvent.ConnectivityRestored) // duplicate
@@ -97,7 +98,7 @@ class SyncStateMachineTest {
     }
 
     @Test
-    fun `catch-up completed while LIVE is no-op`() {
+    fun `catch-up completed while LIVE is no-op`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpCompleted)
         sm.onEvent(SyncEvent.CatchUpCompleted) // duplicate
@@ -107,14 +108,14 @@ class SyncStateMachineTest {
     // === Invalid transitions ===
 
     @Test(expected = IllegalStateException::class)
-    fun `catch-up completed while OFFLINE throws`() {
+    fun `catch-up completed while OFFLINE throws`() = runTest {
         sm.onEvent(SyncEvent.CatchUpCompleted)
     }
 
     // === Full reconnect cycle ===
 
     @Test
-    fun `full offline to live to offline to live cycle`() {
+    fun `full offline to live to offline to live cycle`() = runTest {
         // Start offline
         assertThat(sm.state.value).isEqualTo(SyncState.OFFLINE)
 
@@ -138,7 +139,7 @@ class SyncStateMachineTest {
     // === Sync log ===
 
     @Test
-    fun `state transitions are logged`() {
+    fun `state transitions are logged`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.CatchUpCompleted)
 
@@ -158,7 +159,7 @@ class SyncStateMachineTest {
     }
 
     @Test
-    fun `observability events are logged without state transitions`() {
+    fun `observability events are logged without state transitions`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         sm.onEvent(SyncEvent.PullComplete(table = "products", count = 5))
 
@@ -171,7 +172,7 @@ class SyncStateMachineTest {
     // === Interrupted catch-up (spec: app killed during CATCHING_UP) ===
 
     @Test
-    fun `catch-up interrupted by connectivity loss returns to OFFLINE safely`() {
+    fun `catch-up interrupted by connectivity loss returns to OFFLINE safely`() = runTest {
         sm.onEvent(SyncEvent.ConnectivityRestored)
         assertThat(sm.state.value).isEqualTo(SyncState.CATCHING_UP)
 

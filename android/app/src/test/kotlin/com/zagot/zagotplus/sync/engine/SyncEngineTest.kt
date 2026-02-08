@@ -45,20 +45,20 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `connectivity restored transitions to CATCHING_UP`() {
+    fun `connectivity restored transitions to CATCHING_UP`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         assertThat(stateMachine.state.value).isEqualTo(SyncState.CATCHING_UP)
     }
 
     @Test
-    fun `catch-up completed transitions to LIVE`() {
+    fun `catch-up completed transitions to LIVE`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.CatchUpCompleted)
         assertThat(stateMachine.state.value).isEqualTo(SyncState.LIVE)
     }
 
     @Test
-    fun `connectivity lost during LIVE transitions to OFFLINE`() {
+    fun `connectivity lost during LIVE transitions to OFFLINE`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.CatchUpCompleted)
         stateMachine.onEvent(SyncEvent.ConnectivityLost)
@@ -66,14 +66,14 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `connectivity lost during CATCHING_UP transitions to OFFLINE`() {
+    fun `connectivity lost during CATCHING_UP transitions to OFFLINE`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.ConnectivityLost)
         assertThat(stateMachine.state.value).isEqualTo(SyncState.OFFLINE)
     }
 
     @Test
-    fun `catch-up failed transitions to OFFLINE`() {
+    fun `catch-up failed transitions to OFFLINE`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.CatchUpFailed(RuntimeException("test")))
         assertThat(stateMachine.state.value).isEqualTo(SyncState.OFFLINE)
@@ -103,7 +103,7 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `sync log captures state transitions`() {
+    fun `sync log captures state transitions`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.CatchUpCompleted)
 
@@ -114,7 +114,7 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `sync log captures observability events`() {
+    fun `sync log captures observability events`() = runTest {
         stateMachine.onEvent(SyncEvent.ConnectivityRestored)
         stateMachine.onEvent(SyncEvent.PullComplete("products", 10))
         stateMachine.onEvent(SyncEvent.PushSuccess("products", "p1"))

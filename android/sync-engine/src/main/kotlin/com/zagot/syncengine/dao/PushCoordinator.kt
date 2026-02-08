@@ -50,6 +50,8 @@ class PushCoordinator @Inject constructor(
         private const val MAX_RETRIES = 5
         private const val INITIAL_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 5 * 60 * 1_000L // 5 minutes
+        /** Max records per push request to avoid oversized HTTP payloads. */
+        private const val PUSH_BATCH_SIZE = 200
     }
 
     /** Override for testing — set to 0 to disable delays. */
@@ -82,19 +84,23 @@ class PushCoordinator @Inject constructor(
             val entries = byTable[config.tableName] ?: continue
 
             try {
-                val records = entries.map { entry ->
-                    parsePayload(entry.payload)
-                }
+                // Chunk into batches to avoid oversized HTTP requests
+                val chunks = entries.chunked(PUSH_BATCH_SIZE)
+                for (chunk in chunks) {
+                    val records = chunk.map { entry ->
+                        parsePayload(entry.payload)
+                    }
 
-                pushWithRetry(remoteClient, config, records)
+                    pushWithRetry(remoteClient, config, records)
 
-                // Mark all as synced
-                val ids = entries.map { it.id }
-                outboxDao.markSyncedBatch(ids)
-                successCount += entries.size
+                    // Mark chunk as synced
+                    val ids = chunk.map { it.id }
+                    outboxDao.markSyncedBatch(ids)
+                    successCount += chunk.size
 
-                entries.forEach { entry ->
-                    stateMachine.onEvent(SyncEvent.PushSuccess(config.tableName, entry.recordId))
+                    chunk.forEach { entry ->
+                        stateMachine.onEvent(SyncEvent.PushSuccess(config.tableName, entry.recordId))
+                    }
                 }
 
                 Log.d(TAG, "Pushed ${entries.size} entries for ${config.tableName}")

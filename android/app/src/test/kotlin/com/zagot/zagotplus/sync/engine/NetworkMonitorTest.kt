@@ -70,7 +70,7 @@ class NetworkMonitorTest {
     }
 
     @Test
-    fun `state machine transitions on connectivity changes`() {
+    fun `state machine transitions on connectivity changes`() = runTest {
         val monitor = FakeNetworkMonitor()
         val sm = SyncStateMachine()
 
@@ -88,7 +88,7 @@ class NetworkMonitorTest {
     }
 
     @Test
-    fun `connectivity lost during CATCHING_UP prevents LIVE transition`() {
+    fun `connectivity lost during CATCHING_UP prevents LIVE transition`() = runTest {
         val sm = SyncStateMachine()
 
         sm.onEvent(SyncEvent.ConnectivityRestored)
