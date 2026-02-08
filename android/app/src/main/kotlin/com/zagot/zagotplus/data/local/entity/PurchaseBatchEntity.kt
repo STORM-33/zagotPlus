@@ -48,7 +48,8 @@ import java.util.UUID
         Index(value = ["synced_at"]),
         Index(value = ["created_at"]),
         Index(value = ["is_voided"]),
-        Index(value = ["corrects_batch_id"])
+        Index(value = ["corrects_batch_id"]),
+        Index(value = ["server_updated_at"])
     ]
 )
 data class PurchaseBatchEntity(
@@ -90,5 +91,14 @@ data class PurchaseBatchEntity(
     val correctsBatchId: UUID? = null,
 
     @ColumnInfo(name = "correction_reason")
-    val correctionReason: String? = null
+    val correctionReason: String? = null,
+
+    @ColumnInfo(name = "voided_at")
+    val voidedAt: Instant? = null,
+
+    @ColumnInfo(name = "voided_by_device_id")
+    val voidedByDeviceId: String? = null,
+
+    @ColumnInfo(name = "server_updated_at")
+    val serverUpdatedAt: Instant? = null
 )

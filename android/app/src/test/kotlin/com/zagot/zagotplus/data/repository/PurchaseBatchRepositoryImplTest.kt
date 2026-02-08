@@ -47,7 +47,7 @@ class PurchaseBatchRepositoryImplTest {
         transactionDao = mockk()
         productDao = mockk()
         syncManager = mockk(relaxed = true)
-        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao, productDao, syncManager)
+        repository = PurchaseBatchRepositoryImpl(database, purchaseBatchDao, transactionDao, productDao, syncManager, mockk(relaxed = true))
     }
 
     private fun createBatchEntity(

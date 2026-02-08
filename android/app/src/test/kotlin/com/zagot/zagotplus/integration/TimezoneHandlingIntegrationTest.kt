@@ -19,6 +19,7 @@ import com.zagot.zagotplus.sync.SyncDataSource
 import com.zagot.zagotplus.sync.SyncPreferences
 import com.zagot.zagotplus.sync.SyncResult
 import com.zagot.zagotplus.sync.SyncService
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -54,6 +55,8 @@ class TimezoneHandlingIntegrationTest {
     private lateinit var database: ZagotDatabase
     private lateinit var fakeSyncDataSource: FakeSyncDataSource
     private lateinit var syncPreferences: SyncPreferences
+    private lateinit var supabaseAuthManager: com.zagot.zagotplus.data.remote.SupabaseAuthManager
+    private lateinit var devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences
     private lateinit var syncService: SyncService
     private lateinit var context: Context
 
@@ -71,7 +74,11 @@ class TimezoneHandlingIntegrationTest {
 
         fakeSyncDataSource = FakeSyncDataSource()
         syncPreferences = mockk(relaxed = true)
+        supabaseAuthManager = mockk()
+        devicePreferences = mockk()
         every { syncPreferences.getLastSyncTimestamp() } returns Instant.EPOCH
+        coEvery { supabaseAuthManager.ensureAuthenticated(any()) } returns true
+        every { devicePreferences.getDeviceId() } returns "test-device-id"
 
         syncService = SyncService(
             database = database,
@@ -83,7 +90,9 @@ class TimezoneHandlingIntegrationTest {
             productDao = database.productDao(),
             expenseCategoryDao = database.expenseCategoryDao(),
             cashOperationDao = database.cashOperationDao(),
-            syncPreferences = syncPreferences
+            syncPreferences = syncPreferences,
+            supabaseAuthManager = supabaseAuthManager,
+            devicePreferences = devicePreferences
         )
     }
 
@@ -100,7 +109,8 @@ class TimezoneHandlingIntegrationTest {
                 id = locationId,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = Instant.EPOCH
+                createdAt = Instant.EPOCH,
+                localId = "loc-$locationId"
             )
         )
         database.productDao().insert(
@@ -128,8 +138,8 @@ class TimezoneHandlingIntegrationTest {
                 id = productId.toString(),
                 localId = "product-local",
                 name = "Горіх",
-                defaultBuyPrice = 45.0,
-                defaultSellPrice = 55.0,
+                defaultBuyPrice = "45.0",
+                defaultSellPrice = "55.0",
                 isActive = true,
                 createdAt = Instant.EPOCH.toString()
             )
@@ -148,9 +158,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 10.0,
-            pricePerKg = 45.0,
-            totalAmount = 450.0,
+            weightKg = "10.0",
+            pricePerKg = "45.0",
+            totalAmount = "450.0",
             notes = null,
             deviceId = "device-1",
             createdAt = utcTimestamp,
@@ -179,9 +189,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 10.0,
-            pricePerKg = 45.0,
-            totalAmount = 450.0,
+            weightKg = "10.0",
+            pricePerKg = "45.0",
+            totalAmount = "450.0",
             notes = null,
             deviceId = "device-kyiv",
             createdAt = kyivTimestamp,
@@ -209,9 +219,9 @@ class TimezoneHandlingIntegrationTest {
             type = "sale",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 5.0,
-            pricePerKg = 55.0,
-            totalAmount = 275.0,
+            weightKg = "5.0",
+            pricePerKg = "55.0",
+            totalAmount = "275.0",
             notes = null,
             deviceId = "device-ny",
             createdAt = nyTimestamp,
@@ -246,9 +256,9 @@ class TimezoneHandlingIntegrationTest {
                 type = "purchase",
                 transferLocationId = null,
                 productId = productId.toString(),
-                weightKg = 20.0,
-                pricePerKg = 45.0,
-                totalAmount = 900.0,
+                weightKg = "20.0",
+                pricePerKg = "45.0",
+                totalAmount = "900.0",
                 notes = null,
                 deviceId = "other-device",
                 createdAt = "2024-01-15T12:00:00+03:00", // Different timezone
@@ -283,9 +293,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 10.0,
-            pricePerKg = 45.0,
-            totalAmount = 450.0,
+            weightKg = "10.0",
+            pricePerKg = "45.0",
+            totalAmount = "450.0",
             notes = "Created in Kyiv",
             deviceId = "device-kyiv",
             createdAt = "2024-01-15T12:00:00+02:00",
@@ -303,9 +313,9 @@ class TimezoneHandlingIntegrationTest {
             type = "sale",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 5.0,
-            pricePerKg = 55.0,
-            totalAmount = 275.0,
+            weightKg = "5.0",
+            pricePerKg = "55.0",
+            totalAmount = "275.0",
             notes = "Created in London",
             deviceId = "device-london",
             createdAt = "2024-01-15T10:00:00Z",
@@ -349,9 +359,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 15.0,
-            pricePerKg = 45.0,
-            totalAmount = 675.0,
+            weightKg = "15.0",
+            pricePerKg = "45.0",
+            totalAmount = "675.0",
             notes = "Late night Kyiv purchase",
             deviceId = "device-kyiv-late",
             createdAt = "2024-01-15T23:30:00+02:00",
@@ -370,9 +380,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 20.0,
-            pricePerKg = 45.0,
-            totalAmount = 900.0,
+            weightKg = "20.0",
+            pricePerKg = "45.0",
+            totalAmount = "900.0",
             notes = "Early morning Kyiv purchase (Jan 16 local)",
             deviceId = "device-kyiv-early",
             createdAt = "2024-01-16T00:30:00+02:00",
@@ -424,9 +434,9 @@ class TimezoneHandlingIntegrationTest {
                 type = "purchase",
                 transferLocationId = null,
                 productId = productId.toString(),
-                weightKg = 10.0,
-                pricePerKg = 45.0,
-                totalAmount = 450.0,
+                weightKg = "10.0",
+                pricePerKg = "45.0",
+                totalAmount = "450.0",
                 notes = null,
                 deviceId = "device-1",
                 createdAt = "2024-01-15T12:00:00+02:00",
@@ -454,9 +464,9 @@ class TimezoneHandlingIntegrationTest {
                 type = "sale",
                 transferLocationId = null,
                 productId = productId.toString(),
-                weightKg = 5.0,
-                pricePerKg = 55.0,
-                totalAmount = 275.0,
+                weightKg = "5.0",
+                pricePerKg = "55.0",
+                totalAmount = "275.0",
                 notes = null,
                 deviceId = "device-2",
                 createdAt = "2024-01-15T06:00:00-05:00", // NY time (11:00 UTC)
@@ -488,9 +498,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 10.0,
-            pricePerKg = 45.0,
-            totalAmount = 450.0,
+            weightKg = "10.0",
+            pricePerKg = "45.0",
+            totalAmount = "450.0",
             notes = null,
             deviceId = "device-1",
             createdAt = timestampWithMillis,
@@ -518,9 +528,9 @@ class TimezoneHandlingIntegrationTest {
             type = "purchase",
             transferLocationId = null,
             productId = productId.toString(),
-            weightKg = 10.0,
-            pricePerKg = 45.0,
-            totalAmount = 450.0,
+            weightKg = "10.0",
+            pricePerKg = "45.0",
+            totalAmount = "450.0",
             notes = null,
             deviceId = "device-1",
             createdAt = timestampWithMicros,

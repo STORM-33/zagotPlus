@@ -65,7 +65,8 @@ class SaleFlowIntegrationTest {
             database = database,
             saleBatchDao = database.saleBatchDao(),
             transactionDao = database.transactionDao(),
-            syncManager = syncManager
+            syncManager = syncManager,
+            devicePreferences = mockk(relaxed = true)
         )
     }
 
@@ -82,7 +83,8 @@ class SaleFlowIntegrationTest {
                 id = locationId,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId"
             )
         )
     }

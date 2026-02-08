@@ -21,7 +21,16 @@ data class LocationDto(
     val type: String,
 
     @SerialName("created_at")
-    val createdAt: String
+    val createdAt: String,
+
+    @SerialName("local_id")
+    val localId: String? = null,
+
+    @SerialName("synced_at")
+    val syncedAt: String? = null,
+
+    @SerialName("device_id")
+    val deviceId: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -30,7 +39,10 @@ data class LocationDto(
         id = UUID.fromString(id),
         name = name,
         type = type,
-        createdAt = Instant.parse(createdAt)
+        createdAt = Instant.parse(createdAt),
+        localId = localId ?: id, // Use id as local_id if not provided
+        syncedAt = syncedAt?.let { Instant.parse(it) },
+        deviceId = deviceId
     )
 
     companion object {
@@ -41,7 +53,23 @@ data class LocationDto(
             id = entity.id.toString(),
             name = entity.name,
             type = entity.type,
-            createdAt = entity.createdAt.toString()
+            createdAt = entity.createdAt.toString(),
+            localId = entity.localId,
+            syncedAt = entity.syncedAt?.toString(),
+            deviceId = entity.deviceId
+        )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): LocationDto = LocationDto(
+            id = record["id"] as String,
+            name = record["name"] as String,
+            type = record["type"] as String,
+            createdAt = record["created_at"] as String,
+            localId = record["local_id"] as? String,
+            syncedAt = record["synced_at"] as? String,
+            deviceId = record["device_id"] as? String,
         )
     }
 }

@@ -59,6 +59,7 @@ class CashFlowIntegrationTest {
         every { devicePreferences.getDeviceId() } returns "test-device-id"
 
         cashRepository = CashRepositoryImpl(
+            database = database,
             cashOperationDao = database.cashOperationDao(),
             expenseCategoryDao = database.expenseCategoryDao(),
             devicePreferences = devicePreferences
@@ -78,7 +79,8 @@ class CashFlowIntegrationTest {
                 id = locationId,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId"
             )
         )
     }
@@ -208,7 +210,8 @@ class CashFlowIntegrationTest {
                 id = location2Id,
                 name = "Склад Київ",
                 type = LocationType.MOBILE.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$location2Id"
             )
         )
 
@@ -234,7 +237,8 @@ class CashFlowIntegrationTest {
                 id = location2Id,
                 name = "Склад Київ",
                 type = LocationType.MOBILE.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$location2Id"
             )
         )
 
@@ -361,7 +365,8 @@ class CashFlowIntegrationTest {
                 id = location2Id,
                 name = "Склад Київ",
                 type = LocationType.MOBILE.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$location2Id"
             )
         )
 

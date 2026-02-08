@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.zagot.zagotplus.data.local.entity.LocationEntity
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -27,6 +28,13 @@ interface LocationDao {
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(locations: List<LocationEntity>)
+
+    /**
+     * Upsert locations (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(locations: List<LocationEntity>)
 
     /**
      * Update existing location.

@@ -39,7 +39,8 @@ class LocationRepositoryImplTest {
         id = id,
         name = name,
         type = type,
-        createdAt = now
+        createdAt = now,
+        localId = "loc-$id"
     )
 
     @Test

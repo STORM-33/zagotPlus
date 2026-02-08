@@ -21,11 +21,13 @@ data class ProductDto(
     @SerialName("name")
     val name: String,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("default_buy_price")
-    val defaultBuyPrice: Double?,
+    val defaultBuyPrice: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("default_sell_price")
-    val defaultSellPrice: Double?,
+    val defaultSellPrice: String?,
 
     @SerialName("is_active")
     val isActive: Boolean,
@@ -34,7 +36,10 @@ data class ProductDto(
     val createdAt: String,
 
     @SerialName("image_uri")
-    val imageUri: String? = null
+    val imageUri: String? = null,
+
+    @SerialName("server_updated_at")
+    val serverUpdatedAt: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -43,12 +48,13 @@ data class ProductDto(
         id = UUID.fromString(id),
         localId = localId,
         name = name,
-        defaultBuyPrice = defaultBuyPrice?.let { BigDecimal.valueOf(it) },
-        defaultSellPrice = defaultSellPrice?.let { BigDecimal.valueOf(it) },
+        defaultBuyPrice = defaultBuyPrice?.let { BigDecimal(it) },
+        defaultSellPrice = defaultSellPrice?.let { BigDecimal(it) },
         isActive = isActive,
         createdAt = Instant.parse(createdAt),
         syncedAt = Instant.now(),
-        imageUri = imageUri
+        imageUri = imageUri,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {
@@ -59,11 +65,26 @@ data class ProductDto(
             id = entity.id.toString(),
             localId = entity.localId,
             name = entity.name,
-            defaultBuyPrice = entity.defaultBuyPrice?.toDouble(),
-            defaultSellPrice = entity.defaultSellPrice?.toDouble(),
+            defaultBuyPrice = entity.defaultBuyPrice?.toPlainString(),
+            defaultSellPrice = entity.defaultSellPrice?.toPlainString(),
             isActive = entity.isActive,
             createdAt = entity.createdAt.toString(),
             imageUri = entity.imageUri
+        )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): ProductDto = ProductDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            name = record["name"] as String,
+            defaultBuyPrice = record["default_buy_price"]?.toString(),
+            defaultSellPrice = record["default_sell_price"]?.toString(),
+            isActive = record["is_active"] as Boolean,
+            createdAt = record["created_at"] as String,
+            imageUri = record["image_uri"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
         )
     }
 }

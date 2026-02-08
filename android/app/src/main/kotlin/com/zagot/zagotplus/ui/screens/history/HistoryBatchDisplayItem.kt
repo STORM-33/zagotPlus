@@ -20,6 +20,10 @@ sealed class HistoryBatchDisplayItem {
     abstract val isVoided: Boolean
     abstract val isCorrection: Boolean
     abstract val correctionReason: String?
+    /** True if this is an edited batch (has original data to show). */
+    open val isEdited: Boolean = false
+    /** Notes for the batch, if any. */
+    abstract val notes: String?
 
     /**
      * Real purchase batch from database.
@@ -32,7 +36,7 @@ sealed class HistoryBatchDisplayItem {
         override val itemCount: Int,
         override val locationName: String,
         override val isSynced: Boolean,
-        val notes: String?,
+        override val notes: String?,
         override val isVoided: Boolean = false,
         override val isCorrection: Boolean = false,
         override val correctionReason: String? = null,
@@ -53,7 +57,7 @@ sealed class HistoryBatchDisplayItem {
         override val itemCount: Int,
         override val locationName: String,
         override val isSynced: Boolean,
-        val notes: String?,
+        override val notes: String?,
         override val isVoided: Boolean = false,
         override val isCorrection: Boolean = false,
         override val correctionReason: String? = null,
@@ -61,6 +65,35 @@ sealed class HistoryBatchDisplayItem {
     ) : HistoryBatchDisplayItem() {
         override val id: String = "sale_batch_$batchId"
         override val batchType: BatchType = BatchType.SALE
+    }
+
+    /**
+     * Merged view of an edited batch - combines original (voided) + correction into one display item.
+     * Shows current values with ability to view previous/original values.
+     */
+    data class EditedBatch(
+        val currentBatchId: UUID,
+        val originalBatchId: UUID,
+        override val batchType: BatchType,
+        override val createdAt: Instant,
+        override val totalWeightKg: BigDecimal,
+        override val totalAmount: BigDecimal?,
+        override val itemCount: Int,
+        override val locationName: String,
+        override val isSynced: Boolean,
+        override val notes: String?,
+        override val correctionReason: String?,
+        /** Original batch data before editing. */
+        val originalTotalWeightKg: BigDecimal,
+        val originalTotalAmount: BigDecimal?,
+        val originalItemCount: Int,
+        val originalNotes: String?,
+        val originalCreatedAt: Instant
+    ) : HistoryBatchDisplayItem() {
+        override val id: String = "edited_batch_$currentBatchId"
+        override val isVoided: Boolean = false
+        override val isCorrection: Boolean = false // Not showing as "correction", showing as "edited"
+        override val isEdited: Boolean = true
     }
 
     /**
@@ -75,13 +108,15 @@ sealed class HistoryBatchDisplayItem {
         override val totalWeightKg: BigDecimal,
         override val totalAmount: BigDecimal?,
         override val itemCount: Int,
+        val locationId: UUID?,
         override val locationName: String,
         override val isSynced: Boolean
     ) : HistoryBatchDisplayItem() {
-        override val id: String = "virtual_${batchType.name}_${timeWindowStart.toEpochMilli()}_${locationName.hashCode()}"
+        override val id: String = "virtual_${batchType.name}_${timeWindowStart.toEpochMilli()}_${locationId ?: "unknown"}_${transactionIds.firstOrNull() ?: "empty"}"
         override val isVoided: Boolean = false
         override val isCorrection: Boolean = false
         override val correctionReason: String? = null
+        override val notes: String? = null
     }
 
     /**
@@ -97,13 +132,14 @@ sealed class HistoryBatchDisplayItem {
         override val itemCount: Int,
         override val isSynced: Boolean
     ) : HistoryBatchDisplayItem() {
-        override val id: String = "transfer_${createdAt.toEpochMilli()}_${fromLocationName.hashCode()}_${toLocationName.hashCode()}"
+        override val id: String = "transfer_${transactionIds.firstOrNull() ?: createdAt.toEpochMilli()}"
         override val batchType: BatchType = BatchType.TRANSFER
         override val totalAmount: BigDecimal? = null
         override val locationName: String = "$fromLocationName → $toLocationName"
         override val isVoided: Boolean = false
         override val isCorrection: Boolean = false
         override val correctionReason: String? = null
+        override val notes: String? = null
     }
 }
 

@@ -6,6 +6,7 @@ import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
@@ -28,7 +29,8 @@ class SaleBatchRepositoryImpl @Inject constructor(
     private val database: ZagotDatabase,
     private val saleBatchDao: SaleBatchDao,
     private val transactionDao: TransactionDao,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val devicePreferences: DevicePreferences
 ) : SaleBatchRepository {
 
     override fun observeAll(): Flow<List<SaleBatch>> =
@@ -100,21 +102,33 @@ class SaleBatchRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markVoided(id: UUID) {
-        saleBatchDao.markVoided(id)
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        val rowsUpdated = saleBatchDao.markVoided(id, now, deviceId)
+        if (rowsUpdated == 0) {
+            throw IllegalArgumentException("Партію не знайдено: $id")
+        }
         syncManager.triggerManualSync()
     }
 
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
         transactionDao.getBySaleBatchId(batchId).map { it.toDomain() }
 
-    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<SaleBatch> =
-        saleBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int, includeVoided: Boolean): List<SaleBatch> =
+        if (includeVoided) {
+            saleBatchDao.getAllPaginatedIncludingVoided(limit, offset).map { it.toDomain() }
+        } else {
+            saleBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+        }
 
     override suspend fun getTotalBatchCount(): Int =
         saleBatchDao.getActiveCount()
 
     override fun observeTotalBatchCount(): Flow<Int> =
         saleBatchDao.observeTotalCount()
+
+    override fun observeLatestUpdate(): Flow<Long?> =
+        saleBatchDao.observeLatestUpdate()
 
     override suspend fun correctBatch(
         originalBatchId: UUID,
@@ -134,9 +148,15 @@ class SaleBatchRepositoryImpl @Inject constructor(
             correctionReason = reason
         )
         
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        
         database.withTransaction {
-            // 1. Mark the original batch as voided
-            saleBatchDao.markVoided(originalBatchId)
+            // 1. Mark the original batch as voided with audit trail
+            val rowsVoided = saleBatchDao.markVoided(originalBatchId, now, deviceId)
+            if (rowsVoided == 0) {
+                throw IllegalStateException("Не вдалося анулювати оригінальну партію")
+            }
             
             // 2. Insert the new correction batch
             saleBatchDao.insert(batchWithCorrection.toEntity())
@@ -163,7 +183,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun SaleBatch.toEntity() = SaleBatchEntity(
@@ -179,7 +201,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun Transaction.toEntity(saleBatchId: UUID) = TransactionEntity(

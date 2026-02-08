@@ -1,5 +1,7 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,27 +35,33 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.SaleBatch
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.SkeletonList
+import com.zagot.zagotplus.ui.navigation.SaleMode
 import java.text.DecimalFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SaleScreen(
     modifier: Modifier = Modifier,
     viewModel: SaleViewModel = hiltViewModel(),
-    onNavigateToNewSale: () -> Unit = {}
+    onNavigateToNewSale: (SaleMode) -> Unit = {},
+    isRestrictedMode: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.navigateToNewSale) {
-        if (uiState.navigateToNewSale) {
-            onNavigateToNewSale()
+    LaunchedEffect(uiState.navigateToNewSale, uiState.selectedSaleMode) {
+        val mode = uiState.selectedSaleMode
+        if (uiState.navigateToNewSale && mode != null) {
+            onNavigateToNewSale(mode)
             viewModel.onNavigationHandled()
         }
     }
@@ -118,24 +126,83 @@ fun SaleScreen(
                         items = uiState.todaysBatches,
                         key = { it.id }
                     ) { batch ->
-                        SaleBatchItem(batch = batch)
+                        AnimatedListItem {
+                            SaleBatchItem(
+                                batch = batch,
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // New sale button
-            Button(
-                onClick = { viewModel.onNewSaleClick() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-            ) {
-                Text(
-                    text = "НОВИЙ ПРОДАЖ",
-                    style = MaterialTheme.typography.titleMedium
-                )
+            // Mode selection - different UI for restricted vs full mode
+            if (isRestrictedMode) {
+                // RESTRICTED MODE: Single button for regular sale only
+                Button(
+                    onClick = { viewModel.onNewSaleClick(SaleMode.REGULAR) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "НОВИЙ ПРОДАЖ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                // FULL MODE: Two buttons horizontal - regular (prominent) and wholesale (smaller)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Regular mode button - PRIMARY (prominent, larger)
+                    Button(
+                        onClick = { viewModel.onNewSaleClick(SaleMode.REGULAR) },
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(56.dp)
+                    ) {
+                        Text(
+                            text = "НОВИЙ ПРОДАЖ",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Wholesale mode button - SECONDARY (less prominent, smaller)
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { viewModel.onNewSaleClick(SaleMode.WHOLESALE) }
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Оптовий",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "продаж",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
             }
         }
         }
@@ -159,9 +226,6 @@ private fun SaleBatchItem(
     val time = batch.createdAt
         .atZone(ZoneId.systemDefault())
         .format(timeFormatter)
-    // Weight is stored as positive in batch totals
-    val weight = batch.totalWeightKg?.let { "${decimalFormat.format(abs(it.toDouble()))} кг" } ?: "-- кг"
-    val amount = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
     val positions = "${batch.itemCount ?: 0} поз"
 
     Card(
@@ -182,12 +246,25 @@ private fun SaleBatchItem(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
-            Text(
-                text = weight,
+            batch.totalWeightKg?.let { totalWeight ->
+                AnimatedCounter(
+                    targetValue = totalWeight.abs(),
+                    formatter = { "${decimalFormat.format(it)} кг" },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } ?: Text(
+                text = "-- кг",
                 style = MaterialTheme.typography.bodyMedium
             )
-            Text(
-                text = amount,
+            batch.totalAmount?.let { totalAmount ->
+                AnimatedCounter(
+                    targetValue = totalAmount,
+                    formatter = { "₴${currencyFormat.format(it)}" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } ?: Text(
+                text = "₴--",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )

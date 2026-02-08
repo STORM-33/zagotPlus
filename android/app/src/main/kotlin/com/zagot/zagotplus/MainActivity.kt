@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,6 +55,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var connectivityObserver: ConnectivityObserver
 
+    @Inject
+    lateinit var locationRepository: com.zagot.zagotplus.domain.repository.LocationRepository
+
     private var isAuthenticated by mutableStateOf(false)
     private var needsLocationSelection by mutableStateOf(false)
 
@@ -68,6 +72,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Lock to portrait on mobile devices (sw < 600dp)
+        if (resources.configuration.smallestScreenWidthDp < 600) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
 
         // Restore auth state from persistent storage (survives process death)
         isAuthenticated = authPreferences.isAuthenticated()
@@ -93,6 +102,13 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(isOnline) {
                     Log.d(TAG, "MainActivity isOnline state changed: $isOnline")
+                }
+                
+                // Observe selected location for header display (full mode only)
+                val selectedLocationId by devicePreferences.selectedLocationIdFlow.collectAsStateWithLifecycle()
+                val locations by locationRepository.getAllLocations().collectAsStateWithLifecycle(initialValue = emptyList())
+                val selectedLocationName = remember(selectedLocationId, locations) {
+                    selectedLocationId?.let { id -> locations.find { it.id == id }?.name }
                 }
 
                 Surface(
@@ -121,7 +137,8 @@ class MainActivity : ComponentActivity() {
                                 syncStatusFlow = syncStatusRepository.syncStatus,
                                 isOnline = isOnline,
                                 onSyncClick = { if (isOnline) syncManager.triggerManualSync() },
-                                authPreferences = authPreferences
+                                authPreferences = authPreferences,
+                                selectedLocationName = selectedLocationName
                             )
 
                             // Show blocking location selection dialog
@@ -141,7 +158,8 @@ class MainActivity : ComponentActivity() {
                                 syncStatusFlow = syncStatusRepository.syncStatus,
                                 isOnline = isOnline,
                                 onSyncClick = { if (isOnline) syncManager.triggerManualSync() },
-                                authPreferences = authPreferences
+                                authPreferences = authPreferences,
+                                selectedLocationName = selectedLocationName
                             )
                         }
                     }

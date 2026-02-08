@@ -25,11 +25,13 @@ data class SaleBatchDto(
     @SerialName("notes")
     val notes: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("total_weight_kg")
-    val totalWeightKg: Double?,
+    val totalWeightKg: String?,
 
+    @Serializable(with = FlexibleDecimalSerializerNullable::class)
     @SerialName("total_amount")
-    val totalAmount: Double?,
+    val totalAmount: String?,
 
     @SerialName("item_count")
     val itemCount: Int?,
@@ -53,7 +55,13 @@ data class SaleBatchDto(
     val correctsBatchId: String? = null,
 
     @SerialName("correction_reason")
-    val correctionReason: String? = null
+    val correctionReason: String? = null,
+
+    @SerialName("voided_at")
+    val voidedAt: String? = null,
+
+    @SerialName("voided_by_device_id")
+    val voidedByDeviceId: String? = null
 ) {
     /**
      * Convert DTO to Room entity.
@@ -63,15 +71,18 @@ data class SaleBatchDto(
         localId = localId,
         locationId = locationId?.let { UUID.fromString(it) },
         notes = notes,
-        totalWeightKg = totalWeightKg?.let { BigDecimal.valueOf(it) },
-        totalAmount = totalAmount?.let { BigDecimal.valueOf(it) },
+        totalWeightKg = totalWeightKg?.let { BigDecimal(it) },
+        totalAmount = totalAmount?.let { BigDecimal(it) },
         itemCount = itemCount,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
         isVoided = isVoided,
         correctsBatchId = correctsBatchId?.let { UUID.fromString(it) },
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt?.let { Instant.parse(it) },
+        voidedByDeviceId = voidedByDeviceId,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {
@@ -83,15 +94,39 @@ data class SaleBatchDto(
             localId = entity.localId,
             locationId = entity.locationId?.toString(),
             notes = entity.notes,
-            totalWeightKg = entity.totalWeightKg?.toDouble(),
-            totalAmount = entity.totalAmount?.toDouble(),
+            totalWeightKg = entity.totalWeightKg?.toPlainString(),
+            totalAmount = entity.totalAmount?.toPlainString(),
             itemCount = entity.itemCount,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString(),
             isVoided = entity.isVoided,
             correctsBatchId = entity.correctsBatchId?.toString(),
-            correctionReason = entity.correctionReason
+            correctionReason = entity.correctionReason,
+            voidedAt = entity.voidedAt?.toString(),
+            voidedByDeviceId = entity.voidedByDeviceId
+        )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): SaleBatchDto = SaleBatchDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            locationId = record["location_id"] as? String,
+            notes = record["notes"] as? String,
+            totalWeightKg = record["total_weight_kg"]?.toString(),
+            totalAmount = record["total_amount"]?.toString(),
+            itemCount = (record["item_count"] as? Number)?.toInt(),
+            deviceId = record["device_id"] as? String,
+            createdAt = record["created_at"] as String,
+            syncedAt = record["synced_at"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
+            isVoided = record["is_voided"] as? Boolean ?: false,
+            correctsBatchId = record["corrects_batch_id"] as? String,
+            correctionReason = record["correction_reason"] as? String,
+            voidedAt = record["voided_at"] as? String,
+            voidedByDeviceId = record["voided_by_device_id"] as? String,
         )
     }
 }

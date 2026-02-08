@@ -2,6 +2,7 @@ package com.zagot.zagotplus.ui.screens.reports
 
 import com.zagot.zagotplus.domain.model.CashHistoryItem
 import com.zagot.zagotplus.domain.model.CashHistoryItemType
+import com.zagot.zagotplus.domain.model.InventoryItem
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
@@ -147,6 +148,8 @@ class ReportsViewModelTest {
             listOf(paymentHistoryItem, withdrawalHistoryItem)
         coEvery { cashRepository.getCashHistoryByLocationPaged(any(), any(), any()) } returns 
             listOf(paymentHistoryItem)
+        every { transactionRepository.getInventory() } returns flowOf(emptyList())
+        every { transactionRepository.getInventoryByLocation(any()) } returns flowOf(emptyList())
     }
 
     private fun createViewModel(): ReportsViewModel {

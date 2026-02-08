@@ -3,8 +3,16 @@ package com.zagot.zagotplus.ui.screens.purchase
 import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.hardware.printer.PrinterConnectionState
+import com.zagot.zagotplus.hardware.printer.PrinterError
+import com.zagot.zagotplus.hardware.printer.PrinterService
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesError
+import com.zagot.zagotplus.hardware.scales.ScalesService
+import com.zagot.zagotplus.hardware.scales.WeightReading
 import com.zagot.zagotplus.testutil.MainDispatcherRule
 import com.zagot.zagotplus.testutil.TestData
 import io.mockk.coEvery
@@ -12,6 +20,8 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -21,6 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
 import java.util.UUID
+import com.zagot.zagotplus.ui.screens.shared.PurchaseEntryScreenState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PurchaseEntryViewModelTest {
@@ -30,8 +41,11 @@ class PurchaseEntryViewModelTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var purchaseBatchRepository: PurchaseBatchRepository
+    private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
+    private lateinit var scalesService: ScalesService
+    private lateinit var printerService: PrinterService
     private lateinit var viewModel: PurchaseEntryViewModel
 
     private val testProduct = TestData.PRODUCT_WHITE_WALNUT
@@ -41,22 +55,39 @@ class PurchaseEntryViewModelTest {
     fun setup() {
         productRepository = mockk()
         purchaseBatchRepository = mockk()
+        locationRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
+        scalesService = mockk(relaxed = true)
+        printerService = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
+        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { productOrderPreferences.getProductOrder() } returns emptyList()
         every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
+        every { printerService.isReady() } returns false  // Printer not ready by default
+        
+        // Stub ScalesService flows (required for ViewModel observation)
+        every { scalesService.connectionState } returns MutableStateFlow(ScalesConnectionState.Disconnected)
+        every { scalesService.weightReadings } returns MutableSharedFlow()
+        every { scalesService.errors } returns MutableSharedFlow()
+        
+        // Stub PrinterService flows
+        every { printerService.connectionState } returns MutableStateFlow(PrinterConnectionState.Disconnected)
+        every { printerService.errors } returns MutableSharedFlow()
     }
 
     private fun createViewModel(): PurchaseEntryViewModel {
         return PurchaseEntryViewModel(
             productRepository = productRepository,
             purchaseBatchRepository = purchaseBatchRepository,
+            locationRepository = locationRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences,
+            scalesService = scalesService,
+            printerService = printerService,
             savedStateHandle = SavedStateHandle()
         )
     }

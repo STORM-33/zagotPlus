@@ -110,6 +110,11 @@ interface TransactionRepository {
     fun getProductAvgPurchasePrices(): Flow<Map<UUID, BigDecimal>>
 
     /**
+     * Observe latest server_updated_at to detect content changes (reactive).
+     */
+    fun observeLatestUpdate(): Flow<Long?>
+
+    /**
      * Get filtered and paginated transactions.
      * @param filter Filter criteria
      * @param limit Number of transactions per page

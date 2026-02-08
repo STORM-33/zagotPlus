@@ -14,6 +14,8 @@ import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
+import com.zagot.zagotplus.sync.SyncStatus
+import com.zagot.zagotplus.sync.SyncStatusRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -44,6 +46,7 @@ class HistoryViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
+    private lateinit var syncStatusRepository: SyncStatusRepository
     private lateinit var viewModel: HistoryViewModel
     private val testDispatcher = UnconfinedTestDispatcher()
     private val testScope = TestScope(testDispatcher)
@@ -124,9 +127,10 @@ class HistoryViewModelTest {
         saleBatchRepository = mockk()
         productRepository = mockk()
         locationRepository = mockk()
+        syncStatusRepository = mockk()
         devicePreferences = mockk()
 
-        every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
+        every { productRepository.getAllProducts() } returns flowOf(listOf(testProduct))
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation, testLocation2))
         every { purchaseBatchRepository.observeTotalBatchCount() } returns purchaseBatchCountFlow
         every { saleBatchRepository.observeTotalBatchCount() } returns saleBatchCountFlow
@@ -139,6 +143,8 @@ class HistoryViewModelTest {
         // Mock device preferences for restricted mode
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.selectedLocationIdFlow } returns MutableStateFlow(testLocation.id)
+        // Mock sync status repository to return idle state
+        every { syncStatusRepository.syncStatus } returns MutableStateFlow(SyncStatus.idle())
     }
 
     @After
@@ -149,7 +155,7 @@ class HistoryViewModelTest {
     }
 
     private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository, devicePreferences)
+        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository, devicePreferences, syncStatusRepository)
     }
 
     @Test

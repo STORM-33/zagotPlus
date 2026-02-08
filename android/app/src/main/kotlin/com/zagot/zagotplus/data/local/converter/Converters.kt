@@ -19,8 +19,10 @@ class Converters {
     }
 
     @TypeConverter
-    fun toUUID(string: String?): UUID? {
-        return string?.let { UUID.fromString(it) }
+    fun toUUID(string: String?): UUID? = try {
+        string?.let { UUID.fromString(it) }
+    } catch (e: IllegalArgumentException) {
+        null
     }
 
     // Instant <-> Long (epoch millis)
@@ -41,7 +43,9 @@ class Converters {
     }
 
     @TypeConverter
-    fun toBigDecimal(string: String?): BigDecimal? {
-        return string?.let { BigDecimal(it) }
+    fun toBigDecimal(string: String?): BigDecimal? = try {
+        string?.let { BigDecimal(it) }
+    } catch (e: NumberFormatException) {
+        null
     }
 }

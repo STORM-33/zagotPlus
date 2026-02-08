@@ -1,6 +1,9 @@
 package com.zagot.zagotplus.ui.screens.reports
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,6 +36,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,10 +63,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.DateRange
 import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.Instant
@@ -69,7 +78,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReportsScreen(
     onNavigateBack: () -> Unit,
@@ -80,12 +89,39 @@ fun ReportsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val currencyFormat = remember { DecimalFormat("#,##0") }
     val weightFormat = remember { DecimalFormat("#,##0.0") }
+    
+    // Dialog states for long-press panels
+    var showSpendingsDialog by remember { mutableStateOf(false) }
+    var showEarningsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             snackbarHostState.showSnackbar(error)
             viewModel.dismissError()
         }
+    }
+    
+    // Spendings detail dialog
+    if (showSpendingsDialog) {
+        SpendingsDetailDialog(
+            purchaseTotal = uiState.purchaseTotal,
+            paymentsByCategory = uiState.paymentsByCategory,
+            currencyFormat = currencyFormat,
+            onDismiss = { showSpendingsDialog = false }
+        )
+    }
+    
+    // Earnings detail dialog
+    if (showEarningsDialog) {
+        EarningsDetailDialog(
+            salesItems = uiState.salesItems,
+            totalEarnings = uiState.totalEarnings,
+            totalSpendings = uiState.totalSpendings,
+            inventoryValue = uiState.inventoryValue,
+            currencyFormat = currencyFormat,
+            weightFormat = weightFormat,
+            onDismiss = { showEarningsDialog = false }
+        )
     }
 
     Scaffold(
@@ -116,7 +152,7 @@ fun ReportsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            // Summary panels
+            // Summary panels with long-press support
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,6 +165,7 @@ fun ReportsScreen(
                     currencyFormat = currencyFormat,
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    onLongPress = { showSpendingsDialog = true },
                     modifier = Modifier.weight(1f)
                 )
                 SummaryPanel(
@@ -137,6 +174,7 @@ fun ReportsScreen(
                     currencyFormat = currencyFormat,
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    onLongPress = { showEarningsDialog = true },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -191,17 +229,22 @@ fun ReportsScreen(
                     }
                 }
                 else -> {
+                    val horizontalPadding = adaptiveHorizontalPadding()
+                    val itemSpacing = adaptiveItemSpacing()
+                    
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(itemSpacing)
                     ) {
                         items(uiState.productItems, key = { it.productId }) { item ->
-                            ProductReportCard(
-                                item = item,
-                                currencyFormat = currencyFormat,
-                                weightFormat = weightFormat
-                            )
+                            AnimatedListItem {
+                                ProductReportCard(
+                                    item = item,
+                                    currencyFormat = currencyFormat,
+                                    weightFormat = weightFormat,
+                                )
+                            }
                         }
                         
                         item(key = "summary") {
@@ -219,6 +262,7 @@ fun ReportsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SummaryPanel(
     title: String,
@@ -226,11 +270,18 @@ private fun SummaryPanel(
     currencyFormat: DecimalFormat,
     containerColor: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
+    onLongPress: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        modifier = modifier
+            .combinedClickable(
+                onClick = { },
+                onLongClick = onLongPress
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -241,14 +292,245 @@ private fun SummaryPanel(
                 color = contentColor
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "₴${currencyFormat.format(amount)}",
+            AnimatedCounter(
+                targetValue = amount,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = contentColor
             )
         }
     }
+}
+
+@Composable
+private fun SpendingsDetailDialog(
+    purchaseTotal: BigDecimal,
+    paymentsByCategory: List<PaymentCategoryItem>,
+    currencyFormat: DecimalFormat,
+    onDismiss: () -> Unit
+) {
+    val paymentsTotal = paymentsByCategory.sumOf { it.amount }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Деталі витрат") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Purchases section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Закупки товарів", style = MaterialTheme.typography.bodyLarge)
+                    AnimatedCounter(
+                        targetValue = purchaseTotal,
+                        formatter = { "₴${currencyFormat.format(it)}" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                // Payments section with categories
+                if (paymentsByCategory.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Оплати:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    paymentsByCategory.forEach { category ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                category.categoryName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            AnimatedCounter(
+                                targetValue = category.amount,
+                                formatter = { "₴${currencyFormat.format(it)}" },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                } else if (paymentsTotal > BigDecimal.ZERO) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Оплати", style = MaterialTheme.typography.bodyLarge)
+                        AnimatedCounter(
+                            targetValue = paymentsTotal,
+                            formatter = { "₴${currencyFormat.format(it)}" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Всього", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    AnimatedCounter(
+                        targetValue = purchaseTotal + paymentsTotal,
+                        formatter = { "₴${currencyFormat.format(it)}" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрити")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EarningsDetailDialog(
+    salesItems: List<SalesReportItem>,
+    totalEarnings: BigDecimal,
+    totalSpendings: BigDecimal,
+    inventoryValue: BigDecimal,
+    currencyFormat: DecimalFormat,
+    weightFormat: DecimalFormat,
+    onDismiss: () -> Unit
+) {
+    // Calculate net profit: Total earnings - Total spendings
+    val netProfit = totalEarnings.subtract(totalSpendings)
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Деталі прибутку") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (salesItems.isEmpty()) {
+                    Text(
+                        "Немає даних про продажі",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "Прибуток по товарах:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyColumn(
+                        modifier = Modifier.height(200.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(salesItems, key = { it.productId }) { item ->
+                            AnimatedListItem {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            item.productName,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        AnimatedCounter(
+                                            targetValue = item.totalWeightKg,
+                                            formatter = { "${weightFormat.format(it)} кг" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    AnimatedCounter(
+                                        targetValue = item.totalEarned,
+                                        formatter = { "₴${currencyFormat.format(it)}" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Всього прибуток", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        AnimatedCounter(
+                            targetValue = totalEarnings,
+                            formatter = { "₴${currencyFormat.format(it)}" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                // Net profit (always shown, even if no sales)
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Чистий прибуток",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    AnimatedCounter(
+                        targetValue = netProfit,
+                        formatter = { "₴${currencyFormat.format(it)}" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (netProfit >= BigDecimal.ZERO)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                }
+
+                // Inventory value (potential revenue)
+                // Always shown, unaffected by date range
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "В наявності товар на",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AnimatedCounter(
+                        targetValue = inventoryValue,
+                        formatter = { "₴${currencyFormat.format(it)}" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Закрити")
+            }
+        }
+    )
 }
 
 @Composable
@@ -260,8 +542,10 @@ private fun ReportsSummaryPanel(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -273,14 +557,14 @@ private fun ReportsSummaryPanel(
             Text(
                 text = "Всього закуплено",
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "${weightFormat.format(totalWeightKg)} кг",
+            AnimatedCounter(
+                targetValue = totalWeightKg,
+                formatter = { "${weightFormat.format(it)} кг" },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -336,8 +620,10 @@ private fun ProductReportCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -350,7 +636,7 @@ private fun ProductReportCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surface),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 if (item.imageUri != null) {
@@ -380,16 +666,18 @@ private fun ProductReportCard(
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${weightFormat.format(item.totalWeightKg)} кг",
+                AnimatedCounter(
+                    targetValue = item.totalWeightKg,
+                    formatter = { "${weightFormat.format(it)} кг" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Amount spent
-            Text(
-                text = "₴${currencyFormat.format(item.totalSpent)}",
+            AnimatedCounter(
+                targetValue = item.totalSpent,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.products
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -63,12 +67,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
+import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
+import com.zagot.zagotplus.ui.components.isTablet
 import java.text.DecimalFormat
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ProductsScreen(
     onNavigateBack: () -> Unit,
@@ -163,6 +170,9 @@ fun ProductsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
+        val isTabletLayout = isTablet()
+        val horizontalPadding = adaptiveHorizontalPadding()
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -183,7 +193,31 @@ fun ProductsScreen(
                         onAction = { viewModel.showAddDialog() }
                     )
                 }
+            } else if (isTabletLayout) {
+                // Tablet: Grid layout with 2-3 columns
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 300.dp),
+                    contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = uiState.sortedProducts,
+                        key = { it.id }
+                    ) { product ->
+                        AnimatedListItem {
+                            ProductCard(
+                                product = product,
+                                onEdit = { viewModel.showEditDialog(product) },
+                                onDelete = { productToDelete = product },
+                                onToggleActive = { viewModel.toggleProductActive(product.id) },
+                                isCompact = true,
+                            )
+                        }
+                    }
+                }
             } else {
+                // Phone: List layout
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -192,12 +226,15 @@ fun ProductsScreen(
                         items = uiState.sortedProducts,
                         key = { it.id }
                     ) { product ->
-                        ProductCard(
-                            product = product,
-                            onEdit = { viewModel.showEditDialog(product) },
-                            onDelete = { productToDelete = product },
-                            onToggleActive = { viewModel.toggleProductActive(product.id) }
-                        )
+                        AnimatedListItem {
+                            ProductCard(
+                                product = product,
+                                onEdit = { viewModel.showEditDialog(product) },
+                                onDelete = { productToDelete = product },
+                                onToggleActive = { viewModel.toggleProductActive(product.id) },
+                                isCompact = false,
+                            )
+                        }
                     }
                 }
             }
@@ -212,11 +249,12 @@ private fun ProductCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggleActive: () -> Unit,
+    isCompact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val priceFormat = remember { DecimalFormat("#,##0") }
     var showContextMenu by remember { mutableStateOf(false) }
-    
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -225,7 +263,13 @@ private fun ProductCard(
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             }
-        )
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (product.isActive) MaterialTheme.colorScheme.outlineVariant
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Box {
             Row(
@@ -235,14 +279,14 @@ private fun ProductCard(
                         onClick = { },
                         onLongClick = { showContextMenu = true }
                     )
-                    .padding(16.dp),
+                    .padding(if (isCompact) 12.dp else 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Product image or placeholder
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(if (isCompact) 40.dp else 48.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
@@ -258,7 +302,7 @@ private fun ProductCard(
                         Icon(
                             Icons.Filled.Image,
                             contentDescription = "Немає зображення товару",
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(if (isCompact) 20.dp else 24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
@@ -267,27 +311,31 @@ private fun ProductCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = product.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                         color = if (product.isActive) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         }
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    product.defaultBuyPrice?.let { price ->
-                        Text(
-                            text = "Купівля: ${priceFormat.format(price)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    product.defaultSellPrice?.let { price ->
-                        Text(
-                            text = "Продаж: ${priceFormat.format(price)} грн",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        product.defaultBuyPrice?.let { price ->
+                            Text(
+                                text = if (isCompact) "К: ${priceFormat.format(price)}" else "Купівля: ${priceFormat.format(price)} грн",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        product.defaultSellPrice?.let { price ->
+                            Text(
+                                text = if (isCompact) "П: ${priceFormat.format(price)}" else "Продаж: ${priceFormat.format(price)} грн",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     if (!product.isActive) {
                         Text(
@@ -296,19 +344,21 @@ private fun ProductCard(
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
-                    Text(
-                        text = "Утримуйте для опцій",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
+                    if (!isCompact) {
+                        Text(
+                            text = "Утримуйте для опцій",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
-                
+
                 Switch(
                     checked = product.isActive,
                     onCheckedChange = { onToggleActive() }
                 )
             }
-            
+
             // Context menu for long press
             DropdownMenu(
                 expanded = showContextMenu,

@@ -8,6 +8,8 @@
 
 -- Locations table
 -- Represents physical locations where transactions occur (kiosk, mobile)
+-- NOTE: Server-managed only. No local_id/synced_at columns - locations are
+-- not created/modified on devices, only pulled from server.
 create table locations (
   id uuid primary key default gen_random_uuid(),
   name text not null,

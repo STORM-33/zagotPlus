@@ -20,13 +20,17 @@ import com.zagot.zagotplus.data.local.entity.ProductEntity
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.SaleBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.syncengine.db.SyncMetadataDao
+import com.zagot.syncengine.db.SyncMetadataEntity
+import com.zagot.syncengine.db.SyncOutboxDao
+import com.zagot.syncengine.db.SyncOutboxEntity
 
 /**
  * Room database for Zagot+ application.
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 11 (added is_transfer flag for explicit transfer detection, optimized date grouping queries)
+ * Version: 15 (add sync_metadata and sync_outbox tables for realtime sync engine)
  */
 @Database(
     entities = [
@@ -36,9 +40,11 @@ import com.zagot.zagotplus.data.local.entity.TransactionEntity
         PurchaseBatchEntity::class,
         SaleBatchEntity::class,
         ExpenseCategoryEntity::class,
-        CashOperationEntity::class
+        CashOperationEntity::class,
+        SyncMetadataEntity::class,
+        SyncOutboxEntity::class
     ],
-    version = 11,
+    version = 15,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -78,6 +84,16 @@ abstract class ZagotDatabase : RoomDatabase() {
      * Provides access to cash_operations table.
      */
     abstract fun cashOperationDao(): CashOperationDao
+
+    /**
+     * Provides access to sync_metadata table.
+     */
+    abstract fun syncMetadataDao(): SyncMetadataDao
+
+    /**
+     * Provides access to sync_outbox table.
+     */
+    abstract fun syncOutboxDao(): SyncOutboxDao
 
     companion object {
         /**
@@ -459,6 +475,116 @@ abstract class ZagotDatabase : RoomDatabase() {
                 
                 // Create index for efficient filtering
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_is_transfer ON cash_operations(is_transfer)")
+            }
+        }
+
+        /**
+         * Migration from version 11 to 12: Add sync columns to locations, audit columns for voiding,
+         * transfer_pair_id for linking transfer pairs, and composite index for inventory queries.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add sync columns to locations
+                db.execSQL("ALTER TABLE locations ADD COLUMN local_id TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE locations SET local_id = id WHERE local_id = ''")
+                db.execSQL("ALTER TABLE locations ADD COLUMN synced_at INTEGER")
+                db.execSQL("ALTER TABLE locations ADD COLUMN device_id TEXT")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_locations_local_id ON locations(local_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_locations_synced_at ON locations(synced_at)")
+                
+                // Add audit columns to purchase_batches
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN voided_at INTEGER")
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN voided_by_device_id TEXT")
+                
+                // Add audit columns to sale_batches
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN voided_at INTEGER")
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN voided_by_device_id TEXT")
+                
+                // Add transfer_pair_id to cash_operations
+                db.execSQL("ALTER TABLE cash_operations ADD COLUMN transfer_pair_id TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_transfer_pair_id ON cash_operations(transfer_pair_id)")
+                
+                // Add composite index for inventory queries
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_location_product ON transactions(location_id, product_id)")
+            }
+        }
+        
+        /**
+         * Migration from version 12 to 13: Drop stale composite index.
+         * The index_transactions_location_product was added in MIGRATION_11_12 but the entity
+         * was later changed to only use single-column indices. Room validates schema exactly,
+         * so this stale index must be removed.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS index_transactions_location_product")
+            }
+        }
+
+        /**
+         * Migration from version 13 to 14: Add server_updated_at column to all syncable tables.
+         * This enables server-wins conflict resolution during sync.
+         * 
+         * When pushing records, we compare local server_updated_at with server's current value.
+         * If server has a newer timestamp, we skip the push and let pull retrieve the correct data.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add server_updated_at to sale_batches
+                db.execSQL("ALTER TABLE sale_batches ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sale_batches_server_updated_at ON sale_batches(server_updated_at)")
+                
+                // Add server_updated_at to purchase_batches
+                db.execSQL("ALTER TABLE purchase_batches ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_purchase_batches_server_updated_at ON purchase_batches(server_updated_at)")
+                
+                // Add server_updated_at to transactions
+                db.execSQL("ALTER TABLE transactions ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transactions_server_updated_at ON transactions(server_updated_at)")
+                
+                // Add server_updated_at to cash_operations
+                db.execSQL("ALTER TABLE cash_operations ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_cash_operations_server_updated_at ON cash_operations(server_updated_at)")
+                
+                // Add server_updated_at to expense_categories
+                db.execSQL("ALTER TABLE expense_categories ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_expense_categories_server_updated_at ON expense_categories(server_updated_at)")
+                
+                // Add server_updated_at to products
+                db.execSQL("ALTER TABLE products ADD COLUMN server_updated_at INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_products_server_updated_at ON products(server_updated_at)")
+            }
+        }
+
+        /**
+         * Migration from version 14 to 15: Add sync_metadata and sync_outbox tables
+         * for the realtime sync engine.
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // sync_metadata: tracks last_synced_at per table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_metadata (
+                        table_name TEXT NOT NULL PRIMARY KEY,
+                        last_synced_at INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+
+                // sync_outbox: change tracker for offline mutations
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS sync_outbox (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        table_name TEXT NOT NULL,
+                        record_id TEXT NOT NULL,
+                        operation TEXT NOT NULL,
+                        payload TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        synced INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_table_name_record_id ON sync_outbox(table_name, record_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_synced ON sync_outbox(synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_created_at ON sync_outbox(created_at)")
             }
         }
     }

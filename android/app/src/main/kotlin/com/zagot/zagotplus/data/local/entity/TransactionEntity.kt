@@ -73,7 +73,8 @@ import java.util.UUID
         Index(value = ["batch_id"]),
         Index(value = ["sale_batch_id"]),
         Index(value = ["synced_at"]),
-        Index(value = ["created_at"])
+        Index(value = ["created_at"]),
+        Index(value = ["server_updated_at"])
     ]
 )
 data class TransactionEntity(
@@ -121,5 +122,8 @@ data class TransactionEntity(
     val batchId: UUID? = null,
 
     @ColumnInfo(name = "sale_batch_id")
-    val saleBatchId: UUID? = null
+    val saleBatchId: UUID? = null,
+
+    @ColumnInfo(name = "server_updated_at")
+    val serverUpdatedAt: Instant? = null
 )

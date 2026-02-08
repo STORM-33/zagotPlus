@@ -25,6 +25,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
 import javax.inject.Inject
+import com.zagot.zagotplus.ui.navigation.PurchaseMode
 
 /**
  * UI state for the main purchase screen showing cash balance and today's product totals.
@@ -35,7 +36,8 @@ data class PurchaseUiState(
     val todaysBatches: List<PurchaseBatch> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val navigateToNewClient: Boolean = false
+    val navigateToNewPurchase: Boolean = false,
+    val selectedPurchaseMode: PurchaseMode? = null
 )
 
 @OptIn(FlowPreview::class)
@@ -128,12 +130,12 @@ class PurchaseViewModel @Inject constructor(
             .setScale(2, RoundingMode.HALF_UP)
     }
 
-    fun onNewClientClick() {
-        _uiState.update { it.copy(navigateToNewClient = true) }
+    fun onNewPurchaseClick(mode: PurchaseMode) {
+        _uiState.update { it.copy(navigateToNewPurchase = true, selectedPurchaseMode = mode) }
     }
 
     fun onNavigationHandled() {
-        _uiState.update { it.copy(navigateToNewClient = false) }
+        _uiState.update { it.copy(navigateToNewPurchase = false, selectedPurchaseMode = null) }
     }
 
     fun dismissError() {

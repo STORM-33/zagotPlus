@@ -42,7 +42,8 @@ data class ExpenseCategoryDto(
         name = name,
         isActive = isActive,
         createdAt = Instant.parse(createdAt),
-        syncedAt = syncedAt?.let { Instant.parse(it) }
+        syncedAt = syncedAt?.let { Instant.parse(it) },
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {
@@ -56,6 +57,19 @@ data class ExpenseCategoryDto(
             isActive = entity.isActive,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString()
+        )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): ExpenseCategoryDto = ExpenseCategoryDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            name = record["name"] as String,
+            isActive = record["is_active"] as Boolean,
+            createdAt = record["created_at"] as String,
+            syncedAt = record["synced_at"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
         )
     }
 }

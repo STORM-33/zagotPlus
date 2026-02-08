@@ -62,7 +62,8 @@ class CashDaoTest {
                 id = testLocationId,
                 name = "Склад №1",
                 type = "kiosk",
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-local-$testLocationId"
             ))
             productDao.insert(ProductEntity(
                 id = testProductId,
@@ -479,5 +480,178 @@ class CashDaoTest {
 
         // 1000 - 400 = 600 (only operations within the day)
         assertEquals(0, BigDecimal("600.00").compareTo(dailyChange))
+    }
+
+    // ==================== Voided Batch Filtering Tests ====================
+
+    @Test
+    fun `getBalanceByLocation excludes cash operations linked to voided batches`() = runTest {
+        // Given: deposit of 5000
+        val deposit = createCashOperation(type = "deposit", amount = BigDecimal("5000.00"))
+        cashOperationDao.insert(deposit)
+        
+        // Create a purchase batch
+        val batchId = UUID.randomUUID()
+        val purchaseBatch = PurchaseBatchEntity(
+            id = batchId,
+            localId = "batch-voided-test-1",
+            locationId = testLocationId,
+            notes = null,
+            totalWeightKg = BigDecimal("50.00"),
+            totalAmount = BigDecimal("2500.00"),
+            itemCount = 1,
+            deviceId = "test-device",
+            createdAt = testInstant,
+            syncedAt = null,
+            isVoided = false
+        )
+        purchaseBatchDao.insert(purchaseBatch)
+        
+        // Create cash operation linked to the batch (purchase payment)
+        val purchaseOp = createCashOperation(
+            type = "purchase",
+            amount = BigDecimal("2500.00"),
+            batchId = batchId
+        )
+        cashOperationDao.insert(purchaseOp)
+        
+        // Balance before voiding: 5000 - 2500 = 2500
+        val balanceBefore = cashOperationDao.getBalanceByLocation(testLocationId).first()
+        assertEquals(0, BigDecimal("2500.00").compareTo(balanceBefore))
+        
+        // When: void the batch
+        purchaseBatchDao.markVoided(batchId, testInstant.toEpochMilli(), "test-device")
+        
+        // Then: balance should exclude voided batch operation = 5000
+        val balanceAfter = cashOperationDao.getBalanceByLocation(testLocationId).first()
+        assertEquals(0, BigDecimal("5000.00").compareTo(balanceAfter))
+    }
+
+    @Test
+    fun `getTotalBalance excludes cash operations linked to voided batches`() = runTest {
+        // Given: deposit of 10000
+        val deposit = createCashOperation(type = "deposit", amount = BigDecimal("10000.00"))
+        cashOperationDao.insert(deposit)
+        
+        // Create a purchase batch
+        val batchId = UUID.randomUUID()
+        val purchaseBatch = PurchaseBatchEntity(
+            id = batchId,
+            localId = "batch-voided-test-2",
+            locationId = testLocationId,
+            notes = null,
+            totalWeightKg = BigDecimal("100.00"),
+            totalAmount = BigDecimal("5000.00"),
+            itemCount = 2,
+            deviceId = "test-device",
+            createdAt = testInstant,
+            syncedAt = null,
+            isVoided = false
+        )
+        purchaseBatchDao.insert(purchaseBatch)
+        
+        // Create cash operation linked to the batch
+        val purchaseOp = createCashOperation(
+            type = "purchase",
+            amount = BigDecimal("5000.00"),
+            batchId = batchId
+        )
+        cashOperationDao.insert(purchaseOp)
+        
+        // Get initial total (may include data from other tests, so just check the change)
+        val totalBefore = cashOperationDao.getTotalBalance().first()
+        
+        // When: void the batch
+        purchaseBatchDao.markVoided(batchId, testInstant.toEpochMilli(), "test-device")
+        
+        // Then: total should increase by 5000 (the voided purchase is excluded)
+        val totalAfter = cashOperationDao.getTotalBalance().first()
+        assertEquals(0, BigDecimal("5000.00").compareTo(totalAfter.subtract(totalBefore)))
+    }
+
+    @Test
+    fun `getDailyBalanceChange excludes cash operations linked to voided batches`() = runTest {
+        val startOfDay = Instant.parse("2024-01-15T00:00:00Z")
+        val endOfDay = Instant.parse("2024-01-16T00:00:00Z")
+        
+        // Deposit within the day
+        val deposit = createCashOperation(
+            type = "deposit",
+            amount = BigDecimal("3000.00"),
+            createdAt = Instant.parse("2024-01-15T09:00:00Z")
+        )
+        cashOperationDao.insert(deposit)
+        
+        // Create a purchase batch
+        val batchId = UUID.randomUUID()
+        val purchaseBatch = PurchaseBatchEntity(
+            id = batchId,
+            localId = "batch-voided-test-3",
+            locationId = testLocationId,
+            notes = null,
+            totalWeightKg = BigDecimal("20.00"),
+            totalAmount = BigDecimal("1000.00"),
+            itemCount = 1,
+            deviceId = "test-device",
+            createdAt = Instant.parse("2024-01-15T10:00:00Z"),
+            syncedAt = null,
+            isVoided = false
+        )
+        purchaseBatchDao.insert(purchaseBatch)
+        
+        // Cash operation linked to batch within the day
+        val purchaseOp = createCashOperation(
+            type = "purchase",
+            amount = BigDecimal("1000.00"),
+            batchId = batchId,
+            createdAt = Instant.parse("2024-01-15T10:00:00Z")
+        )
+        cashOperationDao.insert(purchaseOp)
+        
+        // Daily change before voiding: 3000 - 1000 = 2000
+        val changeBefore = cashOperationDao.getDailyBalanceChange(
+            testLocationId, startOfDay, endOfDay
+        ).first()
+        assertEquals(0, BigDecimal("2000.00").compareTo(changeBefore))
+        
+        // When: void the batch
+        purchaseBatchDao.markVoided(batchId, testInstant.toEpochMilli(), "test-device")
+        
+        // Then: daily change should be 3000 (voided purchase excluded)
+        val changeAfter = cashOperationDao.getDailyBalanceChange(
+            testLocationId, startOfDay, endOfDay
+        ).first()
+        assertEquals(0, BigDecimal("3000.00").compareTo(changeAfter))
+    }
+
+    @Test
+    fun `balance includes cash operations without batch_id when batches exist`() = runTest {
+        // This test verifies that operations without batch_id are always included
+        val deposit = createCashOperation(type = "deposit", amount = BigDecimal("2000.00"))
+        val withdrawal = createCashOperation(type = "withdrawal", amount = BigDecimal("500.00"))
+        
+        cashOperationDao.insert(deposit)
+        cashOperationDao.insert(withdrawal)
+        
+        // Create a voided batch (should not affect balance since no operation linked)
+        val batchId = UUID.randomUUID()
+        val voidedBatch = PurchaseBatchEntity(
+            id = batchId,
+            localId = "batch-voided-test-4",
+            locationId = testLocationId,
+            notes = null,
+            totalWeightKg = BigDecimal("10.00"),
+            totalAmount = BigDecimal("400.00"),
+            itemCount = 1,
+            deviceId = "test-device",
+            createdAt = testInstant,
+            syncedAt = null,
+            isVoided = true
+        )
+        purchaseBatchDao.insert(voidedBatch)
+        
+        // Balance should be 2000 - 500 = 1500
+        val balance = cashOperationDao.getBalanceByLocation(testLocationId).first()
+        assertEquals(0, BigDecimal("1500.00").compareTo(balance))
     }
 }

@@ -66,6 +66,9 @@ interface CashRepository {
     fun getDailyDeposits(locationId: UUID, date: LocalDate): Flow<BigDecimal>
     fun getDailyDepositsGlobal(date: LocalDate): Flow<BigDecimal>
 
+    // Reactivity
+    fun observeCashChangeSignal(): Flow<String>
+
     // Update operations
     suspend fun getOperationById(id: UUID): CashOperation?
     suspend fun updateOperation(id: UUID, amount: BigDecimal, categoryId: UUID?, notes: String?)

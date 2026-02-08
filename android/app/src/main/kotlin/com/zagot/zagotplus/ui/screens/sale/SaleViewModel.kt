@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.SaleBatch
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
+import com.zagot.zagotplus.ui.navigation.SaleMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,8 @@ data class SaleUiState(
     val todaysBatches: List<SaleBatch> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val navigateToNewSale: Boolean = false
+    val navigateToNewSale: Boolean = false,
+    val selectedSaleMode: SaleMode? = null
 )
 
 @HiltViewModel
@@ -78,12 +80,12 @@ class SaleViewModel @Inject constructor(
         }
     }
 
-    fun onNewSaleClick() {
-        _uiState.update { it.copy(navigateToNewSale = true) }
+    fun onNewSaleClick(mode: SaleMode) {
+        _uiState.update { it.copy(navigateToNewSale = true, selectedSaleMode = mode) }
     }
 
     fun onNavigationHandled() {
-        _uiState.update { it.copy(navigateToNewSale = false) }
+        _uiState.update { it.copy(navigateToNewSale = false, selectedSaleMode = null) }
     }
 
     fun dismissError() {

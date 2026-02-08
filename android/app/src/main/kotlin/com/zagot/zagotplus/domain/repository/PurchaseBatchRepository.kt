@@ -91,8 +91,9 @@ interface PurchaseBatchRepository {
 
     /**
      * Get paginated batches ordered by creation date (newest first).
+     * @param includeVoided If true, includes voided batches (for "show deleted" filter)
      */
-    suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<PurchaseBatch>
+    suspend fun getAllBatchesPaginated(limit: Int, offset: Int, includeVoided: Boolean = false): List<PurchaseBatch>
 
     /**
      * Get total count of batches.
@@ -103,6 +104,11 @@ interface PurchaseBatchRepository {
      * Observe total count of batches (reactive).
      */
     fun observeTotalBatchCount(): Flow<Int>
+
+    /**
+     * Observe latest server_updated_at to detect content changes (reactive).
+     */
+    fun observeLatestUpdate(): Flow<Long?>
 
     /**
      * Correct a batch by voiding the original and creating a new corrected batch.

@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.zagot.zagotplus.data.local.entity.CashHistoryProjection
 import com.zagot.zagotplus.data.local.entity.CashOperationEntity
 import com.zagot.zagotplus.data.local.entity.ExpenseCategoryEntity
@@ -32,6 +33,13 @@ interface ExpenseCategoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<ExpenseCategoryEntity>)
+
+    /**
+     * Upsert expense categories (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(categories: List<ExpenseCategoryEntity>)
 
     /**
      * Get all existing local_ids for efficient batch deduplication during sync.
@@ -93,19 +101,29 @@ interface CashOperationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(operations: List<CashOperationEntity>)
 
+    /**
+     * Upsert cash operations (INSERT or UPDATE, no DELETE).
+     * Safe for sync pull — avoids FK cascade issues from REPLACE strategy.
+     */
+    @Upsert
+    suspend fun upsertAll(operations: List<CashOperationEntity>)
+
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations WHERE location_id = :locationId)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.location_id = :locationId
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.location_id = :locationId
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getBalanceByLocation(locationId: UUID): Flow<java.math.BigDecimal>
@@ -113,13 +131,15 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations
-            WHERE location_id = :locationId
-              AND created_at >= :startOfDay
-              AND created_at < :endOfDay)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.location_id = :locationId
+              AND co.created_at >= :startOfDay
+              AND co.created_at < :endOfDay
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
@@ -127,7 +147,7 @@ interface CashOperationDao {
               AND t.created_at >= :startOfDay
               AND t.created_at < :endOfDay
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(
@@ -164,15 +184,17 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.batch_id IS NULL OR pb.is_voided = 0)
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getTotalBalance(): Flow<java.math.BigDecimal>
@@ -180,17 +202,19 @@ interface CashOperationDao {
     @Query("""
         SELECT COALESCE(
             (SELECT COALESCE(SUM(CASE 
-                WHEN type = 'deposit' THEN amount
-                WHEN type IN ('withdrawal', 'payment') THEN -amount
+                WHEN co.type = 'deposit' THEN co.amount
+                WHEN co.type IN ('withdrawal', 'payment', 'purchase') THEN -co.amount
                 ELSE 0
-            END), 0) FROM cash_operations
-            WHERE created_at >= :startOfDay AND created_at < :endOfDay)
+            END), 0) FROM cash_operations co
+            LEFT JOIN purchase_batches pb ON co.batch_id = pb.id
+            WHERE co.created_at >= :startOfDay AND co.created_at < :endOfDay
+              AND (co.batch_id IS NULL OR pb.is_voided = 0))
             +
             (SELECT COALESCE(SUM(-t.total_amount), 0) FROM transactions t
             LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
             WHERE t.created_at >= :startOfDay AND t.created_at < :endOfDay
               AND t.type = 'purchase'
-              AND pb.is_voided = 0)
+              AND (t.batch_id IS NULL OR pb.is_voided = 0))
         , 0)
     """)
     fun getDailyBalanceChange(startOfDay: Instant, endOfDay: Instant): Flow<java.math.BigDecimal>
@@ -203,6 +227,14 @@ interface CashOperationDao {
      */
     @Query("SELECT local_id FROM cash_operations")
     suspend fun getAllLocalIds(): List<String>
+
+    /**
+     * Observe total count of cash operations (reactive).
+     * Used by CashViewModel to detect sync changes (inserts AND updates).
+     * Combines count + max timestamp so updates are also detected.
+     */
+    @Query("SELECT COUNT(*) || '-' || COALESCE(MAX(server_updated_at), '') FROM cash_operations")
+    fun observeChangeSignal(): Flow<String>
 
     @Update
     suspend fun update(operation: CashOperationEntity)

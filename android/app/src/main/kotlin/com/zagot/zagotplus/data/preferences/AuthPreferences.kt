@@ -3,6 +3,7 @@ package com.zagot.zagotplus.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import com.zagot.zagotplus.Config
+import com.zagot.zagotplus.debug.CrashLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,7 +60,8 @@ interface AuthPreferences {
  */
 @Singleton
 class AuthPreferencesImpl @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext private val context: Context,
+    private val crashLogger: CrashLogger
 ) : AuthPreferences {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         PREFS_NAME,
@@ -83,20 +85,30 @@ class AuthPreferencesImpl @Inject constructor(
     }
 
     override fun setPin(pin: String) {
-        require(pin.length in Config.MIN_PIN_LENGTH..Config.MAX_PIN_LENGTH) {
-            "PIN must be ${Config.MIN_PIN_LENGTH}-${Config.MAX_PIN_LENGTH} digits"
+        try {
+            crashLogger.logDebug(TAG, "setPin: Starting PIN setup, length=${pin.length}")
+            require(pin.length in Config.MIN_PIN_LENGTH..Config.MAX_PIN_LENGTH) {
+                "PIN must be ${Config.MIN_PIN_LENGTH}-${Config.MAX_PIN_LENGTH} digits"
+            }
+            require(pin.all { it.isDigit() }) { "PIN must contain only digits" }
+            
+            crashLogger.logDebug(TAG, "setPin: Generating salt")
+            val salt = generateSalt()
+            crashLogger.logDebug(TAG, "setPin: Hashing PIN with PBKDF2")
+            val hash = hashPinWithPbkdf2(pin, salt)
+            crashLogger.logDebug(TAG, "setPin: Saving to SharedPreferences")
+            prefs.edit()
+                .putString(KEY_PIN_SALT, Base64.getEncoder().encodeToString(salt))
+                .putString(KEY_PIN_HASH, hash)
+                .putInt(KEY_HASH_VERSION, CURRENT_HASH_VERSION)
+                .putInt(KEY_PIN_LENGTH, pin.length)
+                .apply()
+            clearLockout()
+            crashLogger.logDebug(TAG, "setPin: PIN saved successfully")
+        } catch (e: Exception) {
+            crashLogger.logError(TAG, "setPin: CRASH - Failed to set PIN", e)
+            throw e
         }
-        require(pin.all { it.isDigit() }) { "PIN must contain only digits" }
-        
-        val salt = generateSalt()
-        val hash = hashPinWithPbkdf2(pin, salt)
-        prefs.edit()
-            .putString(KEY_PIN_SALT, Base64.getEncoder().encodeToString(salt))
-            .putString(KEY_PIN_HASH, hash)
-            .putInt(KEY_HASH_VERSION, CURRENT_HASH_VERSION)
-            .putInt(KEY_PIN_LENGTH, pin.length)
-            .apply()
-        clearLockout()
     }
 
     override fun verifyPin(pin: String): Boolean {
@@ -244,17 +256,27 @@ class AuthPreferencesImpl @Inject constructor(
     }
 
     override fun setAdminPin(pin: String) {
-        require(pin.length == Config.ADMIN_PIN_LENGTH) {
-            "Admin PIN must be ${Config.ADMIN_PIN_LENGTH} digits"
+        try {
+            crashLogger.logDebug(TAG, "setAdminPin: Starting admin PIN setup, length=${pin.length}")
+            require(pin.length == Config.ADMIN_PIN_LENGTH) {
+                "Admin PIN must be ${Config.ADMIN_PIN_LENGTH} digits"
+            }
+            require(pin.all { it.isDigit() }) { "Admin PIN must contain only digits" }
+            
+            crashLogger.logDebug(TAG, "setAdminPin: Generating salt")
+            val salt = generateSalt()
+            crashLogger.logDebug(TAG, "setAdminPin: Hashing PIN with PBKDF2")
+            val hash = hashPinWithPbkdf2(pin, salt)
+            crashLogger.logDebug(TAG, "setAdminPin: Saving to SharedPreferences")
+            prefs.edit()
+                .putString(KEY_ADMIN_PIN_SALT, Base64.getEncoder().encodeToString(salt))
+                .putString(KEY_ADMIN_PIN_HASH, hash)
+                .apply()
+            crashLogger.logDebug(TAG, "setAdminPin: Admin PIN saved successfully")
+        } catch (e: Exception) {
+            crashLogger.logError(TAG, "setAdminPin: CRASH - Failed to set admin PIN", e)
+            throw e
         }
-        require(pin.all { it.isDigit() }) { "Admin PIN must contain only digits" }
-        
-        val salt = generateSalt()
-        val hash = hashPinWithPbkdf2(pin, salt)
-        prefs.edit()
-            .putString(KEY_ADMIN_PIN_SALT, Base64.getEncoder().encodeToString(salt))
-            .putString(KEY_ADMIN_PIN_HASH, hash)
-            .apply()
     }
 
     override fun verifyAdminPin(pin: String): Boolean {
@@ -278,6 +300,7 @@ class AuthPreferencesImpl @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "AuthPreferences"
         private const val PREFS_NAME = "zagot_auth_prefs"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"

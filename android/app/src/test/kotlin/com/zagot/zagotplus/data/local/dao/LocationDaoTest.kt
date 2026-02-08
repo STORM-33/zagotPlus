@@ -46,12 +46,14 @@ class LocationDaoTest {
     private fun createLocation(
         id: UUID = UUID.randomUUID(),
         name: String = "Склад №1",
-        type: String = "kiosk"
+        type: String = "kiosk",
+        localId: String = UUID.randomUUID().toString()
     ) = LocationEntity(
         id = id,
         name = name,
         type = type,
-        createdAt = testInstant
+        createdAt = testInstant,
+        localId = localId
     )
 
     // ==================== Insert Tests ====================
@@ -100,9 +102,11 @@ class LocationDaoTest {
     fun `getAll returns all locations ordered by created_at`() = runTest {
         val earlier = Instant.parse("2024-01-01T10:00:00Z")
         val later = Instant.parse("2024-01-15T10:00:00Z")
+        val laterId = UUID.randomUUID()
+        val earlierId = UUID.randomUUID()
         
-        locationDao.insert(LocationEntity(UUID.randomUUID(), "Later", "kiosk", later))
-        locationDao.insert(LocationEntity(UUID.randomUUID(), "Earlier", "kiosk", earlier))
+        locationDao.insert(LocationEntity(laterId, "Later", "kiosk", later, localId = "loc-$laterId"))
+        locationDao.insert(LocationEntity(earlierId, "Earlier", "kiosk", earlier, localId = "loc-$earlierId"))
         
         val all = locationDao.getAll()
         

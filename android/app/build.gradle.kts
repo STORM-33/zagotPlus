@@ -91,7 +91,9 @@ android {
                 // Required for MockK/ByteBuddy on JDK 17+
                 "--add-opens", "java.base/java.lang=ALL-UNNAMED",
                 "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
-                "--add-opens", "java.base/java.util=ALL-UNNAMED"
+                "--add-opens", "java.base/java.util=ALL-UNNAMED",
+                "-XX:+EnableDynamicAgentLoading",
+                "-Djdk.attach.allowAttachSelf=true"
             )
         }
         unitTests.isReturnDefaultValues = true
@@ -99,6 +101,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":sync-engine"))
+
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -139,7 +143,8 @@ dependencies {
     implementation(libs.supabase.postgrest.kt)
     implementation(libs.supabase.realtime.kt)
     implementation(libs.supabase.storage.kt)
-    implementation(libs.ktor.client.android)
+    implementation(libs.supabase.gotrue.kt)
+    implementation(libs.ktor.client.okhttp)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

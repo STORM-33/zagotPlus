@@ -3,6 +3,7 @@ package com.zagot.zagotplus.ui.screens.sale
 import androidx.lifecycle.SavedStateHandle
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.data.preferences.ProductOrderPreferences
+import com.zagot.zagotplus.domain.repository.LocationRepository
 import com.zagot.zagotplus.domain.repository.ProductRepository
 import com.zagot.zagotplus.domain.repository.SaleBatchRepository
 import com.zagot.zagotplus.domain.repository.TransactionRepository
@@ -21,6 +22,13 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
+import com.zagot.zagotplus.ui.screens.shared.TransactionEntryScreenState
+import com.zagot.zagotplus.ui.screens.shared.TransactionEntryMode
+import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.hardware.scales.ScalesConnectionState
+import com.zagot.zagotplus.hardware.scales.ScalesService
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SaleEntryViewModelTest {
@@ -31,8 +39,10 @@ class SaleEntryViewModelTest {
     private lateinit var productRepository: ProductRepository
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var saleBatchRepository: SaleBatchRepository
+    private lateinit var locationRepository: LocationRepository
     private lateinit var devicePreferences: DevicePreferences
     private lateinit var productOrderPreferences: ProductOrderPreferences
+    private lateinit var scalesService: ScalesService
     private lateinit var viewModel: SaleEntryViewModel
 
     private val testProduct = TestData.PRODUCT_WHITE_WALNUT
@@ -48,16 +58,24 @@ class SaleEntryViewModelTest {
         productRepository = mockk()
         transactionRepository = mockk()
         saleBatchRepository = mockk()
+        locationRepository = mockk()
         devicePreferences = mockk()
         productOrderPreferences = mockk(relaxed = true)
 
         every { productRepository.getActiveProducts() } returns flowOf(listOf(testProduct))
+        every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation))
         every { devicePreferences.getSelectedLocationId() } returns testLocation.id
         every { devicePreferences.getDeviceId() } returns "test-device"
         every { transactionRepository.getInventoryByLocation(testLocation.id) } returns flowOf(listOf(testInventoryItem))
         every { productOrderPreferences.getProductOrder() } returns emptyList()
         every { productOrderPreferences.applyOrder(any<List<Any>>(), any()) } answers { firstArg() }
         coEvery { saleBatchRepository.createBatchWithTransactions(any(), any()) } returns Unit
+        
+        // Setup ScalesService mocks
+        scalesService = mockk(relaxed = true)
+        every { scalesService.connectionState } returns MutableStateFlow(ScalesConnectionState.Disconnected)
+        every { scalesService.weightReadings } returns MutableSharedFlow()
+        every { scalesService.errors } returns MutableSharedFlow()
     }
 
     private fun createViewModel(): SaleEntryViewModel {
@@ -65,8 +83,10 @@ class SaleEntryViewModelTest {
             productRepository = productRepository,
             transactionRepository = transactionRepository,
             saleBatchRepository = saleBatchRepository,
+            locationRepository = locationRepository,
             devicePreferences = devicePreferences,
             productOrderPreferences = productOrderPreferences,
+            scalesService = scalesService,
             savedStateHandle = SavedStateHandle()
         )
     }
@@ -107,7 +127,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(testProduct, state.selectedProduct)
         assertEquals(testProduct.defaultSellPrice?.toPlainString(), state.pricePerKg)
-        assertEquals(SaleEntryScreenState.WEIGHING, state.screenState)
+        assertEquals(TransactionEntryScreenState.WEIGHT_ENTRY, state.screenState)
     }
 
     @Test
@@ -118,6 +138,48 @@ class SaleEntryViewModelTest {
         viewModel.selectProduct(testProduct)
 
         assertEquals(testInventoryItem.totalWeightKg, viewModel.uiState.value.availableWeight)
+    }
+
+    @Test
+    fun `selectProduct clears tablet batch editing state`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("30")
+        viewModel.onTareCountChange("3")
+        viewModel.addBatch()
+        
+        // Start editing a batch
+        val batch = viewModel.uiState.value.currentBatches[0]
+        viewModel.selectTabletBatch(batch)
+        assertEquals(batch.id, viewModel.uiState.value.tabletEditingBatchId)
+        
+        // Select product again - should clear edit state
+        viewModel.selectProduct(testProduct)
+        
+        assertNull(viewModel.uiState.value.tabletEditingBatchId)
+    }
+
+    @Test
+    fun `selectProduct clears tablet position reviewing state`() = runTest {
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        viewModel.selectProduct(testProduct)
+        viewModel.onWeightChange("30")
+        viewModel.addBatch()
+        viewModel.proceedToReview()
+        viewModel.onPriceChange("55")
+        viewModel.addPositionAndContinue()
+        
+        // Start reviewing position weightings
+        val position = viewModel.uiState.value.positions[0]
+        viewModel.reviewPositionWeightings(position)
+        assertEquals(position.id, viewModel.uiState.value.tabletReviewingPositionId)
+        
+        // Select product - should clear review state
+        viewModel.selectProduct(testProduct)
+        
+        assertNull(viewModel.uiState.value.tabletReviewingPositionId)
     }
 
     // ==================== Weighing Input Tests ====================
@@ -271,7 +333,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(1, state.positions.size)
         assertEquals(testProduct, state.positions[0].product)
-        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 
     @Test
@@ -284,10 +346,10 @@ class SaleEntryViewModelTest {
         viewModel.proceedToReview()
 
         viewModel.onPriceChange("55.00")
-        assertTrue(viewModel.uiState.value.canAddPosition)
+        assertTrue(viewModel.uiState.value.canAddBatchPosition)
 
         viewModel.onPriceChange("0")
-        assertFalse(viewModel.uiState.value.canAddPosition)
+        assertFalse(viewModel.uiState.value.canAddBatchPosition)
     }
 
     @Test
@@ -306,7 +368,7 @@ class SaleEntryViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.positions.isEmpty())
-        assertEquals(SaleEntryScreenState.PRODUCT_GRID, state.screenState)
+        assertEquals(TransactionEntryScreenState.PRODUCT_GRID, state.screenState)
     }
 
     // ==================== Totals Tests ====================
@@ -353,7 +415,7 @@ class SaleEntryViewModelTest {
         viewModel.finalize()
         advanceUntilIdle()
 
-        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -364,7 +426,7 @@ class SaleEntryViewModelTest {
         viewModel.finalize()
         advanceUntilIdle()
 
-        assertEquals(SaleEntryScreenState.PRODUCT_GRID, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.PRODUCT_GRID, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -381,7 +443,7 @@ class SaleEntryViewModelTest {
         advanceUntilIdle()
 
         coVerify { saleBatchRepository.createBatchWithTransactions(any(), any()) }
-        assertEquals(SaleEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
     }
 
     @Test
@@ -420,7 +482,7 @@ class SaleEntryViewModelTest {
         val state = viewModel.uiState.value
         assertNotNull(state.error)
         assertFalse(state.isSaving)
-        assertEquals(SaleEntryScreenState.POSITIONS_LIST, state.screenState)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 
     // ==================== Navigation Tests ====================
@@ -512,5 +574,126 @@ class SaleEntryViewModelTest {
         assertEquals(testProduct, state.positions[0].product)
         assertEquals(BigDecimal("30.00"), state.positions[0].netWeight)
         assertEquals(BigDecimal("55.00"), state.positions[0].pricePerKg)
+    }
+
+    @Test
+    fun `finalize calls correctBatch when editingBatchId is set`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId, notes = "Original batch")
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } returns TestData.createSaleBatch()
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        // Load batch for editing
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        // Verify we're in editing mode
+        assertEquals(originalBatchId, viewModel.uiState.value.editingBatchId)
+        
+        // Set correction reason
+        viewModel.onCorrectionReasonChange("Fixed weight error")
+        
+        // Finalize
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Verify correctBatch was called (not createBatchWithTransactions)
+        coVerify { 
+            saleBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Fixed weight error"
+            ) 
+        }
+        coVerify(exactly = 0) { saleBatchRepository.createBatchWithTransactions(any(), any()) }
+        
+        assertEquals(TransactionEntryScreenState.SUMMARY, viewModel.uiState.value.screenState)
+    }
+
+    @Test
+    fun `finalize uses default correction reason when empty`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } returns TestData.createSaleBatch()
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        // Don't set correction reason - should use default
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Verify correctBatch was called with default reason
+        coVerify { 
+            saleBatchRepository.correctBatch(
+                originalBatchId = originalBatchId,
+                correctedBatch = any(),
+                correctedTransactions = any(),
+                reason = "Виправлення помилки"
+            ) 
+        }
+    }
+
+    @Test
+    fun `finalize handles correctBatch error`() = runTest {
+        val originalBatchId = java.util.UUID.randomUUID()
+        val existingBatch = TestData.createSaleBatch(id = originalBatchId)
+        val existingTransactions = listOf(
+            TestData.createSaleTransaction(
+                id = java.util.UUID.randomUUID(),
+                productId = testProduct.id,
+                weightKg = BigDecimal("-25.00"),
+                pricePerKg = BigDecimal("50.00")
+            ).copy(saleBatchId = originalBatchId)
+        )
+
+        coEvery { saleBatchRepository.getById(originalBatchId) } returns existingBatch
+        coEvery { saleBatchRepository.getTransactionsForBatch(originalBatchId) } returns existingTransactions
+        coEvery { saleBatchRepository.correctBatch(any(), any(), any(), any()) } throws 
+            IllegalStateException("Не вдалося анулювати оригінальну партію")
+
+        viewModel = createViewModel()
+        advanceUntilIdle()
+        
+        viewModel.loadBatchForEditing(originalBatchId.toString())
+        advanceUntilIdle()
+        
+        viewModel.finalize()
+        advanceUntilIdle()
+
+        // Should have error and stay in positions list
+        val state = viewModel.uiState.value
+        assertNotNull(state.error)
+        assertTrue(state.error!!.contains("анулювати"))
+        assertFalse(state.isSaving)
+        assertEquals(TransactionEntryScreenState.POSITIONS_LIST, state.screenState)
     }
 }

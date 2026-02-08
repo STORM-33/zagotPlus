@@ -55,6 +55,7 @@ import com.zagot.zagotplus.ui.screens.reports.ReportsScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleEntryScreen
 import com.zagot.zagotplus.ui.screens.sale.SaleScreen
 import com.zagot.zagotplus.ui.screens.cash.CashScreen
+import com.zagot.zagotplus.ui.screens.settings.ScalesDebugScreen
 import com.zagot.zagotplus.ui.screens.settings.SettingsScreen
 import com.zagot.zagotplus.ui.screens.transfer.TransferScreen
 import androidx.navigation.NavType
@@ -72,6 +73,7 @@ fun NavGraph(
     isOnline: Boolean,
     onSyncClick: () -> Unit,
     authPreferences: AuthPreferences,
+    selectedLocationName: String? = null,
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
@@ -108,6 +110,13 @@ fun NavGraph(
         currentDestination?.hierarchy?.any { it.route == destination.route } == true
     }?.title ?: Destination.Purchase.title
     
+    // In full mode, show location name; in restricted mode, show screen title
+    val headerTitle = if (!isRestrictedMode && selectedLocationName != null) {
+        selectedLocationName
+    } else {
+        currentTitle
+    }
+    
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -122,7 +131,7 @@ fun NavGraph(
                     },
                     navigationIcon = {
                         Text(
-                            text = currentTitle,
+                            text = headerTitle,
                             style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
                             modifier = Modifier.padding(start = 16.dp)
                         )
@@ -238,8 +247,8 @@ fun NavGraph(
         ) {
             composable(Destination.Purchase.route) {
                 PurchaseScreen(
-                    onNavigateToNewClient = {
-                        navController.navigate(Destination.PurchaseEntry.route)
+                    onNavigateToNewPurchase = { mode: PurchaseMode ->
+                        navController.navigate(Destination.PurchaseEntry.createRoute(mode = mode))
                     },
                     isRestrictedMode = isRestrictedMode
                 )
@@ -252,6 +261,11 @@ fun NavGraph(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument(Destination.PurchaseEntry.ARG_MODE) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = PurchaseMode.REGULAR.name
                     }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
@@ -260,16 +274,20 @@ fun NavGraph(
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_BATCH_ID)
+                val modeString = backStackEntry.arguments?.getString(Destination.PurchaseEntry.ARG_MODE)
+                val mode = PurchaseMode.fromString(modeString)
                 PurchaseEntryScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    editingBatchId = batchId
+                    editingBatchId = batchId,
+                    mode = mode
                 )
             }
             composable(Destination.Sale.route) {
                 SaleScreen(
-                    onNavigateToNewSale = {
-                        navController.navigate(Destination.SaleEntry.route)
-                    }
+                    onNavigateToNewSale = { mode: SaleMode ->
+                        navController.navigate(Destination.SaleEntry.createRoute(mode = mode))
+                    },
+                    isRestrictedMode = isRestrictedMode
                 )
             }
             // Detail screens get slide transitions
@@ -280,6 +298,11 @@ fun NavGraph(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument(Destination.SaleEntry.ARG_MODE) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = SaleMode.WHOLESALE.name
                     }
                 ),
                 enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
@@ -288,9 +311,12 @@ fun NavGraph(
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
             ) { backStackEntry ->
                 val batchId = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_BATCH_ID)
+                val modeString = backStackEntry.arguments?.getString(Destination.SaleEntry.ARG_MODE)
+                val mode = SaleMode.fromString(modeString)
                 SaleEntryScreen(
                     onNavigateBack = { navController.popBackStack() },
-                    editingBatchId = batchId
+                    editingBatchId = batchId,
+                    mode = mode
                 )
             }
             composable(Destination.Inventory.route) {
@@ -306,10 +332,12 @@ fun NavGraph(
             composable(Destination.History.route) {
                 HistoryScreen(
                     onNavigateToEditPurchase = { batchId ->
-                        navController.navigate(Destination.PurchaseEntry.createRoute(batchId))
+                        // Use REGULAR mode for redaction - batch weightings are not saved
+                        navController.navigate(Destination.PurchaseEntry.createRoute(batchId, PurchaseMode.REGULAR))
                     },
                     onNavigateToEditSale = { batchId ->
-                        navController.navigate(Destination.SaleEntry.createRoute(batchId))
+                        // Use REGULAR mode for redaction - batch weightings are not saved
+                        navController.navigate(Destination.SaleEntry.createRoute(batchId, SaleMode.REGULAR))
                     },
                     isRestrictedMode = isRestrictedMode
                 )
@@ -347,7 +375,19 @@ fun NavGraph(
                 SettingsScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToProducts = { navController.navigate(Destination.Products.route) },
+                    onNavigateToScalesDebug = { navController.navigate(Destination.ScalesDebug.route) },
                     authPreferences = authPreferences
+                )
+            }
+            composable(
+                route = Destination.ScalesDebug.route,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 4 }, animationSpec = tween(300)) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+            ) {
+                ScalesDebugScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             composable(

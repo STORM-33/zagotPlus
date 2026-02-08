@@ -11,10 +11,16 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.zagot.zagotplus.debug.CrashLogger
 import com.zagot.zagotplus.debug.MainThreadDebugger
 import com.zagot.zagotplus.debug.PerformanceTracer
 import com.zagot.zagotplus.data.preferences.PreferencesWarmer
-import com.zagot.zagotplus.sync.SyncManager
+import com.zagot.syncengine.api.SyncEngine
+import com.zagot.zagotplus.sync.engine.api.ZagotSyncRegistrar
+import com.zagot.syncengine.db.SyncMigrationHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import dagger.hilt.android.HiltAndroidApp
 import java.util.Locale
 import javax.inject.Inject
@@ -26,7 +32,13 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
     lateinit var workerFactory: HiltWorkerFactory
 
     @Inject
-    lateinit var syncManager: SyncManager
+    lateinit var syncEngine: SyncEngine
+
+    @Inject
+    lateinit var syncRegistrar: ZagotSyncRegistrar
+
+    @Inject
+    lateinit var syncMigrationHelper: SyncMigrationHelper
 
     @Inject
     lateinit var mainThreadDebugger: MainThreadDebugger
@@ -35,24 +47,39 @@ class ZagotApp : Application(), WorkConfiguration.Provider, ImageLoaderFactory {
     lateinit var performanceTracer: PerformanceTracer
     
     @Inject
+    lateinit var crashLogger: CrashLogger
+    
+    @Inject
     lateinit var preferencesWarmer: PreferencesWarmer
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Install crash handler FIRST to catch any initialization crashes
+        crashLogger.install()
+        
+        // Log device info for crash debugging
+        crashLogger.logDeviceInfo()
         
         // Pre-warm preferences on background thread FIRST to avoid main thread disk I/O
         preferencesWarmer.warmUp()
         
         // Force Ukrainian locale
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("uk"))
-        // Initialize periodic background sync
-        syncManager.initializePeriodicSync()
+        // Register all tables then start the realtime sync engine.
+        // Migration must complete before engine starts to avoid pushing
+        // before all unsynced records are in the outbox.
+        syncRegistrar.registerAll(syncEngine)
+        CoroutineScope(Dispatchers.IO).launch {
+            syncMigrationHelper.migrateIfNeeded()
+            syncEngine.start()
+        }
         
         // Initialize performance debugging in debug builds
-        if (BuildConfig.DEBUG) {
-            mainThreadDebugger.initialize()
-            performanceTracer.startPeriodicReport(30_000L) // Report every 30 seconds
-        }
+//        if (BuildConfig.DEBUG) {
+//            mainThreadDebugger.initialize()
+//            performanceTracer.startPeriodicReport(30_000L) // Report every 30 seconds
+//        }
     }
 
     override fun attachBaseContext(base: Context) {

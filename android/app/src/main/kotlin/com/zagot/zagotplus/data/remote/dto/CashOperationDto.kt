@@ -25,8 +25,9 @@ data class CashOperationDto(
     @SerialName("type")
     val type: String,
 
+    @Serializable(with = FlexibleDecimalSerializer::class)
     @SerialName("amount")
-    val amount: Double,
+    val amount: String,
 
     @SerialName("category_id")
     val categoryId: String?,
@@ -49,6 +50,9 @@ data class CashOperationDto(
     @SerialName("is_transfer")
     val isTransfer: Boolean = false,
 
+    @SerialName("transfer_pair_id")
+    val transferPairId: String? = null,
+
     @SerialName("server_updated_at")
     val serverUpdatedAt: String? = null
 ) {
@@ -60,14 +64,16 @@ data class CashOperationDto(
         localId = localId,
         locationId = locationId?.let { UUID.fromString(it) },
         type = type,
-        amount = BigDecimal.valueOf(amount),
+        amount = BigDecimal(amount),
         categoryId = categoryId?.let { UUID.fromString(it) },
         batchId = batchId?.let { UUID.fromString(it) },
         notes = notes,
         deviceId = deviceId,
         createdAt = Instant.parse(createdAt),
         syncedAt = syncedAt?.let { Instant.parse(it) },
-        isTransfer = isTransfer
+        isTransfer = isTransfer,
+        transferPairId = transferPairId,
+        serverUpdatedAt = serverUpdatedAt?.let { Instant.parse(it) }
     )
 
     companion object {
@@ -79,14 +85,35 @@ data class CashOperationDto(
             localId = entity.localId,
             locationId = entity.locationId?.toString(),
             type = entity.type,
-            amount = entity.amount.toDouble(),
+            amount = entity.amount.toPlainString(),
             categoryId = entity.categoryId?.toString(),
             batchId = entity.batchId?.toString(),
             notes = entity.notes,
             deviceId = entity.deviceId,
             createdAt = entity.createdAt.toString(),
             syncedAt = entity.syncedAt?.toString(),
-            isTransfer = entity.isTransfer
+            isTransfer = entity.isTransfer,
+            transferPairId = entity.transferPairId
+        )
+
+        /**
+         * Create DTO from generic Record map (sync engine pull).
+         */
+        fun fromRecord(record: Map<String, Any?>): CashOperationDto = CashOperationDto(
+            id = record["id"] as String,
+            localId = record["local_id"] as String,
+            locationId = record["location_id"] as? String,
+            type = record["type"] as String,
+            amount = record["amount"]?.toString() ?: "0",
+            categoryId = record["category_id"] as? String,
+            batchId = record["batch_id"] as? String,
+            notes = record["notes"] as? String,
+            deviceId = record["device_id"] as? String,
+            createdAt = record["created_at"] as String,
+            syncedAt = record["synced_at"] as? String,
+            isTransfer = record["is_transfer"] as? Boolean ?: false,
+            transferPairId = record["transfer_pair_id"] as? String,
+            serverUpdatedAt = record["server_updated_at"] as? String,
         )
     }
 }

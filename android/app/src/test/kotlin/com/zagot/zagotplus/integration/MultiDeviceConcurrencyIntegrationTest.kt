@@ -88,7 +88,8 @@ class MultiDeviceConcurrencyIntegrationTest {
             database = database,
             saleBatchDao = database.saleBatchDao(),
             transactionDao = database.transactionDao(),
-            syncManager = syncManager
+            syncManager = syncManager,
+            devicePreferences = devicePreferences
         )
 
         return Pair(transactionRepo, saleBatchRepo)
@@ -96,10 +97,10 @@ class MultiDeviceConcurrencyIntegrationTest {
 
     private suspend fun insertTestData() {
         database.locationDao().insert(
-            LocationEntity(location1Id, "Кіоск №1", LocationType.KIOSK.name, testInstant)
+            LocationEntity(location1Id, "Кіоск №1", LocationType.KIOSK.name, testInstant, localId = "loc-$location1Id")
         )
         database.locationDao().insert(
-            LocationEntity(location2Id, "Кіоск №2", LocationType.KIOSK.name, testInstant)
+            LocationEntity(location2Id, "Кіоск №2", LocationType.KIOSK.name, testInstant, localId = "loc-$location2Id")
         )
         database.productDao().insert(
             ProductEntity(

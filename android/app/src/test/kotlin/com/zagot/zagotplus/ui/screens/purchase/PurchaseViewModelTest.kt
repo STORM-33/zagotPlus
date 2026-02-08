@@ -22,6 +22,7 @@ import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
+import com.zagot.zagotplus.ui.navigation.PurchaseMode
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PurchaseViewModelTest {
@@ -111,9 +112,9 @@ class PurchaseViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.onNewClientClick()
+        viewModel.onNewPurchaseClick(PurchaseMode.REGULAR)
 
-        assertTrue(viewModel.uiState.value.navigateToNewClient)
+        assertTrue(viewModel.uiState.value.navigateToNewPurchase)
     }
 
     @Test
@@ -125,11 +126,11 @@ class PurchaseViewModelTest {
         viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.onNewClientClick()
-        assertTrue(viewModel.uiState.value.navigateToNewClient)
+        viewModel.onNewPurchaseClick(PurchaseMode.REGULAR)
+        assertTrue(viewModel.uiState.value.navigateToNewPurchase)
 
         viewModel.onNavigationHandled()
-        assertFalse(viewModel.uiState.value.navigateToNewClient)
+        assertFalse(viewModel.uiState.value.navigateToNewPurchase)
     }
 
     @Test

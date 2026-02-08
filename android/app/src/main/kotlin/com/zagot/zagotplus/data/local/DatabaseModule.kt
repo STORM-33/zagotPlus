@@ -11,6 +11,9 @@ import com.zagot.zagotplus.data.local.dao.ProductDao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.SaleBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
+import com.zagot.syncengine.db.SyncMetadataDao
+import com.zagot.syncengine.db.SyncOutboxDao
+import com.zagot.syncengine.util.RawDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -40,7 +43,11 @@ object DatabaseModule {
         ZagotDatabase.MIGRATION_7_8,
         ZagotDatabase.MIGRATION_8_9,
         ZagotDatabase.MIGRATION_9_10,
-        ZagotDatabase.MIGRATION_10_11
+        ZagotDatabase.MIGRATION_10_11,
+        ZagotDatabase.MIGRATION_11_12,
+        ZagotDatabase.MIGRATION_12_13,
+        ZagotDatabase.MIGRATION_13_14,
+        ZagotDatabase.MIGRATION_14_15
     )
 
     /**
@@ -63,9 +70,11 @@ object DatabaseModule {
 
     /**
      * Provides LocationDao from database.
+     * Qualified with @RawDao — the unqualified binding is the SyncAware wrapper.
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideLocationDao(database: ZagotDatabase): LocationDao {
         return database.locationDao()
     }
@@ -75,6 +84,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideProductDao(database: ZagotDatabase): ProductDao {
         return database.productDao()
     }
@@ -84,6 +94,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideTransactionDao(database: ZagotDatabase): TransactionDao {
         return database.transactionDao()
     }
@@ -93,6 +104,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun providePurchaseBatchDao(database: ZagotDatabase): PurchaseBatchDao {
         return database.purchaseBatchDao()
     }
@@ -102,6 +114,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideSaleBatchDao(database: ZagotDatabase): SaleBatchDao {
         return database.saleBatchDao()
     }
@@ -111,6 +124,7 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideExpenseCategoryDao(database: ZagotDatabase): ExpenseCategoryDao {
         return database.expenseCategoryDao()
     }
@@ -120,7 +134,20 @@ object DatabaseModule {
      */
     @Provides
     @Singleton
+    @RawDao
     fun provideCashOperationDao(database: ZagotDatabase): CashOperationDao {
         return database.cashOperationDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncMetadataDao(database: ZagotDatabase): SyncMetadataDao {
+        return database.syncMetadataDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncOutboxDao(database: ZagotDatabase): SyncOutboxDao {
+        return database.syncOutboxDao()
     }
 }

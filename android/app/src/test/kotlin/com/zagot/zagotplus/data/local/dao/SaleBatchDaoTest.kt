@@ -47,7 +47,7 @@ class SaleBatchDaoTest {
         // Create required foreign key entity
         testLocationId = UUID.randomUUID()
         kotlinx.coroutines.runBlocking {
-            locationDao.insert(LocationEntity(testLocationId, "Test Location", "kiosk", testInstant))
+            locationDao.insert(LocationEntity(testLocationId, "Test Location", "kiosk", testInstant, localId = "loc-$testLocationId"))
         }
     }
 
@@ -65,7 +65,10 @@ class SaleBatchDaoTest {
         totalAmount: BigDecimal? = BigDecimal("9000.00"),
         itemCount: Int? = 3,
         syncedAt: Instant? = null,
-        createdAt: Instant = testInstant
+        createdAt: Instant = testInstant,
+        isVoided: Boolean = false,
+        correctsBatchId: UUID? = null,
+        correctionReason: String? = null
     ) = SaleBatchEntity(
         id = id,
         localId = localId,
@@ -76,7 +79,10 @@ class SaleBatchDaoTest {
         itemCount = itemCount,
         deviceId = "test-device",
         createdAt = createdAt,
-        syncedAt = syncedAt
+        syncedAt = syncedAt,
+        isVoided = isVoided,
+        correctsBatchId = correctsBatchId,
+        correctionReason = correctionReason
     )
 
     // ==================== Insert Tests ====================
@@ -325,5 +331,163 @@ class SaleBatchDaoTest {
         assertNull(retrieved?.totalWeightKg)
         assertNull(retrieved?.totalAmount)
         assertNull(retrieved?.itemCount)
+    }
+
+    // ==================== Voiding Tests ====================
+
+    @Test
+    fun `markVoided sets isVoided and audit fields`() = runTest {
+        val batch = createBatch()
+        saleBatchDao.insert(batch)
+        
+        val voidedAt = Instant.now().toEpochMilli()
+        saleBatchDao.markVoided(batch.id, voidedAt, "voiding-device")
+        
+        val retrieved = saleBatchDao.getById(batch.id)
+        assertNotNull(retrieved)
+        assertTrue(retrieved!!.isVoided)
+        assertEquals(voidedAt, retrieved.voidedAt?.toEpochMilli())
+        assertEquals("voiding-device", retrieved.voidedByDeviceId)
+        // syncedAt should be cleared to trigger re-sync
+        assertNull(retrieved.syncedAt)
+    }
+
+    @Test
+    fun `markVoided clears syncedAt to trigger resync`() = runTest {
+        val batch = createBatch(syncedAt = testInstant)
+        saleBatchDao.insert(batch)
+        
+        // Verify it was synced
+        val beforeVoid = saleBatchDao.getById(batch.id)
+        assertNotNull(beforeVoid?.syncedAt)
+        
+        // Void the batch
+        saleBatchDao.markVoided(batch.id, Instant.now().toEpochMilli(), "test-device")
+        
+        // syncedAt should be null now
+        val afterVoid = saleBatchDao.getById(batch.id)
+        assertNull(afterVoid?.syncedAt)
+    }
+
+    @Test
+    fun `observeAll excludes voided batches`() = runTest {
+        saleBatchDao.insertAll(listOf(
+            createBatch(isVoided = false),
+            createBatch(isVoided = true),
+            createBatch(isVoided = false)
+        ))
+        
+        val all = saleBatchDao.observeAll().first()
+        
+        assertEquals(2, all.size)
+        assertTrue(all.none { it.isVoided })
+    }
+
+    @Test
+    fun `getBatchesInRange excludes voided batches`() = runTest {
+        val jan15 = LocalDate.of(2024, 1, 15).atStartOfDay().toInstant(ZoneOffset.UTC)
+        
+        saleBatchDao.insertAll(listOf(
+            createBatch(createdAt = jan15, isVoided = false),
+            createBatch(createdAt = jan15, isVoided = true),
+            createBatch(createdAt = jan15, isVoided = false)
+        ))
+        
+        val inRange = saleBatchDao.getBatchesInRange(
+            startMillis = jan10Millis(),
+            endMillis = jan25Millis()
+        )
+        
+        assertEquals(2, inRange.size)
+        assertTrue(inRange.none { it.isVoided })
+    }
+
+    @Test
+    fun `observeBatchesInRange excludes voided batches`() = runTest {
+        val jan15 = LocalDate.of(2024, 1, 15).atStartOfDay().toInstant(ZoneOffset.UTC)
+        
+        saleBatchDao.insertAll(listOf(
+            createBatch(createdAt = jan15, isVoided = false),
+            createBatch(createdAt = jan15, isVoided = true)
+        ))
+        
+        val inRange = saleBatchDao.observeBatchesInRange(
+            startMillis = jan10Millis(),
+            endMillis = jan25Millis()
+        ).first()
+        
+        assertEquals(1, inRange.size)
+        assertFalse(inRange[0].isVoided)
+    }
+
+    @Test
+    fun `getAllPaginated excludes voided batches`() = runTest {
+        saleBatchDao.insertAll(listOf(
+            createBatch(isVoided = false),
+            createBatch(isVoided = true),
+            createBatch(isVoided = false),
+            createBatch(isVoided = true)
+        ))
+        
+        val page = saleBatchDao.getAllPaginated(limit = 10, offset = 0)
+        
+        assertEquals(2, page.size)
+        assertTrue(page.none { it.isVoided })
+    }
+
+    @Test
+    fun `getTotalCount excludes voided batches`() = runTest {
+        saleBatchDao.insertAll(listOf(
+            createBatch(isVoided = false),
+            createBatch(isVoided = true),
+            createBatch(isVoided = false)
+        ))
+        
+        val count = saleBatchDao.getTotalCount()
+        
+        assertEquals(2, count)
+    }
+
+    @Test
+    fun `observeTotalCount excludes voided batches`() = runTest {
+        saleBatchDao.insertAll(listOf(
+            createBatch(isVoided = false),
+            createBatch(isVoided = true),
+            createBatch(isVoided = false)
+        ))
+        
+        val count = saleBatchDao.observeTotalCount().first()
+        
+        assertEquals(2, count)
+    }
+
+    @Test
+    fun `getById returns voided batch for correction lookup`() = runTest {
+        // getById should still return voided batches so we can look up corrections
+        val batch = createBatch(isVoided = true)
+        saleBatchDao.insert(batch)
+        
+        val retrieved = saleBatchDao.getById(batch.id)
+        
+        assertNotNull(retrieved)
+        assertTrue(retrieved!!.isVoided)
+    }
+
+    @Test
+    fun `correction batch stores correctsBatchId and reason`() = runTest {
+        val originalBatch = createBatch()
+        saleBatchDao.insert(originalBatch)
+        
+        val correctionBatch = createBatch(
+            correctsBatchId = originalBatch.id,
+            correctionReason = "Помилка при зважуванні"
+        )
+        saleBatchDao.insert(correctionBatch)
+        
+        val retrieved = saleBatchDao.getById(correctionBatch.id)
+        
+        assertNotNull(retrieved)
+        assertEquals(originalBatch.id, retrieved!!.correctsBatchId)
+        assertEquals("Помилка при зважуванні", retrieved.correctionReason)
     }
 }

@@ -85,7 +85,8 @@ class PurchaseFlowIntegrationTest {
                 id = locationId,
                 name = "Склад Рівне",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$locationId"
             )
         )
     }
@@ -279,7 +280,8 @@ class PurchaseFlowIntegrationTest {
                 id = toLocationId,
                 name = "Склад Київ",
                 type = LocationType.KIOSK.name,
-                createdAt = testInstant
+                createdAt = testInstant,
+                localId = "loc-$toLocationId"
             )
         )
 

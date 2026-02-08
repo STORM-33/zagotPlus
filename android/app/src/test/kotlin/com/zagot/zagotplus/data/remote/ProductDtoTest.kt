@@ -22,8 +22,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-123",
             name = "Горіх білий",
-            defaultBuyPrice = 50.0,
-            defaultSellPrice = 75.0,
+            defaultBuyPrice = "50.0",
+            defaultSellPrice = "75.0",
             isActive = true,
             createdAt = testInstant.toString(),
             imageUri = "content://images/1"
@@ -82,8 +82,8 @@ class ProductDtoTest {
         assertEquals(testId.toString(), dto.id)
         assertEquals("local-789", dto.localId)
         assertEquals("Горіх чорний", dto.name)
-        assertEquals(45.50, dto.defaultBuyPrice!!, 0.001)
-        assertEquals(68.00, dto.defaultSellPrice!!, 0.001)
+        assertEquals("45.50", dto.defaultBuyPrice)
+        assertEquals("68.00", dto.defaultSellPrice)
         assertTrue(dto.isActive)
         assertEquals(testInstant.toString(), dto.createdAt)
         assertEquals("file://path/to/image.jpg", dto.imageUri)
@@ -137,8 +137,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-zero",
             name = "Free Product",
-            defaultBuyPrice = 0.0,
-            defaultSellPrice = 0.0,
+            defaultBuyPrice = "0.0",
+            defaultSellPrice = "0.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -155,8 +155,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-unicode",
             name = "Насіння соняшникове смажене",
-            defaultBuyPrice = 30.0,
-            defaultSellPrice = 45.0,
+            defaultBuyPrice = "30.0",
+            defaultSellPrice = "45.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -174,8 +174,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-empty",
             name = "",
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -192,8 +192,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-long",
             name = longName,
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -210,8 +210,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-special",
             name = specialName,
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -227,8 +227,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-small",
             name = "Cheap",
-            defaultBuyPrice = 0.001,
-            defaultSellPrice = 0.002,
+            defaultBuyPrice = "0.001",
+            defaultSellPrice = "0.002",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -245,8 +245,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-large",
             name = "Expensive",
-            defaultBuyPrice = 999999.99,
-            defaultSellPrice = 1000000.00,
+            defaultBuyPrice = "999999.99",
+            defaultSellPrice = "1000000.00",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -265,8 +265,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-negative",
             name = "Invalid",
-            defaultBuyPrice = -10.0,
-            defaultSellPrice = -5.0,
+            defaultBuyPrice = "-10.0",
+            defaultSellPrice = "-5.0",
             isActive = true,
             createdAt = testInstant.toString()
         )
@@ -283,8 +283,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-empty-uri",
             name = "Test",
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = testInstant.toString(),
             imageUri = ""
@@ -378,8 +378,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-millis",
             name = "Millis Test",
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = instantWithMillis.toString()
         )
@@ -396,8 +396,8 @@ class ProductDtoTest {
             id = testId.toString(),
             localId = "local-nanos",
             name = "Nanos Test",
-            defaultBuyPrice = 10.0,
-            defaultSellPrice = 15.0,
+            defaultBuyPrice = "10.0",
+            defaultSellPrice = "15.0",
             isActive = true,
             createdAt = instantWithNanos.toString()
         )

@@ -28,7 +28,7 @@ class CashOperationDtoTest {
             localId = "local-123",
             locationId = testLocationId.toString(),
             type = "deposit",
-            amount = 1000.50,
+            amount = "1000.50",
             categoryId = null,
             batchId = null,
             notes = "Початкова каса",
@@ -43,7 +43,7 @@ class CashOperationDtoTest {
         assertEquals("local-123", entity.localId)
         assertEquals(testLocationId, entity.locationId)
         assertEquals("deposit", entity.type)
-        assertEquals(BigDecimal.valueOf(1000.50), entity.amount)
+        assertEquals(0, BigDecimal("1000.50").compareTo(entity.amount))
         assertNull(entity.categoryId)
         assertNull(entity.batchId)
         assertEquals("Початкова каса", entity.notes)
@@ -59,7 +59,7 @@ class CashOperationDtoTest {
             localId = "local-456",
             locationId = testLocationId.toString(),
             type = "withdrawal",
-            amount = 500.0,
+            amount = "500.0",
             categoryId = null,
             batchId = null,
             notes = "Видача готівки",
@@ -71,7 +71,7 @@ class CashOperationDtoTest {
         val entity = dto.toEntity()
 
         assertEquals("withdrawal", entity.type)
-        assertEquals(BigDecimal.valueOf(500.0), entity.amount)
+        assertEquals(0, BigDecimal("500.0").compareTo(entity.amount))
         assertNull(entity.syncedAt)
     }
 
@@ -82,7 +82,7 @@ class CashOperationDtoTest {
             localId = "local-789",
             locationId = testLocationId.toString(),
             type = "payment",
-            amount = 250.0,
+            amount = "250.0",
             categoryId = testCategoryId.toString(),
             batchId = null,
             notes = "Оплата за транспорт",
@@ -105,7 +105,7 @@ class CashOperationDtoTest {
             localId = "local-abc",
             locationId = testLocationId.toString(),
             type = "purchase",
-            amount = 4500.0,
+            amount = "4500.0",
             categoryId = null,
             batchId = testBatchId.toString(),
             notes = null,
@@ -128,7 +128,7 @@ class CashOperationDtoTest {
             localId = "local-no-location",
             locationId = null,
             type = "deposit",
-            amount = 100.0,
+            amount = "100.0",
             categoryId = null,
             batchId = null,
             notes = null,
@@ -168,7 +168,7 @@ class CashOperationDtoTest {
         assertEquals("local-123", dto.localId)
         assertEquals(testLocationId.toString(), dto.locationId)
         assertEquals("deposit", dto.type)
-        assertEquals(1000.50, dto.amount, 0.001)
+        assertEquals("1000.50", dto.amount)
         assertNull(dto.categoryId)
         assertNull(dto.batchId)
         assertEquals("Початкова каса", dto.notes)
@@ -342,7 +342,7 @@ class CashOperationDtoTest {
             localId = "zero-amount",
             locationId = testLocationId.toString(),
             type = "deposit",
-            amount = 0.0,
+            amount = "0.0",
             categoryId = null,
             batchId = null,
             notes = null,
@@ -358,7 +358,7 @@ class CashOperationDtoTest {
 
     @Test
     fun `handles large amount`() {
-        val largeAmount = 999999999.99
+        val largeAmount = "999999999.99"
         val dto = CashOperationDto(
             id = testId.toString(),
             localId = "large-amount",
@@ -375,7 +375,7 @@ class CashOperationDtoTest {
 
         val entity = dto.toEntity()
 
-        assertEquals(0, BigDecimal.valueOf(largeAmount).compareTo(entity.amount))
+        assertEquals(0, BigDecimal("999999999.99").compareTo(entity.amount))
     }
 
     @Test

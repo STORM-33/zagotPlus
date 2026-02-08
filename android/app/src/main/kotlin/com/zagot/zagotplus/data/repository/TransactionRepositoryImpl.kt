@@ -189,6 +189,9 @@ class TransactionRepositoryImpl @Inject constructor(
             }.toMap()
         }
 
+    override fun observeLatestUpdate(): Flow<Long?> =
+        transactionDao.observeLatestUpdate()
+
     private fun InventoryAggregateResult.toInventoryItem() = InventoryItem(
         locationId = UUID.fromString(locationId),
         productId = UUID.fromString(productId),

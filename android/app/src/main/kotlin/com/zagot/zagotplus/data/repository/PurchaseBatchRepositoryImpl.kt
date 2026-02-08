@@ -7,6 +7,7 @@ import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.dao.TransactionDao
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.local.entity.TransactionEntity
+import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.ProductDailyTotal
 import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
@@ -33,7 +34,8 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     private val purchaseBatchDao: PurchaseBatchDao,
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val devicePreferences: DevicePreferences
 ) : PurchaseBatchRepository {
 
     override fun observeAll(): Flow<List<PurchaseBatch>> =
@@ -61,15 +63,16 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
             transactionDao.observeTodaysPurchaseTotalsWithAvg(startMillis, endMillis),
             productDao.getAllFlow()
         ) { totals, products ->
-            val productMap = products.associate { it.id to it.name }
+            val productMap = products.associate { it.id to Pair(it.name, it.imageUri) }
             totals.mapNotNull { result ->
                 val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
-                val name = productMap[productId] ?: return@mapNotNull null
+                val productInfo = productMap[productId] ?: return@mapNotNull null
                 ProductDailyTotal(
                     productId = productId,
-                    productName = name,
+                    productName = productInfo.first,
                     totalWeightKg = BigDecimal(result.totalWeightKg),
                     totalAmount = BigDecimal(result.totalAmount ?: "0"),
+                    imageUri = productInfo.second,
                     avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
                 )
             }.sortedBy { it.productName }
@@ -82,15 +85,16 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
             transactionDao.observeTodaysPurchaseTotalsWithAvgByLocation(startMillis, endMillis, locationId),
             productDao.getAllFlow()
         ) { totals, products ->
-            val productMap = products.associate { it.id to it.name }
+            val productMap = products.associate { it.id to Pair(it.name, it.imageUri) }
             totals.mapNotNull { result ->
                 val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
-                val name = productMap[productId] ?: return@mapNotNull null
+                val productInfo = productMap[productId] ?: return@mapNotNull null
                 ProductDailyTotal(
                     productId = productId,
-                    productName = name,
+                    productName = productInfo.first,
                     totalWeightKg = BigDecimal(result.totalWeightKg),
                     totalAmount = BigDecimal(result.totalAmount ?: "0"),
+                    imageUri = productInfo.second,
                     avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
                 )
             }.sortedBy { it.productName }
@@ -147,21 +151,33 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markVoided(id: UUID) {
-        purchaseBatchDao.markVoided(id)
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        val rowsUpdated = purchaseBatchDao.markVoided(id, now, deviceId)
+        if (rowsUpdated == 0) {
+            throw IllegalArgumentException("Партію не знайдено: $id")
+        }
         syncManager.triggerManualSync()
     }
 
     override suspend fun getTransactionsForBatch(batchId: UUID): List<Transaction> =
         transactionDao.getByBatchId(batchId).map { it.toDomain() }
 
-    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int): List<PurchaseBatch> =
-        purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+    override suspend fun getAllBatchesPaginated(limit: Int, offset: Int, includeVoided: Boolean): List<PurchaseBatch> =
+        if (includeVoided) {
+            purchaseBatchDao.getAllPaginatedIncludingVoided(limit, offset).map { it.toDomain() }
+        } else {
+            purchaseBatchDao.getAllPaginated(limit, offset).map { it.toDomain() }
+        }
 
     override suspend fun getTotalBatchCount(): Int =
         purchaseBatchDao.getActiveCount()
 
     override fun observeTotalBatchCount(): Flow<Int> =
         purchaseBatchDao.observeTotalCount()
+
+    override fun observeLatestUpdate(): Flow<Long?> =
+        purchaseBatchDao.observeLatestUpdate()
 
     override suspend fun correctBatch(
         originalBatchId: UUID,
@@ -181,9 +197,15 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
             correctionReason = reason
         )
         
+        val now = Instant.now().toEpochMilli()
+        val deviceId = devicePreferences.getDeviceId()
+        
         database.withTransaction {
-            // 1. Mark the original batch as voided
-            purchaseBatchDao.markVoided(originalBatchId)
+            // 1. Mark the original batch as voided (with audit trail)
+            val rowsVoided = purchaseBatchDao.markVoided(originalBatchId, now, deviceId)
+            if (rowsVoided == 0) {
+                throw IllegalStateException("Не вдалося анулювати оригінальну партію")
+            }
             
             // 2. Insert the new correction batch
             purchaseBatchDao.insert(batchWithCorrection.toEntity())
@@ -210,7 +232,9 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun PurchaseBatch.toEntity() = PurchaseBatchEntity(
@@ -226,7 +250,9 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
         syncedAt = syncedAt,
         isVoided = isVoided,
         correctsBatchId = correctsBatchId,
-        correctionReason = correctionReason
+        correctionReason = correctionReason,
+        voidedAt = voidedAt,
+        voidedByDeviceId = voidedByDeviceId
     )
 
     private fun Transaction.toEntity(batchId: UUID) = TransactionEntity(

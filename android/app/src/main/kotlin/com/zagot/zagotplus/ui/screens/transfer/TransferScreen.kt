@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.transfer
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +58,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
@@ -377,10 +380,14 @@ private fun TransferWeightEntry(
 ) {
     // Auto-focus weight field
     val focusRequester = remember { FocusRequester() }
+    val view = LocalView.current
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        // Prevent crash if composition completes before window is focused
+        if (view.isAttachedToWindow) {
+            focusRequester.requestFocus()
+        }
     }
-    
+
     val hasTare = tareCount.toIntOrNull()?.let { it > 0 } == true
     
     Column(
@@ -537,6 +544,7 @@ private fun TransferWeightEntry(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TransferPositionsList(
     positions: List<TransferPosition>,
@@ -560,10 +568,12 @@ private fun TransferPositionsList(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(positions, key = { it.id }) { position ->
-                TransferPositionItem(
-                    position = position,
-                    onRemove = { onRemovePosition(position.id) }
-                )
+                AnimatedListItem {
+                    TransferPositionItem(
+                        position = position,
+                        onRemove = { onRemovePosition(position.id) },
+                    )
+                }
             }
 
             item {
@@ -1008,6 +1018,7 @@ private fun LocationCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TransferSummaryOverlay(
     positions: List<TransferPosition>,
@@ -1099,7 +1110,11 @@ private fun TransferSummaryOverlay(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(positions, key = { it.id }) { position ->
-                        SummaryTransferItem(position = position)
+                        AnimatedListItem {
+                            SummaryTransferItem(
+                                position = position,
+                            )
+                        }
                     }
                 }
 

@@ -25,7 +25,8 @@ import java.util.UUID
     tableName = "products",
     indices = [
         Index(value = ["local_id"], unique = true),
-        Index(value = ["synced_at"])
+        Index(value = ["synced_at"]),
+        Index(value = ["server_updated_at"])
     ]
 )
 data class ProductEntity(
@@ -55,5 +56,8 @@ data class ProductEntity(
     val syncedAt: Instant? = null,
 
     @ColumnInfo(name = "image_uri")
-    val imageUri: String? = null
+    val imageUri: String? = null,
+
+    @ColumnInfo(name = "server_updated_at")
+    val serverUpdatedAt: Instant? = null
 )
