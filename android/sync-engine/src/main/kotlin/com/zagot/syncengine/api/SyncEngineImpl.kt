@@ -82,16 +82,11 @@ class SyncEngineImpl @Inject constructor(
     private val outboxDao: SyncOutboxDao,
     private val database: RoomDatabase,
     private val workManager: WorkManager,
+    private val config: SyncEngineConfig,
 ) : SyncEngine {
 
     companion object {
         private const val TAG = "SyncEngine"
-        /** Pruning threshold: keep synced entries for 30 minutes. */
-        private const val OUTBOX_PRUNE_RETENTION_MS = 30 * 60 * 1_000L
-        /** Debounce for LIVE push to batch rapid successive writes. */
-        private const val LIVE_PUSH_DEBOUNCE_MS = 200L
-        /** Max retries for catch-up when buffer overflows repeatedly. */
-        private const val MAX_CATCHUP_RETRIES = 3
     }
 
     private val registeredTables = mutableListOf<SyncTableConfig>()
@@ -120,7 +115,7 @@ class SyncEngineImpl @Inject constructor(
         // Debounce: cancel previous pending push, schedule a new one
         livePushJob?.cancel()
         livePushJob = scope.launch {
-            delay(LIVE_PUSH_DEBOUNCE_MS)
+            delay(config.livePushDebounceMs)
             try {
                 pushCoordinator.pushPending(remoteClient, registeredTables)
             } catch (e: Exception) {
@@ -135,8 +130,9 @@ class SyncEngineImpl @Inject constructor(
             return
         }
 
-        Log.d(TAG, "Starting SyncEngine with ${registeredTables.size} tables")
+        Log.d(TAG, "Starting SyncEngine with ${registeredTables.size} tables, config=$config")
         started = true
+        pushCoordinator.pushBatchSize = config.pushBatchSize
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         engineScope = scope
 
@@ -145,7 +141,7 @@ class SyncEngineImpl @Inject constructor(
 
         // Enqueue periodic safety sync (spec Section 8)
         val safetySyncRequest = PeriodicWorkRequestBuilder<SafetySyncWorker>(
-            repeatInterval = 15, repeatIntervalTimeUnit = TimeUnit.MINUTES
+            repeatInterval = config.safetySyncIntervalMinutes, repeatIntervalTimeUnit = TimeUnit.MINUTES
         ).setConstraints(
             Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -245,13 +241,13 @@ class SyncEngineImpl @Inject constructor(
      * 7. Update last_synced_at (all in single Room transaction)
      * 8. Transition to LIVE
      *
-     * Uses iterative retry (max [MAX_CATCHUP_RETRIES]) on buffer overflow
+     * Uses iterative retry (max [config.maxCatchUpRetries]) on buffer overflow
      * instead of recursion to prevent stack overflow under pathological write pressure.
      */
     private suspend fun executeCatchUp(scope: CoroutineScope) = syncMutex.withLock {
         val tableNames = registeredTables.map { it.tableName }
 
-        for (attempt in 1..MAX_CATCHUP_RETRIES) {
+        for (attempt in 1..config.maxCatchUpRetries) {
             // Step 1: Subscribe to Realtime + buffer
             realtimeBuffer.reset()
             realtimeManager.start(realtimeChannel, tableNames, scope)
@@ -308,11 +304,11 @@ class SyncEngineImpl @Inject constructor(
                 return
             }
 
-            Log.w(TAG, "Buffer overflow on attempt $attempt/$MAX_CATCHUP_RETRIES — retrying")
+            Log.w(TAG, "Buffer overflow on attempt $attempt/$config.maxCatchUpRetries — retrying")
         }
 
         // Exhausted retries — go LIVE anyway with safety sync as backstop
-        Log.e(TAG, "Catch-up failed to drain buffer after $MAX_CATCHUP_RETRIES attempts, going LIVE (safety sync will recover)")
+        Log.e(TAG, "Catch-up failed to drain buffer after $config.maxCatchUpRetries attempts, going LIVE (safety sync will recover)")
         stateMachine.onEvent(SyncEvent.CatchUpCompleted)
     }
 
@@ -406,7 +402,7 @@ class SyncEngineImpl @Inject constructor(
             // Retry in a separate coroutine to not block the realtime event pipeline.
             Log.w(TAG, "FK constraint applying ${event.table}/$pk, scheduling retry")
             engineScope?.launch {
-                delay(500)
+                delay(config.fkRetryDelayMs)
                 try {
                     config.applyToRoom?.invoke(listOf(event.record))
                     Log.d(TAG, "FK retry succeeded for ${event.table}/$pk")
@@ -450,10 +446,11 @@ class SyncEngineImpl @Inject constructor(
      * Prune synced outbox entries older than retention period (spec Section 4).
      */
     private suspend fun pruneOutbox() {
-        val cutoff = System.currentTimeMillis() - OUTBOX_PRUNE_RETENTION_MS
+        val cutoff = System.currentTimeMillis() - config.outboxPruneRetentionMs
         val pruned = outboxDao.pruneSynced(cutoff)
         if (pruned > 0) {
             Log.d(TAG, "Pruned $pruned old outbox entries")
         }
     }
 }
+

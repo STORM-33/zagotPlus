@@ -44,14 +44,16 @@ class PushCoordinator @Inject constructor(
     private val outboxDao: SyncOutboxDao,
     private val stateMachine: SyncStateMachine,
 ) {
+    /** Configurable batch size. Set by SyncEngineImpl from SyncEngineConfig. */
+    var pushBatchSize: Int = DEFAULT_PUSH_BATCH_SIZE
 
     companion object {
         private const val TAG = "PushCoordinator"
         private const val MAX_RETRIES = 5
         private const val INITIAL_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 5 * 60 * 1_000L // 5 minutes
-        /** Max records per push request to avoid oversized HTTP payloads. */
-        private const val PUSH_BATCH_SIZE = 200
+        /** Default max records per push request. Override via [pushBatchSize]. */
+        private const val DEFAULT_PUSH_BATCH_SIZE = 200
     }
 
     /** Override for testing — set to 0 to disable delays. */
@@ -85,7 +87,7 @@ class PushCoordinator @Inject constructor(
 
             try {
                 // Chunk into batches to avoid oversized HTTP requests
-                val chunks = entries.chunked(PUSH_BATCH_SIZE)
+                val chunks = entries.chunked(pushBatchSize)
                 for (chunk in chunks) {
                     val records = chunk.map { entry ->
                         parsePayload(entry.payload)

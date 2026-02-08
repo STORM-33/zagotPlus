@@ -5,21 +5,29 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.zagot.syncengine.dao.PushErrorCategory
+import com.zagot.syncengine.dao.PushCoordinator
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
  * Periodic safety sync worker (spec Section 9).
  *
- * Runs every 15 minutes to catch any records missed by Realtime.
+ * Runs at the configured interval to catch any records missed by Realtime.
  * Same pull logic as CATCHING_UP but without buffer/drain (already LIVE).
  * Also prunes old synced outbox entries.
+ *
+ * Error handling:
+ * - Auth errors (401) → [Result.failure] (retrying won't help, saves battery)
+ * - Terminal errors (400/404) → [Result.failure] (server rejected the data)
+ * - Transient errors (network, 5xx) → [Result.retry] (will succeed later)
  */
 @HiltWorker
 class SafetySyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val syncEngine: SyncEngineImpl,
+    private val pushCoordinator: PushCoordinator,
 ) : CoroutineWorker(context, params) {
 
     companion object {
@@ -35,7 +43,14 @@ class SafetySyncWorker @AssistedInject constructor(
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Safety sync failed: ${e.message}", e)
-            Result.retry()
+            val category = pushCoordinator.classifyError(e)
+            when (category) {
+                PushErrorCategory.AUTH, PushErrorCategory.TERMINAL -> {
+                    Log.e(TAG, "Non-retryable error ($category), failing permanently")
+                    Result.failure()
+                }
+                else -> Result.retry()
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import com.zagot.zagotplus.sync.engine.dao.SyncAwareSaleBatchDao
 import com.zagot.zagotplus.sync.engine.dao.SyncAwareTransactionDao
 import com.zagot.syncengine.api.RealtimeChannelContract
 import com.zagot.syncengine.api.SyncEngine
+import com.zagot.syncengine.api.SyncEngineConfig
 import com.zagot.syncengine.api.SyncEngineImpl
 import com.zagot.syncengine.api.SyncRemoteClient
 import com.zagot.syncengine.db.OutboxMigrationProvider
@@ -84,4 +85,12 @@ object SyncEngineModule {
     @Singleton
     fun provideWorkManager(@ApplicationContext context: android.content.Context): WorkManager =
         WorkManager.getInstance(context)
+
+    @Provides
+    @Singleton
+    fun provideSyncEngineConfig(): SyncEngineConfig = SyncEngineConfig(
+        // Zagot+ defaults — adjust per app
+        safetySyncIntervalMinutes = 15L,
+        pushBatchSize = 200,
+    )
 }
