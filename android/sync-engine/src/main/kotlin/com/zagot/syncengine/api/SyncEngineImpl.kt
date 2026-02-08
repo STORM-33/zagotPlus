@@ -403,7 +403,7 @@ class SyncEngineImpl @Inject constructor(
             // Retry in a separate coroutine to not block the realtime event pipeline.
             Log.w(TAG, "FK constraint applying ${event.table}/$pk, scheduling retry")
             engineScope?.launch {
-                delay(config.fkRetryDelayMs)
+                delay(this@SyncEngineImpl.config.fkRetryDelayMs)
                 try {
                     config.applyToRoom?.invoke(listOf(event.record))
                     Log.d(TAG, "FK retry succeeded for ${event.table}/$pk")
