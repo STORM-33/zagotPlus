@@ -1,6 +1,6 @@
 # History Index
 
-Last updated: 2026-01-11
+Last updated: 2026-02-08
 
 ## Plans
 
@@ -132,6 +132,8 @@ Last updated: 2026-01-11
 | 2026-01-12 | Test Coverage | every { dao.method() } returns flowOf() | Standard pattern for Flow-returning DAO mocks | repository-tests |
 | 2026-01-12 | Test Coverage | coVerify for suspend function verification | Coroutine-aware verification in tests | repository-tests |
 | 2026-01-12 | Test Coverage | Test complexity drives coverage depth | Low=smoke tests, Medium=full coverage, High=edge cases | viewmodel-tests |
+| 2026-02-05 | Production Readiness Audit | DTO decimal fields must use String to avoid precision loss | audit-data-layer |
+| 2026-02-05 | Production Readiness Audit | Verify release signing + R8 minification early to avoid ship blockers | audit-build-and-dependencies |
 
 ## Patterns & Solutions
 
