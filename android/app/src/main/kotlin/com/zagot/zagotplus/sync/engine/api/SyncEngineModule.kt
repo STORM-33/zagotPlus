@@ -17,11 +17,16 @@ import com.zagot.zagotplus.sync.engine.dao.SyncAwareProductDao
 import com.zagot.zagotplus.sync.engine.dao.SyncAwarePurchaseBatchDao
 import com.zagot.zagotplus.sync.engine.dao.SyncAwareSaleBatchDao
 import com.zagot.zagotplus.sync.engine.dao.SyncAwareTransactionDao
-import com.zagot.zagotplus.sync.engine.network.AndroidNetworkMonitor
-import com.zagot.zagotplus.sync.engine.network.NetworkMonitor
-import com.zagot.zagotplus.sync.engine.remote.SupabaseRealtimeChannel
-import com.zagot.zagotplus.sync.engine.remote.SupabaseSyncRemoteClient
-import com.zagot.zagotplus.sync.engine.util.RawDao
+import com.zagot.syncengine.api.RealtimeChannelContract
+import com.zagot.syncengine.api.SyncEngine
+import com.zagot.syncengine.api.SyncEngineImpl
+import com.zagot.syncengine.api.SyncRemoteClient
+import com.zagot.syncengine.db.OutboxMigrationProvider
+import com.zagot.syncengine.network.AndroidNetworkMonitor
+import com.zagot.syncengine.network.NetworkMonitor
+import com.zagot.syncengine.remote.SupabaseRealtimeChannel
+import com.zagot.syncengine.remote.SupabaseSyncRemoteClient
+import com.zagot.syncengine.util.RawDao
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -52,6 +57,10 @@ abstract class SyncEngineBindingsModule {
     @Binds
     @Singleton
     abstract fun bindNetworkMonitor(impl: AndroidNetworkMonitor): NetworkMonitor
+
+    @Binds
+    @Singleton
+    abstract fun bindOutboxMigrationProvider(impl: ZagotOutboxMigrationProvider): OutboxMigrationProvider
 
     // SyncAware DAO bindings — unqualified types so ViewModels get outbox-instrumented DAOs
     @Binds @Singleton abstract fun bindLocationDao(impl: SyncAwareLocationDao): LocationDao

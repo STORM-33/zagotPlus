@@ -1,6 +1,9 @@
 package com.zagot.zagotplus.sync.engine
 
 import com.google.common.truth.Truth.assertThat
+import com.zagot.syncengine.api.ChangeOperation
+import com.zagot.syncengine.api.RealtimeChangeEvent
+import com.zagot.syncengine.realtime.RealtimeBuffer
 import org.junit.Before
 import org.junit.Test
 

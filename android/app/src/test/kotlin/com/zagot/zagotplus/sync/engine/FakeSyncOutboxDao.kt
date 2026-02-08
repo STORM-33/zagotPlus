@@ -1,5 +1,8 @@
 package com.zagot.zagotplus.sync.engine
 
+import com.zagot.syncengine.db.SyncOutboxDao
+import com.zagot.syncengine.db.SyncOutboxEntity
+
 /**
  * Shared in-memory fake for [SyncOutboxDao] used across sync engine tests.
  */

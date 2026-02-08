@@ -3,11 +3,11 @@ package com.zagot.zagotplus.sync.engine.dao
 import com.zagot.zagotplus.data.local.dao.PurchaseBatchDao
 import com.zagot.zagotplus.data.local.entity.PurchaseBatchEntity
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
-import com.zagot.zagotplus.sync.engine.api.SyncEngine
-import com.zagot.zagotplus.sync.engine.db.SyncOutboxDao
-import com.zagot.zagotplus.sync.engine.db.SyncOutboxEntity
-import com.zagot.zagotplus.sync.engine.util.RawDao
-import com.zagot.zagotplus.sync.engine.util.SyncJson
+import com.zagot.syncengine.api.SyncEngine
+import com.zagot.syncengine.db.SyncOutboxDao
+import com.zagot.syncengine.db.SyncOutboxEntity
+import com.zagot.syncengine.util.RawDao
+import com.zagot.syncengine.util.SyncJson
 import kotlinx.serialization.encodeToString
 import java.util.UUID
 import javax.inject.Inject

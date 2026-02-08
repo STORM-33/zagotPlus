@@ -15,8 +15,9 @@ import com.zagot.zagotplus.data.remote.dto.ProductDto
 import com.zagot.zagotplus.data.remote.dto.PurchaseBatchDto
 import com.zagot.zagotplus.data.remote.dto.SaleBatchDto
 import com.zagot.zagotplus.data.remote.dto.TransactionDto
-import com.zagot.zagotplus.sync.engine.util.RawDao
-import com.zagot.zagotplus.sync.engine.util.SyncTableConfig
+import com.zagot.syncengine.api.SyncEngine
+import com.zagot.syncengine.util.RawDao
+import com.zagot.syncengine.util.SyncTableConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 

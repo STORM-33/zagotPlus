@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ZagotPlus"
 include(":app")
+include(":sync-engine")

@@ -1,6 +1,8 @@
 package com.zagot.zagotplus.sync.engine
 
 import com.google.common.truth.Truth.assertThat
+import com.zagot.syncengine.db.SyncMetadataEntity
+import com.zagot.syncengine.db.SyncOutboxEntity
 import org.junit.Test
 
 /**
