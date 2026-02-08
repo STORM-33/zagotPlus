@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.inventory
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -73,6 +74,8 @@ import com.zagot.zagotplus.ui.components.adaptiveItemSpacing
 import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
 import java.text.DecimalFormat
+import com.zagot.zagotplus.ui.components.AnimatedListItem
+import com.zagot.zagotplus.ui.components.AnimatedCounter
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -246,30 +249,32 @@ fun InventoryScreen(
                                 ) {
                                     items(displayItems, key = { it.productId }) { item ->
                                         val isSelected = item.productId in selectedProductIds
-                                        InventoryItemCard(
-                                            item = item,
-                                            currencyFormat = currencyFormat,
-                                            priceFormat = priceFormat,
-                                            weightFormat = weightFormat,
-                                            isSelected = isSelected,
-                                            showContextMenuOption = !isTotalView,
-                                            isRestrictedMode = isRestrictedMode,
-                                            onClick = {
-                                                selectedProductIds = if (isSelected) {
-                                                    selectedProductIds - item.productId
-                                                } else {
-                                                    selectedProductIds + item.productId
+                                        AnimatedListItem {
+                                            InventoryItemCard(
+                                                item = item,
+                                                currencyFormat = currencyFormat,
+                                                priceFormat = priceFormat,
+                                                weightFormat = weightFormat,
+                                                isSelected = isSelected,
+                                                showContextMenuOption = !isTotalView,
+                                                isRestrictedMode = isRestrictedMode,
+                                                onClick = {
+                                                    selectedProductIds = if (isSelected) {
+                                                        selectedProductIds - item.productId
+                                                    } else {
+                                                        selectedProductIds + item.productId
+                                                    }
+                                                },
+                                                onTransferClick = {
+                                                    selectedItem = item
+                                                    showMoveDialog = true
+                                                },
+                                                onAdjustClick = {
+                                                    selectedItem = item
+                                                    showAdjustDialog = true
                                                 }
-                                            },
-                                            onTransferClick = {
-                                                selectedItem = item
-                                                showMoveDialog = true
-                                            },
-                                            onAdjustClick = {
-                                                selectedItem = item
-                                                showAdjustDialog = true
-                                            }
-                                        )
+                                            )
+                                        }
                                     }
 
                                     // Summary panel spans full width
@@ -292,30 +297,32 @@ fun InventoryScreen(
                                 ) {
                                     items(displayItems, key = { it.productId }) { item ->
                                         val isSelected = item.productId in selectedProductIds
-                                        InventoryItemCard(
-                                            item = item,
-                                            currencyFormat = currencyFormat,
-                                            priceFormat = priceFormat,
-                                            weightFormat = weightFormat,
-                                            isSelected = isSelected,
-                                            showContextMenuOption = !isTotalView,
-                                            isRestrictedMode = isRestrictedMode,
-                                            onClick = {
-                                                selectedProductIds = if (isSelected) {
-                                                    selectedProductIds - item.productId
-                                                } else {
-                                                    selectedProductIds + item.productId
+                                        AnimatedListItem {
+                                            InventoryItemCard(
+                                                item = item,
+                                                currencyFormat = currencyFormat,
+                                                priceFormat = priceFormat,
+                                                weightFormat = weightFormat,
+                                                isSelected = isSelected,
+                                                showContextMenuOption = !isTotalView,
+                                                isRestrictedMode = isRestrictedMode,
+                                                onClick = {
+                                                    selectedProductIds = if (isSelected) {
+                                                        selectedProductIds - item.productId
+                                                    } else {
+                                                        selectedProductIds + item.productId
+                                                    }
+                                                },
+                                                onTransferClick = {
+                                                    selectedItem = item
+                                                    showMoveDialog = true
+                                                },
+                                                onAdjustClick = {
+                                                    selectedItem = item
+                                                    showAdjustDialog = true
                                                 }
-                                            },
-                                            onTransferClick = {
-                                                selectedItem = item
-                                                showMoveDialog = true
-                                            },
-                                            onAdjustClick = {
-                                                selectedItem = item
-                                                showAdjustDialog = true
-                                            }
-                                        )
+                                            )
+                                        }
                                     }
 
                                     // Summary panel at the end of the list
@@ -483,7 +490,6 @@ private fun InventoryItemCard(
 ) {
     var showContextMenu by remember { mutableStateOf(false) }
     
-    val weightText = "${weightFormat.format(item.weightKg)} кг"
     val isNegative = item.isNegative
     
     val containerColor = when {
@@ -519,6 +525,7 @@ private fun InventoryItemCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateContentSize()
                     .padding(16.dp)
             ) {
                 Row(
@@ -570,8 +577,9 @@ private fun InventoryItemCard(
                                 tint = MaterialTheme.colorScheme.error
                             )
                         }
-                        Text(
-                            text = weightText,
+                        AnimatedCounter(
+                            targetValue = item.weightKg,
+                            formatter = { "${weightFormat.format(it)} кг" },
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -596,8 +604,16 @@ private fun InventoryItemCard(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = contentColor.copy(alpha = 0.6f)
                                 )
-                                Text(
-                                    text = item.avgPurchasePrice?.let { "₴${priceFormat.format(it)}" } ?: "—",
+                                item.avgPurchasePrice?.let { price ->
+                                    AnimatedCounter(
+                                        targetValue = price,
+                                        formatter = { "₴${priceFormat.format(it)}" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                } ?: Text(
+                                    text = "—",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.secondary
@@ -610,8 +626,16 @@ private fun InventoryItemCard(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = contentColor.copy(alpha = 0.6f)
                                 )
-                                Text(
-                                    text = item.salePrice?.let { "₴${priceFormat.format(it)}" } ?: "—",
+                                item.salePrice?.let { price ->
+                                    AnimatedCounter(
+                                        targetValue = price,
+                                        formatter = { "₴${priceFormat.format(it)}" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                } ?: Text(
+                                    text = "—",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.tertiary
@@ -628,8 +652,16 @@ private fun InventoryItemCard(
                                     if (profit >= BigDecimal.ZERO) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.error
                                 } ?: contentColor
-                                Text(
-                                    text = item.projectedProfit?.let { "₴${currencyFormat.format(it)}" } ?: "—",
+                                item.projectedProfit?.let { profit ->
+                                    AnimatedCounter(
+                                        targetValue = profit,
+                                        formatter = { "₴${currencyFormat.format(it)}" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = profitColor
+                                    )
+                                } ?: Text(
+                                    text = "—",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
                                     color = profitColor
@@ -899,8 +931,9 @@ private fun InventorySummaryPanel(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
-                Text(
-                    text = "${weightFormat.format(summary.totalWeight)} кг",
+                AnimatedCounter(
+                    targetValue = summary.totalWeight,
+                    formatter = { "${weightFormat.format(it)} кг" },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -917,8 +950,9 @@ private fun InventorySummaryPanel(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
-                    Text(
-                        text = "₴${currencyFormat.format(summary.totalInvested)}",
+                    AnimatedCounter(
+                        targetValue = summary.totalInvested,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -938,8 +972,9 @@ private fun InventorySummaryPanel(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
-                    Text(
-                        text = "₴${currencyFormat.format(summary.totalExpectedProfit)}",
+                    AnimatedCounter(
+                        targetValue = summary.totalExpectedProfit,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = profitColor

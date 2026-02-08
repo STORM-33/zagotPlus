@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.transfer
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.LocationType
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
@@ -542,6 +544,7 @@ private fun TransferWeightEntry(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TransferPositionsList(
     positions: List<TransferPosition>,
@@ -565,10 +568,12 @@ private fun TransferPositionsList(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(positions, key = { it.id }) { position ->
-                TransferPositionItem(
-                    position = position,
-                    onRemove = { onRemovePosition(position.id) }
-                )
+                AnimatedListItem {
+                    TransferPositionItem(
+                        position = position,
+                        onRemove = { onRemovePosition(position.id) },
+                    )
+                }
             }
 
             item {
@@ -1013,6 +1018,7 @@ private fun LocationCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TransferSummaryOverlay(
     positions: List<TransferPosition>,
@@ -1104,7 +1110,11 @@ private fun TransferSummaryOverlay(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(positions, key = { it.id }) { position ->
-                        SummaryTransferItem(position = position)
+                        AnimatedListItem {
+                            SummaryTransferItem(
+                                position = position,
+                            )
+                        }
                     }
                 }
 

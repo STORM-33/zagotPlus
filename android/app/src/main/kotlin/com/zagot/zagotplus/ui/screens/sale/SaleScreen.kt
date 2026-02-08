@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.sale
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zagot.zagotplus.domain.model.SaleBatch
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
@@ -44,6 +47,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SaleScreen(
     modifier: Modifier = Modifier,
@@ -122,7 +126,11 @@ fun SaleScreen(
                         items = uiState.todaysBatches,
                         key = { it.id }
                     ) { batch ->
-                        SaleBatchItem(batch = batch)
+                        AnimatedListItem {
+                            SaleBatchItem(
+                                batch = batch,
+                            )
+                        }
                     }
                 }
             }
@@ -218,9 +226,6 @@ private fun SaleBatchItem(
     val time = batch.createdAt
         .atZone(ZoneId.systemDefault())
         .format(timeFormatter)
-    // Weight is stored as positive in batch totals
-    val weight = batch.totalWeightKg?.let { "${decimalFormat.format(abs(it.toDouble()))} кг" } ?: "-- кг"
-    val amount = batch.totalAmount?.let { "₴${currencyFormat.format(it)}" } ?: "₴--"
     val positions = "${batch.itemCount ?: 0} поз"
 
     Card(
@@ -241,12 +246,25 @@ private fun SaleBatchItem(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
-            Text(
-                text = weight,
+            batch.totalWeightKg?.let { totalWeight ->
+                AnimatedCounter(
+                    targetValue = totalWeight.abs(),
+                    formatter = { "${decimalFormat.format(it)} кг" },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } ?: Text(
+                text = "-- кг",
                 style = MaterialTheme.typography.bodyMedium
             )
-            Text(
-                text = amount,
+            batch.totalAmount?.let { totalAmount ->
+                AnimatedCounter(
+                    targetValue = totalAmount,
+                    formatter = { "₴${currencyFormat.format(it)}" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } ?: Text(
+                text = "₴--",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary
             )

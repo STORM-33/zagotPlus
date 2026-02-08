@@ -127,6 +127,9 @@ class SaleBatchRepositoryImpl @Inject constructor(
     override fun observeTotalBatchCount(): Flow<Int> =
         saleBatchDao.observeTotalCount()
 
+    override fun observeLatestUpdate(): Flow<Long?> =
+        saleBatchDao.observeLatestUpdate()
+
     override suspend fun correctBatch(
         originalBatchId: UUID,
         correctedBatch: SaleBatch,

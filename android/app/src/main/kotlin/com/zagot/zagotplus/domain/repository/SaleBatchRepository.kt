@@ -93,6 +93,11 @@ interface SaleBatchRepository {
     fun observeTotalBatchCount(): Flow<Int>
 
     /**
+     * Observe latest server_updated_at to detect content changes (reactive).
+     */
+    fun observeLatestUpdate(): Flow<Long?>
+
+    /**
      * Correct a batch by voiding the original and creating a new corrected batch.
      * This is an atomic operation that:
      * 1. Marks the original batch as voided (is_voided = true)

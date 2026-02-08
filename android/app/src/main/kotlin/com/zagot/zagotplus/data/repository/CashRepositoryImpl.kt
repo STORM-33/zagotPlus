@@ -268,6 +268,11 @@ class CashRepositoryImpl @Inject constructor(
         return cashOperationDao.getDailyDepositsGlobal(startOfDay, endOfDay)
     }
 
+    // ========== Reactivity ==========
+
+    override fun observeCashChangeSignal(): Flow<String> =
+        cashOperationDao.observeChangeSignal()
+
     // ========== Update ==========
 
     override suspend fun getOperationById(id: UUID): CashOperation? {

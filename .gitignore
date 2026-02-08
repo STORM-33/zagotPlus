@@ -16,6 +16,7 @@ build/
 
 # Local configuration
 local.properties
+local.test.properties
 *.env
 *.env.local
 

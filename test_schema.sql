@@ -83,14 +83,21 @@ CREATE TABLE IF NOT EXISTS "public"."cash_operations" (
     "synced_at" timestamp with time zone,
     "server_updated_at" timestamp with time zone DEFAULT "now"(),
     "is_transfer" boolean DEFAULT false NOT NULL,
+    "transfer_pair_id" "text",
     CONSTRAINT "cash_operations_type_check" CHECK (("type" = ANY (ARRAY['deposit'::"text", 'withdrawal'::"text", 'payment'::"text", 'purchase'::"text"])))
 );
+
+ALTER TABLE ONLY "public"."cash_operations" REPLICA IDENTITY FULL;
 
 
 ALTER TABLE "public"."cash_operations" OWNER TO "postgres";
 
 
 COMMENT ON COLUMN "public"."cash_operations"."is_transfer" IS 'True if this operation is part of a cash transfer between locations';
+
+
+
+COMMENT ON COLUMN "public"."cash_operations"."transfer_pair_id" IS 'UUID linking both sides of a cash transfer. Same value on withdrawal and deposit.';
 
 
 
@@ -113,6 +120,8 @@ CREATE TABLE IF NOT EXISTS "public"."purchase_batches" (
     "voided_by_device_id" "text"
 );
 
+ALTER TABLE ONLY "public"."purchase_batches" REPLICA IDENTITY FULL;
+
 
 ALTER TABLE "public"."purchase_batches" OWNER TO "postgres";
 
@@ -126,6 +135,14 @@ COMMENT ON COLUMN "public"."purchase_batches"."corrects_batch_id" IS 'Reference 
 
 
 COMMENT ON COLUMN "public"."purchase_batches"."correction_reason" IS 'User-provided reason for the correction';
+
+
+
+COMMENT ON COLUMN "public"."purchase_batches"."voided_at" IS 'Timestamp when batch was voided';
+
+
+
+COMMENT ON COLUMN "public"."purchase_batches"."voided_by_device_id" IS 'Device that voided this batch';
 
 
 
@@ -161,6 +178,8 @@ CREATE TABLE IF NOT EXISTS "public"."expense_categories" (
     "server_updated_at" timestamp with time zone DEFAULT "now"()
 );
 
+ALTER TABLE ONLY "public"."expense_categories" REPLICA IDENTITY FULL;
+
 
 ALTER TABLE "public"."expense_categories" OWNER TO "postgres";
 
@@ -184,6 +203,8 @@ CREATE TABLE IF NOT EXISTS "public"."sale_batches" (
     "voided_by_device_id" "text"
 );
 
+ALTER TABLE ONLY "public"."sale_batches" REPLICA IDENTITY FULL;
+
 
 ALTER TABLE "public"."sale_batches" OWNER TO "postgres";
 
@@ -197,6 +218,14 @@ COMMENT ON COLUMN "public"."sale_batches"."corrects_batch_id" IS 'Reference to t
 
 
 COMMENT ON COLUMN "public"."sale_batches"."correction_reason" IS 'User-provided reason for the correction';
+
+
+
+COMMENT ON COLUMN "public"."sale_batches"."voided_at" IS 'Timestamp when batch was voided';
+
+
+
+COMMENT ON COLUMN "public"."sale_batches"."voided_by_device_id" IS 'Device that voided this batch';
 
 
 
@@ -219,6 +248,8 @@ CREATE TABLE IF NOT EXISTS "public"."transactions" (
     "server_updated_at" timestamp with time zone DEFAULT "now"(),
     CONSTRAINT "transactions_type_check" CHECK (("type" = ANY (ARRAY['purchase'::"text", 'sale'::"text", 'transfer_out'::"text", 'transfer_in'::"text", 'adjustment'::"text"])))
 );
+
+ALTER TABLE ONLY "public"."transactions" REPLICA IDENTITY FULL;
 
 
 ALTER TABLE "public"."transactions" OWNER TO "postgres";
@@ -259,8 +290,14 @@ CREATE TABLE IF NOT EXISTS "public"."locations" (
     "name" "text" NOT NULL,
     "type" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
+    "local_id" "text" NOT NULL,
+    "synced_at" timestamp with time zone,
+    "server_updated_at" timestamp with time zone DEFAULT "now"(),
+    "device_id" "text",
     CONSTRAINT "locations_type_check" CHECK (("type" = ANY (ARRAY['kiosk'::"text", 'mobile'::"text"])))
 );
+
+ALTER TABLE ONLY "public"."locations" REPLICA IDENTITY FULL;
 
 
 ALTER TABLE "public"."locations" OWNER TO "postgres";
@@ -278,6 +315,8 @@ CREATE TABLE IF NOT EXISTS "public"."products" (
     "synced_at" timestamp with time zone,
     "server_updated_at" timestamp with time zone DEFAULT "now"()
 );
+
+ALTER TABLE ONLY "public"."products" REPLICA IDENTITY FULL;
 
 
 ALTER TABLE "public"."products" OWNER TO "postgres";
@@ -324,6 +363,11 @@ ALTER TABLE ONLY "public"."expense_categories"
 
 ALTER TABLE ONLY "public"."expense_categories"
     ADD CONSTRAINT "expense_categories_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."locations"
+    ADD CONSTRAINT "locations_local_id_key" UNIQUE ("local_id");
 
 
 
@@ -383,10 +427,6 @@ CREATE INDEX "idx_cash_operations_is_transfer" ON "public"."cash_operations" USI
 
 
 
-CREATE INDEX "idx_cash_operations_local_id" ON "public"."cash_operations" USING "btree" ("local_id");
-
-
-
 CREATE INDEX "idx_cash_operations_location" ON "public"."cash_operations" USING "btree" ("location_id");
 
 
@@ -399,11 +439,11 @@ CREATE INDEX "idx_cash_operations_synced" ON "public"."cash_operations" USING "b
 
 
 
+CREATE INDEX "idx_cash_operations_transfer_pair" ON "public"."cash_operations" USING "btree" ("transfer_pair_id") WHERE ("transfer_pair_id" IS NOT NULL);
+
+
+
 CREATE INDEX "idx_cash_operations_type" ON "public"."cash_operations" USING "btree" ("type");
-
-
-
-CREATE INDEX "idx_expense_categories_local_id" ON "public"."expense_categories" USING "btree" ("local_id");
 
 
 
@@ -412,6 +452,10 @@ CREATE INDEX "idx_expense_categories_server_updated" ON "public"."expense_catego
 
 
 CREATE INDEX "idx_expense_categories_synced" ON "public"."expense_categories" USING "btree" ("synced_at") WHERE ("synced_at" IS NULL);
+
+
+
+CREATE INDEX "idx_locations_synced" ON "public"."locations" USING "btree" ("synced_at") WHERE ("synced_at" IS NULL);
 
 
 
@@ -435,14 +479,6 @@ CREATE INDEX "idx_purchase_batches_created" ON "public"."purchase_batches" USING
 
 
 
-CREATE INDEX "idx_purchase_batches_is_voided" ON "public"."purchase_batches" USING "btree" ("is_voided");
-
-
-
-CREATE INDEX "idx_purchase_batches_local_id" ON "public"."purchase_batches" USING "btree" ("local_id");
-
-
-
 CREATE INDEX "idx_purchase_batches_location" ON "public"."purchase_batches" USING "btree" ("location_id");
 
 
@@ -455,19 +491,15 @@ CREATE INDEX "idx_purchase_batches_synced" ON "public"."purchase_batches" USING 
 
 
 
+CREATE INDEX "idx_purchase_batches_voided" ON "public"."purchase_batches" USING "btree" ("id") WHERE ("is_voided" = true);
+
+
+
 CREATE INDEX "idx_sale_batches_corrects_batch_id" ON "public"."sale_batches" USING "btree" ("corrects_batch_id");
 
 
 
 CREATE INDEX "idx_sale_batches_created" ON "public"."sale_batches" USING "btree" ("created_at" DESC);
-
-
-
-CREATE INDEX "idx_sale_batches_is_voided" ON "public"."sale_batches" USING "btree" ("is_voided");
-
-
-
-CREATE INDEX "idx_sale_batches_local_id" ON "public"."sale_batches" USING "btree" ("local_id");
 
 
 
@@ -483,6 +515,10 @@ CREATE INDEX "idx_sale_batches_synced" ON "public"."sale_batches" USING "btree" 
 
 
 
+CREATE INDEX "idx_sale_batches_voided" ON "public"."sale_batches" USING "btree" ("id") WHERE ("is_voided" = true);
+
+
+
 CREATE INDEX "idx_transactions_batch" ON "public"."transactions" USING "btree" ("batch_id");
 
 
@@ -491,11 +527,11 @@ CREATE INDEX "idx_transactions_created" ON "public"."transactions" USING "btree"
 
 
 
-CREATE INDEX "idx_transactions_local_id" ON "public"."transactions" USING "btree" ("local_id");
-
-
-
 CREATE INDEX "idx_transactions_location" ON "public"."transactions" USING "btree" ("location_id");
+
+
+
+CREATE INDEX "idx_transactions_location_product" ON "public"."transactions" USING "btree" ("location_id", "product_id");
 
 
 
@@ -543,6 +579,10 @@ CREATE OR REPLACE TRIGGER "trg_transactions_server_updated_at" BEFORE INSERT OR 
 
 
 
+CREATE OR REPLACE TRIGGER "trigger_locations_server_updated_at" BEFORE INSERT OR UPDATE ON "public"."locations" FOR EACH ROW EXECUTE FUNCTION "public"."update_server_updated_at"();
+
+
+
 ALTER TABLE ONLY "public"."cash_operations"
     ADD CONSTRAINT "cash_operations_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."purchase_batches"("id") ON DELETE RESTRICT;
 
@@ -579,7 +619,7 @@ ALTER TABLE ONLY "public"."sale_batches"
 
 
 ALTER TABLE ONLY "public"."transactions"
-    ADD CONSTRAINT "transactions_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."purchase_batches"("id");
+    ADD CONSTRAINT "transactions_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."purchase_batches"("id") ON DELETE RESTRICT;
 
 
 
@@ -594,7 +634,7 @@ ALTER TABLE ONLY "public"."transactions"
 
 
 ALTER TABLE ONLY "public"."transactions"
-    ADD CONSTRAINT "transactions_sale_batch_id_fkey" FOREIGN KEY ("sale_batch_id") REFERENCES "public"."sale_batches"("id");
+    ADD CONSTRAINT "transactions_sale_batch_id_fkey" FOREIGN KEY ("sale_batch_id") REFERENCES "public"."sale_batches"("id") ON DELETE RESTRICT;
 
 
 
@@ -657,10 +697,43 @@ ALTER TABLE "public"."transactions" ENABLE ROW LEVEL SECURITY;
 ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
 
 
+
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."cash_operations";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."expense_categories";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."locations";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."products";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."purchase_batches";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."sale_batches";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."transactions";
+
+
+
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
+GRANT USAGE ON SCHEMA "public" TO "zagot_ai_readonly";
 
 
 
@@ -838,60 +911,70 @@ GRANT ALL ON FUNCTION "public"."update_server_updated_at"() TO "service_role";
 GRANT ALL ON TABLE "public"."cash_operations" TO "anon";
 GRANT ALL ON TABLE "public"."cash_operations" TO "authenticated";
 GRANT ALL ON TABLE "public"."cash_operations" TO "service_role";
+GRANT SELECT ON TABLE "public"."cash_operations" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."purchase_batches" TO "anon";
 GRANT ALL ON TABLE "public"."purchase_batches" TO "authenticated";
 GRANT ALL ON TABLE "public"."purchase_batches" TO "service_role";
+GRANT SELECT ON TABLE "public"."purchase_batches" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."cash_balance" TO "anon";
 GRANT ALL ON TABLE "public"."cash_balance" TO "authenticated";
 GRANT ALL ON TABLE "public"."cash_balance" TO "service_role";
+GRANT SELECT ON TABLE "public"."cash_balance" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."expense_categories" TO "anon";
 GRANT ALL ON TABLE "public"."expense_categories" TO "authenticated";
 GRANT ALL ON TABLE "public"."expense_categories" TO "service_role";
+GRANT SELECT ON TABLE "public"."expense_categories" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."sale_batches" TO "anon";
 GRANT ALL ON TABLE "public"."sale_batches" TO "authenticated";
 GRANT ALL ON TABLE "public"."sale_batches" TO "service_role";
+GRANT SELECT ON TABLE "public"."sale_batches" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."transactions" TO "anon";
 GRANT ALL ON TABLE "public"."transactions" TO "authenticated";
 GRANT ALL ON TABLE "public"."transactions" TO "service_role";
+GRANT SELECT ON TABLE "public"."transactions" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."inventory" TO "anon";
 GRANT ALL ON TABLE "public"."inventory" TO "authenticated";
 GRANT ALL ON TABLE "public"."inventory" TO "service_role";
+GRANT SELECT ON TABLE "public"."inventory" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."locations" TO "anon";
 GRANT ALL ON TABLE "public"."locations" TO "authenticated";
 GRANT ALL ON TABLE "public"."locations" TO "service_role";
+GRANT SELECT ON TABLE "public"."locations" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."products" TO "anon";
 GRANT ALL ON TABLE "public"."products" TO "authenticated";
 GRANT ALL ON TABLE "public"."products" TO "service_role";
+GRANT SELECT ON TABLE "public"."products" TO "zagot_ai_readonly";
 
 
 
 GRANT ALL ON TABLE "public"."total_cash_balance" TO "anon";
 GRANT ALL ON TABLE "public"."total_cash_balance" TO "authenticated";
 GRANT ALL ON TABLE "public"."total_cash_balance" TO "service_role";
+GRANT SELECT ON TABLE "public"."total_cash_balance" TO "zagot_ai_readonly";
 
 
 
@@ -925,6 +1008,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT SELECT ON TABLES TO "zagot_ai_readonly";
 
 
 

@@ -176,6 +176,9 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     override fun observeTotalBatchCount(): Flow<Int> =
         purchaseBatchDao.observeTotalCount()
 
+    override fun observeLatestUpdate(): Flow<Long?> =
+        purchaseBatchDao.observeLatestUpdate()
+
     override suspend fun correctBatch(
         originalBatchId: UUID,
         correctedBatch: PurchaseBatch,

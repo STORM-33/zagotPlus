@@ -1,8 +1,10 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import com.zagot.zagotplus.ui.screens.shared.PurchasePosition
 import androidx.compose.foundation.clickable
+import com.zagot.zagotplus.ui.components.AnimatedListItem
+import com.zagot.zagotplus.ui.screens.shared.PurchasePosition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import java.math.BigDecimal
  * Full-screen summary overlay shown after saving a purchase batch.
  * Tapping anywhere exits the flow.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PurchaseSummaryOverlay(
     positions: List<PurchasePosition>,
@@ -89,7 +92,11 @@ fun PurchaseSummaryOverlay(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(positions, key = { it.id }) { position ->
-                        SummaryPositionItem(position = position)
+                        AnimatedListItem {
+                            SummaryPositionItem(
+                                position = position,
+                            )
+                        }
                     }
                 }
 

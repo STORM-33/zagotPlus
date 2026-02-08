@@ -248,8 +248,11 @@ class SyncEngineImpl @Inject constructor(
         // Steps 5 + 6 + 7: Apply records + drain buffer + update metadata
         // ALL IN A SINGLE ROOM TRANSACTION (crash safety — spec Section 5.1)
         database.withTransaction {
-            // Step 5: Apply remote changes
-            for ((config, records) in allPulled) {
+            // Step 5: Apply remote changes in FK dependency order (registeredTables order)
+            // Using registeredTables instead of allPulled.keys to guarantee FK order,
+            // even though mutableMapOf (LinkedHashMap) currently preserves insertion order.
+            for (config in registeredTables) {
+                val records = allPulled[config] ?: continue
                 applyRecordsToRoom(config, records)
             }
 

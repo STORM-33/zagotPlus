@@ -68,6 +68,7 @@ import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.PriceType
 import com.zagot.zagotplus.ui.components.ReorderableProductGrid
 import com.zagot.zagotplus.ui.components.adaptiveButtonHeight
@@ -546,7 +547,12 @@ fun TransactionBatchWeighing(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(batches, key = { it.id }) { batch ->
-                        WeighingBatchItem(batch = batch, onRemove = { onRemoveBatch(batch.id) })
+                        AnimatedListItem {
+                            WeighingBatchItem(
+                                batch = batch,
+                                onRemove = { onRemoveBatch(batch.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -619,7 +625,12 @@ fun TransactionBatchWeighing(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(batches, key = { it.id }) { batch ->
-                        WeighingBatchItem(batch = batch, onRemove = { onRemoveBatch(batch.id) })
+                        AnimatedListItem {
+                            WeighingBatchItem(
+                                batch = batch,
+                                onRemove = { onRemoveBatch(batch.id) }
+                            )
+                        }
                     }
                 }
             } else {
@@ -634,6 +645,7 @@ fun TransactionBatchWeighing(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WeighingBatchItem(
     batch: WeighingBatch,
@@ -643,7 +655,8 @@ private fun WeighingBatchItem(
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -905,11 +918,13 @@ fun TransactionPositionsList(
             verticalArrangement = Arrangement.spacedBy(itemSpacing)
         ) {
             items(positions, key = { it.id }) { position ->
-                PositionItem(
-                    position = position,
-                    onRemove = { onRemovePosition(position.id) },
-                    onLongClick = { onEditPosition(position) }
-                )
+                AnimatedListItem {
+                    PositionItem(
+                        position = position,
+                        onRemove = { onRemovePosition(position.id) },
+                        onLongClick = { onEditPosition(position) }
+                    )
+                }
             }
 
             if (showAddButton) {
@@ -1086,11 +1101,13 @@ fun TransactionPositionsList(
                 verticalArrangement = Arrangement.spacedBy(itemSpacing)
             ) {
                 items(positions, key = { it.id }) { position ->
-                    PositionItem(
-                        position = position,
-                        onRemove = { onRemovePosition(position.id) },
-                        onLongClick = { onEditPosition(position) }
-                    )
+                    AnimatedListItem {
+                        PositionItem(
+                            position = position,
+                            onRemove = { onRemovePosition(position.id) },
+                            onLongClick = { onEditPosition(position) }
+                        )
+                    }
                 }
 
                 item {

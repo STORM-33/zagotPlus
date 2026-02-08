@@ -74,15 +74,12 @@ class PushCoordinator @Inject constructor(
         Log.d(TAG, "Pushing ${pending.size} pending entries")
         var successCount = 0
 
-        // Group by table to batch pushes
+        // Group by table, then iterate in FK dependency order (tableConfigs order)
+        // to avoid FK constraint violations on the remote database.
         val byTable = pending.groupBy { it.tableName }
 
-        for ((tableName, entries) in byTable) {
-            val config = tableConfigs.find { it.tableName == tableName }
-            if (config == null) {
-                Log.w(TAG, "No config for table $tableName, skipping ${entries.size} entries")
-                continue
-            }
+        for (config in tableConfigs) {
+            val entries = byTable[config.tableName] ?: continue
 
             try {
                 val records = entries.map { entry ->
@@ -97,19 +94,19 @@ class PushCoordinator @Inject constructor(
                 successCount += entries.size
 
                 entries.forEach { entry ->
-                    stateMachine.onEvent(SyncEvent.PushSuccess(tableName, entry.recordId))
+                    stateMachine.onEvent(SyncEvent.PushSuccess(config.tableName, entry.recordId))
                 }
 
-                Log.d(TAG, "Pushed ${entries.size} entries for $tableName")
+                Log.d(TAG, "Pushed ${entries.size} entries for ${config.tableName}")
             } catch (e: Exception) {
                 val category = classifyError(e)
-                Log.e(TAG, "Push failed for $tableName (${category}): ${e.message}")
-                stateMachine.onEvent(SyncEvent.PushFailed(tableName, e.message ?: "unknown"))
+                Log.e(TAG, "Push failed for ${config.tableName} (${category}): ${e.message}")
+                stateMachine.onEvent(SyncEvent.PushFailed(config.tableName, e.message ?: "unknown"))
 
                 when (category) {
                     PushErrorCategory.TERMINAL -> {
                         // Skip terminal errors — mark as synced to avoid infinite retry
-                        Log.e(TAG, "Terminal error, skipping entries for $tableName")
+                        Log.e(TAG, "Terminal error, skipping entries for ${config.tableName}")
                         val ids = entries.map { it.id }
                         outboxDao.markSyncedBatch(ids)
                     }

@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.shared
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.CustomNumpad
 import com.zagot.zagotplus.ui.components.InputDisplayBox
 import com.zagot.zagotplus.ui.components.PriceType
@@ -239,14 +241,16 @@ private fun RegularPositionsPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(positions, key = { it.id }) { position ->
-                    RegularPositionItem(
-                        position = position,
-                        isSelected = position.id == selectedPositionId,
-                        onClick = if (onPositionClick != null) {
-                            { onPositionClick(position) }
-                        } else null,
-                        onRemove = { onRemovePosition(position.id) }
-                    )
+                    AnimatedListItem {
+                        RegularPositionItem(
+                            position = position,
+                            isSelected = position.id == selectedPositionId,
+                            onClick = if (onPositionClick != null) {
+                                { onPositionClick(position) }
+                            } else null,
+                            onRemove = { onRemovePosition(position.id) }
+                        )
+                    }
                 }
             }
         }
@@ -308,6 +312,7 @@ private fun RegularPositionsPanel(
 /**
  * Position item card for regular mode.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RegularPositionItem(
     position: TransactionPosition,

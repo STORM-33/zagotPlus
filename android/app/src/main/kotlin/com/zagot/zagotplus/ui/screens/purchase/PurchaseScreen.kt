@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.ProductDailyTotal
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.BatchCardSkeleton
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
@@ -61,6 +64,7 @@ import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.util.UUID
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PurchaseScreen(
     modifier: Modifier = Modifier,
@@ -178,19 +182,21 @@ fun PurchaseScreen(
                         key = { it.productId }
                     ) { productTotal ->
                         val isSelected = productTotal.productId in selectedProductIds
-                        ProductTotalItem(
-                            productTotal = productTotal,
-                            weightFormat = weightFormat,
-                            currencyFormat = currencyFormat,
-                            isSelected = isSelected,
-                            onClick = {
-                                selectedProductIds = if (isSelected) {
-                                    selectedProductIds - productTotal.productId
-                                } else {
-                                    selectedProductIds + productTotal.productId
-                                }
-                            }
-                        )
+                        AnimatedListItem {
+                            ProductTotalItem(
+                                productTotal = productTotal,
+                                weightFormat = weightFormat,
+                                currencyFormat = currencyFormat,
+                                isSelected = isSelected,
+                                onClick = {
+                                    selectedProductIds = if (isSelected) {
+                                        selectedProductIds - productTotal.productId
+                                    } else {
+                                        selectedProductIds + productTotal.productId
+                                    }
+                                },
+                            )
+                        }
                     }
                     
                     // Summary row at end of list (uses selected items or all)
@@ -315,8 +321,9 @@ private fun DailySpendingsCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "₴${currencyFormat.format(totalSpendings)}",
+            AnimatedCounter(
+                targetValue = totalSpendings,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.tertiary
@@ -351,8 +358,9 @@ private fun CashBalanceCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "₴${currencyFormat.format(balance)}",
+            AnimatedCounter(
+                targetValue = balance,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -397,8 +405,9 @@ private fun SummaryTotalItem(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = "${weightFormat.format(totalWeight)} кг",
+                AnimatedCounter(
+                    targetValue = totalWeight,
+                    formatter = { "${weightFormat.format(it)} кг" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -406,16 +415,28 @@ private fun SummaryTotalItem(
             }
             // Planned profit row - hide in restricted mode
             if (!isRestrictedMode) {
-                Text(
-                    text = plannedProfit?.let { "Плановий прибуток: ₴${currencyFormat.format(it)}" }
-                        ?: "Плановий прибуток: —",
+                val plannedProfitColor = if (plannedProfit != null && plannedProfit > BigDecimal.ZERO)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                plannedProfit?.let { profit ->
+                    AnimatedCounter(
+                        targetValue = profit,
+                        formatter = { "Плановий прибуток: ₴${currencyFormat.format(it)}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        color = plannedProfitColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    )
+                } ?: Text(
+                    text = "Плановий прибуток: —",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
-                    color = if (plannedProfit != null && plannedProfit > BigDecimal.ZERO)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = plannedProfitColor,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp)
@@ -489,8 +510,9 @@ private fun ProductTotalItem(
                 )
                 // Average price per kg - shown below if available
                 productTotal.avgPricePerKg?.let { avgPrice ->
-                    Text(
-                        text = "Сер. ціна: ₴${currencyFormat.format(avgPrice)}/кг",
+                    AnimatedCounter(
+                        targetValue = avgPrice,
+                        formatter = { "Сер. ціна: ₴${currencyFormat.format(it)}/кг" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -502,15 +524,17 @@ private fun ProductTotalItem(
                 horizontalAlignment = Alignment.End
             ) {
                 // Kilograms - visually highlighted (larger, bold, primary color)
-                Text(
-                    text = "${weightFormat.format(productTotal.totalWeightKg)} кг",
+                AnimatedCounter(
+                    targetValue = productTotal.totalWeightKg,
+                    formatter = { "${weightFormat.format(it)} кг" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 // Total amount - secondary display
-                Text(
-                    text = "₴${currencyFormat.format(productTotal.totalAmount)}",
+                AnimatedCounter(
+                    targetValue = productTotal.totalAmount,
+                    formatter = { "₴${currencyFormat.format(it)}" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

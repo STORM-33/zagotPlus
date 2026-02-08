@@ -1,6 +1,7 @@
 package com.zagot.zagotplus.ui.screens.shared
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.adaptivePadding
 import com.zagot.zagotplus.ui.components.isTablet
 import java.math.BigDecimal
@@ -258,6 +260,7 @@ fun TransactionEditPositionDialog(
 /**
  * Dialog showing weighing history for a position.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WeighingHistoryDialog(
     batches: List<WeighingBatch>,
@@ -288,60 +291,65 @@ private fun WeighingHistoryDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(batches.size) { index ->
+                items(
+                    count = batches.size,
+                    key = { index -> batches[index].id }
+                ) { index ->
                     val batch = batches[index]
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditBatch(batch) },
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Row(
+                    AnimatedListItem {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable { onEditBatch(batch) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "#${index + 1}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.width(36.dp)
-                                )
-                                Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "${decimalFormat.format(batch.grossWeightKg)} кг",
+                                        text = "#${index + 1}",
                                         style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Medium
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.width(36.dp)
                                     )
-                                    Text(
-                                        text = "${batch.tareCount} шт тари",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Column {
+                                        Text(
+                                            text = "${decimalFormat.format(batch.grossWeightKg)} кг",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${batch.tareCount} шт тари",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
-                            }
-                            Row {
-                                Text(
-                                    text = "редагувати",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(end = 8.dp)
-                                )
-                                IconButton(
-                                    onClick = { onRemoveBatch(batch.id) },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Видалити",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
+                                Row {
+                                    Text(
+                                        text = "редагувати",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(end = 8.dp)
                                     )
+                                    IconButton(
+                                        onClick = { onRemoveBatch(batch.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Видалити",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

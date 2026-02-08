@@ -139,6 +139,13 @@ interface PurchaseBatchDao {
     fun observeTotalCount(): Flow<Int>
 
     /**
+     * Observe max server_updated_at to detect content changes (voids, corrections).
+     * Returns null when table is empty or all values are null.
+     */
+    @Query("SELECT MAX(server_updated_at) FROM purchase_batches")
+    fun observeLatestUpdate(): Flow<Long?>
+
+    /**
      * Mark a batch as voided (for correction workflow).
      * Sets voided_at timestamp and voided_by_device_id for audit trail.
      * @return Number of rows affected (should be 1 if batch exists, 0 if not found)

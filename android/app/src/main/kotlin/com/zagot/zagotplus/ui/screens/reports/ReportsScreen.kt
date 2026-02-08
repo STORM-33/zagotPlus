@@ -63,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.DateRange
 import com.zagot.zagotplus.ui.components.DateRangePreset
 import com.zagot.zagotplus.ui.components.EmptyState
@@ -236,11 +238,13 @@ fun ReportsScreen(
                         verticalArrangement = Arrangement.spacedBy(itemSpacing)
                     ) {
                         items(uiState.productItems, key = { it.productId }) { item ->
-                            ProductReportCard(
-                                item = item,
-                                currencyFormat = currencyFormat,
-                                weightFormat = weightFormat
-                            )
+                            AnimatedListItem {
+                                ProductReportCard(
+                                    item = item,
+                                    currencyFormat = currencyFormat,
+                                    weightFormat = weightFormat,
+                                )
+                            }
                         }
                         
                         item(key = "summary") {
@@ -288,8 +292,9 @@ private fun SummaryPanel(
                 color = contentColor
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "₴${currencyFormat.format(amount)}",
+            AnimatedCounter(
+                targetValue = amount,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = contentColor
@@ -320,8 +325,9 @@ private fun SpendingsDetailDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Закупки товарів", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "₴${currencyFormat.format(purchaseTotal)}",
+                    AnimatedCounter(
+                        targetValue = purchaseTotal,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -346,8 +352,9 @@ private fun SpendingsDetailDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                "₴${currencyFormat.format(category.amount)}",
+                            AnimatedCounter(
+                                targetValue = category.amount,
+                                formatter = { "₴${currencyFormat.format(it)}" },
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -358,8 +365,9 @@ private fun SpendingsDetailDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Оплати", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "₴${currencyFormat.format(paymentsTotal)}",
+                        AnimatedCounter(
+                            targetValue = paymentsTotal,
+                            formatter = { "₴${currencyFormat.format(it)}" },
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -372,8 +380,9 @@ private fun SpendingsDetailDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Всього", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "₴${currencyFormat.format(purchaseTotal + paymentsTotal)}",
+                    AnimatedCounter(
+                        targetValue = purchaseTotal + paymentsTotal,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.error
@@ -426,27 +435,32 @@ private fun EarningsDetailDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(salesItems, key = { it.productId }) { item ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        item.productName,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        "${weightFormat.format(item.totalWeightKg)} кг",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            AnimatedListItem {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            item.productName,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        AnimatedCounter(
+                                            targetValue = item.totalWeightKg,
+                                            formatter = { "${weightFormat.format(it)} кг" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    AnimatedCounter(
+                                        targetValue = item.totalEarned,
+                                        formatter = { "₴${currencyFormat.format(it)}" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
-                                Text(
-                                    "₴${currencyFormat.format(item.totalEarned)}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
                     }
@@ -456,8 +470,9 @@ private fun EarningsDetailDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Всього прибуток", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            "₴${currencyFormat.format(totalEarnings)}",
+                        AnimatedCounter(
+                            targetValue = totalEarnings,
+                            formatter = { "₴${currencyFormat.format(it)}" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -476,13 +491,14 @@ private fun EarningsDetailDialog(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        "₴${currencyFormat.format(netProfit)}",
+                    AnimatedCounter(
+                        targetValue = netProfit,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (netProfit >= BigDecimal.ZERO) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
+                        color = if (netProfit >= BigDecimal.ZERO)
+                            MaterialTheme.colorScheme.primary
+                        else
                             MaterialTheme.colorScheme.error
                     )
                 }
@@ -499,8 +515,9 @@ private fun EarningsDetailDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        "₴${currencyFormat.format(inventoryValue)}",
+                    AnimatedCounter(
+                        targetValue = inventoryValue,
+                        formatter = { "₴${currencyFormat.format(it)}" },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.tertiary
@@ -542,8 +559,9 @@ private fun ReportsSummaryPanel(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "${weightFormat.format(totalWeightKg)} кг",
+            AnimatedCounter(
+                targetValue = totalWeightKg,
+                formatter = { "${weightFormat.format(it)} кг" },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -648,16 +666,18 @@ private fun ProductReportCard(
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${weightFormat.format(item.totalWeightKg)} кг",
+                AnimatedCounter(
+                    targetValue = item.totalWeightKg,
+                    formatter = { "${weightFormat.format(it)} кг" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Amount spent
-            Text(
-                text = "₴${currencyFormat.format(item.totalSpent)}",
+            AnimatedCounter(
+                targetValue = item.totalSpent,
+                formatter = { "₴${currencyFormat.format(it)}" },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

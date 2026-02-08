@@ -228,6 +228,14 @@ interface CashOperationDao {
     @Query("SELECT local_id FROM cash_operations")
     suspend fun getAllLocalIds(): List<String>
 
+    /**
+     * Observe total count of cash operations (reactive).
+     * Used by CashViewModel to detect sync changes (inserts AND updates).
+     * Combines count + max timestamp so updates are also detected.
+     */
+    @Query("SELECT COUNT(*) || '-' || COALESCE(MAX(server_updated_at), '') FROM cash_operations")
+    fun observeChangeSignal(): Flow<String>
+
     @Update
     suspend fun update(operation: CashOperationEntity)
 

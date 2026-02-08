@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -114,10 +115,12 @@ class HistoryViewModel @Inject constructor(
     private var searchJob: Job? = null
     private var lastKnownPurchaseBatchCount: Int = -1
     private var lastKnownSaleBatchCount: Int = -1
+    private var lastKnownContentTimestamp: Long? = null
 
     init {
         loadInitialData()
         observeBatchChanges()
+        observeContentChanges()
         observeLocationChangesForRestrictedMode()
         observeSyncCompletion()
     }
@@ -175,6 +178,29 @@ class HistoryViewModel @Inject constructor(
                         reloadWithFilter()
                     }
                     lastKnownSaleBatchCount = count
+                }
+        }
+    }
+
+    /**
+     * Observe content changes via max server_updated_at across synced tables.
+     * Detects voids, corrections, and transaction updates that don't change batch count.
+     */
+    private fun observeContentChanges() {
+        viewModelScope.launch {
+            combine(
+                purchaseBatchRepository.observeLatestUpdate(),
+                saleBatchRepository.observeLatestUpdate(),
+                transactionRepository.observeLatestUpdate()
+            ) { pbUpdate, sbUpdate, txUpdate ->
+                maxOf(pbUpdate ?: 0L, sbUpdate ?: 0L, txUpdate ?: 0L)
+            }
+                .distinctUntilChanged()
+                .collect { timestamp ->
+                    if (lastKnownContentTimestamp != null && timestamp != lastKnownContentTimestamp) {
+                        reloadWithFilter()
+                    }
+                    lastKnownContentTimestamp = timestamp
                 }
         }
     }

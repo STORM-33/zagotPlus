@@ -1,9 +1,7 @@
 package com.zagot.zagotplus.ui.screens.cash
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,6 +104,9 @@ import com.zagot.zagotplus.ui.theme.CashTransfer
 import com.zagot.zagotplus.ui.theme.CashWarning
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.math.BigDecimal
+import com.zagot.zagotplus.ui.components.AnimatedCounter
+import com.zagot.zagotplus.ui.components.AnimatedListItem
+import com.zagot.zagotplus.ui.components.AnimatedValueText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -227,7 +228,6 @@ fun CashScreen(
                                 balance = uiState.balance.roundBalanceForDisplay(),
                                 dailyChange = uiState.dailyChange,
                                 dailyAddition = uiState.dailyAddition,
-                                selectedLocationId = uiState.selectedLocationId,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -313,15 +313,16 @@ fun CashScreen(
                                     items = uiState.dayGroups,
                                     key = { it.date.toString() }
                                 ) { dayGroup ->
-                                    ExpandableDayCard(
-                                        dayGroup = dayGroup,
-                                        isExpanded = dayGroup.date in uiState.expandedDays,
-                                        showLocationName = uiState.isTotalsView,
-                                        onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
-                                        onEditItem = { item -> viewModel.showEditDialog(item) },
-                                        canModifyItem = { item -> viewModel.canModifyItem(item) },
-                                        modifier = Modifier.animateItemPlacement()
-                                    )
+                                    AnimatedListItem {
+                                        ExpandableDayCard(
+                                            dayGroup = dayGroup,
+                                            isExpanded = dayGroup.date in uiState.expandedDays,
+                                            showLocationName = uiState.isTotalsView,
+                                            onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
+                                            onEditItem = { item -> viewModel.showEditDialog(item) },
+                                            canModifyItem = { item -> viewModel.canModifyItem(item) },
+                                        )
+                                    }
                                 }
 
                                 // Loading indicator at bottom
@@ -376,7 +377,6 @@ fun CashScreen(
                         balance = uiState.balance.roundBalanceForDisplay(),
                         dailyChange = uiState.dailyChange,
                         dailyAddition = uiState.dailyAddition,
-                        selectedLocationId = uiState.selectedLocationId,
                         modifier = Modifier.padding(16.dp)
                     )
 
@@ -447,15 +447,16 @@ fun CashScreen(
                             items = uiState.dayGroups,
                             key = { it.date.toString() }
                         ) { dayGroup ->
-                            ExpandableDayCard(
-                                dayGroup = dayGroup,
-                                isExpanded = dayGroup.date in uiState.expandedDays,
-                                showLocationName = uiState.isTotalsView,
-                                onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
-                                onEditItem = { item -> viewModel.showEditDialog(item) },
-                                canModifyItem = { item -> viewModel.canModifyItem(item) },
-                                modifier = Modifier.animateItemPlacement()
-                            )
+                            AnimatedListItem {
+                                ExpandableDayCard(
+                                    dayGroup = dayGroup,
+                                    isExpanded = dayGroup.date in uiState.expandedDays,
+                                    showLocationName = uiState.isTotalsView,
+                                    onToggle = { viewModel.toggleDayExpansion(dayGroup.date) },
+                                    onEditItem = { item -> viewModel.showEditDialog(item) },
+                                    canModifyItem = { item -> viewModel.canModifyItem(item) },
+                                )
+                            }
                         }
 
                         // Loading indicator at bottom
@@ -607,21 +608,8 @@ private fun BalanceCard(
     balance: BigDecimal,
     dailyChange: BigDecimal,
     dailyAddition: BigDecimal = BigDecimal.ZERO,
-    selectedLocationId: UUID? = null,
     modifier: Modifier = Modifier
 ) {
-    // Use Animatable to control animation manually on tab switch
-    val animatedBalance = remember { Animatable(0f) }
-    
-    // Animate to new balance when it changes OR when location changes
-    LaunchedEffect(balance, selectedLocationId) {
-        // Animate from current value to new balance
-        animatedBalance.animateTo(
-            targetValue = balance.toFloat(),
-            animationSpec = spring(stiffness = 300f)
-        )
-    }
-    
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -640,8 +628,11 @@ private fun BalanceCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "${BigDecimal(animatedBalance.value.toDouble()).setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
+            AnimatedCounter(
+                targetValue = balance,
+                formatter = { value ->
+                    "${value.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"
+                },
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -660,8 +651,8 @@ private fun BalanceCard(
                     else -> MaterialTheme.colorScheme.onPrimaryContainer
                 }
                 val changePrefix = if (dailyChange > BigDecimal.ZERO) "+" else ""
-                Text(
-                    text = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
+                AnimatedValueText(
+                    targetValue = stringResource(R.string.cash_today, "$changePrefix${dailyChange.setScale(0, java.math.RoundingMode.HALF_UP)} ₴"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = changeColor
                 )
@@ -993,13 +984,10 @@ private fun HistoryItem(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    val amountText = if (item.type.isInflow) {
-                        "+${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
-                    } else {
-                        "-${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
-                    }
-                    Text(
-                        text = "$amountText ₴",
+                    val amountPrefix = if (item.type.isInflow) "+" else "-"
+                    AnimatedCounter(
+                        targetValue = item.amount,
+                        formatter = { "$amountPrefix${it.setScale(0, java.math.RoundingMode.HALF_UP)} ₴" },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = color
@@ -1111,8 +1099,9 @@ private fun ExpandableDayCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val prefix = if (dayGroup.dayTotal >= BigDecimal.ZERO) "+" else ""
-                    Text(
-                        text = "$prefix${dayGroup.dayTotal.setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
+                    AnimatedCounter(
+                        targetValue = dayGroup.dayTotal,
+                        formatter = { "$prefix${it.setScale(0, java.math.RoundingMode.HALF_UP)} ₴" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = dayTotalColor
@@ -1204,8 +1193,9 @@ private fun OperationTypeSection(
                     )
                 }
                 val prefix = if (sectionTotal >= BigDecimal.ZERO) "+" else ""
-                Text(
-                    text = "$prefix${sectionTotal.setScale(0, java.math.RoundingMode.HALF_UP)} ₴",
+                AnimatedCounter(
+                    targetValue = sectionTotal,
+                    formatter = { "$prefix${it.setScale(0, java.math.RoundingMode.HALF_UP)} ₴" },
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = color
@@ -1293,9 +1283,10 @@ private fun CompactHistoryItem(
                 }
             }
             
-            val amountText = if (item.type.isInflow) "+${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}" else "-${item.amount.setScale(0, java.math.RoundingMode.HALF_UP)}"
-            Text(
-                text = "$amountText ₴",
+            val amountPrefix = if (item.type.isInflow) "+" else "-"
+            AnimatedCounter(
+                targetValue = item.amount,
+                formatter = { "$amountPrefix${it.setScale(0, java.math.RoundingMode.HALF_UP)} ₴" },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )

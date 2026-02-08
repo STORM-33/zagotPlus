@@ -350,4 +350,11 @@ interface TransactionDao {
         GROUP BY t.product_id
     """)
     fun observeProductAvgPurchasePrices(): Flow<List<ProductAvgPurchasePriceResult>>
+
+    /**
+     * Observe max server_updated_at to detect content changes (voids, corrections).
+     * Returns null when table is empty or all values are null.
+     */
+    @Query("SELECT MAX(server_updated_at) FROM transactions")
+    fun observeLatestUpdate(): Flow<Long?>
 }

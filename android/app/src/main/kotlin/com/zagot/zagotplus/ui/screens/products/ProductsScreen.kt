@@ -67,6 +67,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zagot.zagotplus.domain.model.Product
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.EmptyState
 import com.zagot.zagotplus.ui.components.EmptyStateIcons
 import com.zagot.zagotplus.ui.components.adaptiveHorizontalPadding
@@ -74,7 +75,7 @@ import com.zagot.zagotplus.ui.components.isTablet
 import java.text.DecimalFormat
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ProductsScreen(
     onNavigateBack: () -> Unit,
@@ -204,13 +205,15 @@ fun ProductsScreen(
                         items = uiState.sortedProducts,
                         key = { it.id }
                     ) { product ->
-                        ProductCard(
-                            product = product,
-                            onEdit = { viewModel.showEditDialog(product) },
-                            onDelete = { productToDelete = product },
-                            onToggleActive = { viewModel.toggleProductActive(product.id) },
-                            isCompact = true
-                        )
+                        AnimatedListItem {
+                            ProductCard(
+                                product = product,
+                                onEdit = { viewModel.showEditDialog(product) },
+                                onDelete = { productToDelete = product },
+                                onToggleActive = { viewModel.toggleProductActive(product.id) },
+                                isCompact = true,
+                            )
+                        }
                     }
                 }
             } else {
@@ -223,13 +226,15 @@ fun ProductsScreen(
                         items = uiState.sortedProducts,
                         key = { it.id }
                     ) { product ->
-                        ProductCard(
-                            product = product,
-                            onEdit = { viewModel.showEditDialog(product) },
-                            onDelete = { productToDelete = product },
-                            onToggleActive = { viewModel.toggleProductActive(product.id) },
-                            isCompact = false
-                        )
+                        AnimatedListItem {
+                            ProductCard(
+                                product = product,
+                                onEdit = { viewModel.showEditDialog(product) },
+                                onDelete = { productToDelete = product },
+                                onToggleActive = { viewModel.toggleProductActive(product.id) },
+                                isCompact = false,
+                            )
+                        }
                     }
                 }
             }

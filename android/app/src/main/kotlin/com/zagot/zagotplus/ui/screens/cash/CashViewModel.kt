@@ -130,6 +130,9 @@ class CashViewModel @Inject constructor(
     /** Job for balance/categories flow collection - cancelled when location changes */
     private var balanceCollectionJob: Job? = null
 
+    /** Last known cash operation count for change detection */
+    private var lastKnownCashSignal: String = ""
+
     companion object {
         private const val TAG = "CashViewModel"
         private const val PAGE_SIZE = 20
@@ -142,6 +145,24 @@ class CashViewModel @Inject constructor(
     init {
         Log.d(TAG, "CashViewModel init")
         loadData()
+        observeCashChanges()
+    }
+
+    /**
+     * Observe cash operation count changes to auto-refresh when sync writes new operations.
+     * Follows the same pattern as HistoryViewModel.observeBatchChanges().
+     */
+    private fun observeCashChanges() {
+        viewModelScope.launch {
+            cashRepository.observeCashChangeSignal()
+                .distinctUntilChanged()
+                .collect { signal ->
+                    if (lastKnownCashSignal.isNotEmpty() && signal != lastKnownCashSignal) {
+                        refreshOperations()
+                    }
+                    lastKnownCashSignal = signal
+                }
+        }
     }
 
     private fun loadData() {

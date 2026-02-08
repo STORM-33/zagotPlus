@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.zagot.zagotplus.domain.model.Product
 import com.zagot.zagotplus.domain.model.TransactionType
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import com.zagot.zagotplus.ui.components.CustomNumpad
 import com.zagot.zagotplus.ui.components.InputDisplayBox
 import com.zagot.zagotplus.ui.components.PriceType
@@ -378,14 +380,19 @@ private fun BatchWeightingsPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Display in chronological order (oldest top, newest bottom)
-                items(batches) { batch ->
-                    BatchWeightingItem(
-                        batchNumber = batches.indexOf(batch) + 1,
-                        batch = batch,
-                        isSelected = batch.id == selectedBatchId,
-                        onClick = { onSelectBatch(batch) },
-                        onRemove = { onRemoveBatch(batch.id) }
-                    )
+                items(
+                    items = batches,
+                    key = { it.id }
+                ) { batch ->
+                    AnimatedListItem {
+                        BatchWeightingItem(
+                            batchNumber = batches.indexOf(batch) + 1,
+                            batch = batch,
+                            isSelected = batch.id == selectedBatchId,
+                            onClick = { onSelectBatch(batch) },
+                            onRemove = { onRemoveBatch(batch.id) }
+                        )
+                    }
                 }
             }
         }
@@ -395,6 +402,7 @@ private fun BatchWeightingsPanel(
 /**
  * Individual weighting batch item.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BatchWeightingItem(
     batchNumber: Int,
@@ -643,12 +651,14 @@ private fun BatchPositionsPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(positions, key = { it.id }) { position ->
-                    BatchPositionItem(
-                        position = position,
-                        isSelected = position.id == selectedPositionId,
-                        onClick = { onPositionClick(position) },
-                        onRemove = { onRemovePosition(position.id) }
-                    )
+                    AnimatedListItem {
+                        BatchPositionItem(
+                            position = position,
+                            isSelected = position.id == selectedPositionId,
+                            onClick = { onPositionClick(position) },
+                            onRemove = { onRemovePosition(position.id) }
+                        )
+                    }
                 }
             }
         }
@@ -709,6 +719,7 @@ private fun BatchPositionsPanel(
 /**
  * Position item for batch mode.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BatchPositionItem(
     position: TransactionPosition,

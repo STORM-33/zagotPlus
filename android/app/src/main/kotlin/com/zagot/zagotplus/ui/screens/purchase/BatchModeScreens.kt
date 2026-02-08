@@ -1,8 +1,10 @@
 package com.zagot.zagotplus.ui.screens.purchase
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import com.zagot.zagotplus.ui.screens.shared.PurchaseEntryUiState
 import com.zagot.zagotplus.ui.screens.shared.PurchaseWeighingBatch
+import com.zagot.zagotplus.ui.components.AnimatedListItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -230,11 +230,13 @@ fun BatchWeighingScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(indexedBatches, key = { it.second.id }) { (batchNumber, batch) ->
-                    BatchItem(
-                        batchNumber = batchNumber,
-                        batch = batch,
-                        onRemove = { onRemoveBatch(batch.id) }
-                    )
+                    AnimatedListItem {
+                        BatchItem(
+                            batchNumber = batchNumber,
+                            batch = batch,
+                            onRemove = { onRemoveBatch(batch.id) }
+                        )
+                    }
                 }
             }
         }
@@ -502,6 +504,7 @@ fun BatchPositionReviewScreen(
 /**
  * Simple batch item for the weighing list.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BatchItem(
     batchNumber: Int,
@@ -512,7 +515,8 @@ private fun BatchItem(
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -573,6 +577,7 @@ private fun BatchItem(
 /**
  * Dialog showing list of all batches with edit and remove options.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BatchHistoryDialog(
     batches: List<PurchaseWeighingBatch>,
@@ -594,64 +599,67 @@ private fun BatchHistoryDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(indexedBatches, key = { it.second.id }) { (batchNumber, batch) ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Row(
+                    AnimatedListItem {
+                        Card(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
                         ) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "#$batchNumber",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "#$batchNumber",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "${decimalFormat.format(batch.grossWeightKg)} кг",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${batch.tareCount} шт",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
-                                Column {
-                                    Text(
-                                        text = "${decimalFormat.format(batch.grossWeightKg)} кг",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "${batch.tareCount} шт",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Row {
-                                IconButton(onClick = { onEditBatch(batch) }) {
-                                    Icon(
-                                        Icons.Filled.Edit,
-                                        contentDescription = "Редагувати",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                IconButton(onClick = { onRemoveBatch(batch.id) }) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Видалити",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                Row {
+                                    IconButton(onClick = { onEditBatch(batch) }) {
+                                        Icon(
+                                            Icons.Filled.Edit,
+                                            contentDescription = "Редагувати",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(onClick = { onRemoveBatch(batch.id) }) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Видалити",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                             }
                         }
