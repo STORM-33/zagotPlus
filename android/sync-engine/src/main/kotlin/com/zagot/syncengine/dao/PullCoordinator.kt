@@ -22,9 +22,9 @@ import javax.inject.Singleton
  *
  * Uses cursor-based pagination to handle tables with more records than a
  * single page (default 1000). The cursor advances by the max timestamp in
- * each batch, using `gt` (strict greater-than) so already-fetched records
- * at the boundary are skipped. Sub-millisecond timestamp collisions at the
- * page boundary are safe: duplicate records from `gt` overlap are handled
+ * each batch, using `gte` (greater-than-or-equal) so records sharing the
+ * boundary timestamp are not skipped. Duplicates from re-fetched boundary
+ * records are filtered by PK within the pagination loop and also handled
  * by the caller's UPSERT-by-PK logic.
  */
 @Singleton
@@ -70,6 +70,7 @@ class PullCoordinator @Inject constructor(
         }
 
         val allRecords = mutableListOf<Record>()
+        val seenPks = mutableSetOf<String>()
         var page = 0
 
         do {
@@ -81,27 +82,37 @@ class PullCoordinator @Inject constructor(
                 limit = pullPageSize,
             )
 
-            allRecords.addAll(batch)
+            // Deduplicate: gte re-fetches boundary records from the previous page.
+            // Filter by PK to only add genuinely new records.
+            var newInBatch = 0
+            for (record in batch) {
+                val pk = record[config.primaryKey]?.toString() ?: continue
+                if (seenPks.add(pk)) {
+                    allRecords.add(record)
+                    newInBatch++
+                }
+            }
+
             page++
 
             if (batch.size == pullPageSize) {
                 // Advance cursor to the max timestamp in this batch for next page.
-                // Uses gt (strict greater-than) so records at the boundary are not
-                // re-fetched. In the rare case of multiple records sharing the exact
-                // boundary timestamp, some may be skipped — the UPSERT deduplication
-                // and overlap window on the next full sync make this safe.
+                // Uses gte so records sharing the boundary timestamp are included
+                // in the next fetch — dedup above filters out already-seen records.
                 val batchMaxTs = maxTimestamp(batch, config.timestampColumn)
                 if (batchMaxTs > since) {
                     since = batchMaxTs
-                } else {
-                    // Safety: if max timestamp didn't advance, break to avoid infinite loop.
-                    // This can happen if all records in the batch share the same timestamp.
-                    Log.w(TAG, "Cursor did not advance for ${config.tableName} (stuck at $since), breaking pagination")
+                } else if (newInBatch == 0) {
+                    // Cursor didn't advance AND no new records — we're stuck.
+                    // This means 1000+ records share the exact same timestamp (pathological).
+                    Log.w(TAG, "Cursor stuck for ${config.tableName} at $since with no new records, breaking pagination")
                     break
                 }
+                // If cursor didn't advance but we still got new records (duplicates
+                // were filtered), keep going — there are more records at this timestamp.
             }
 
-            Log.d(TAG, "Pulled page $page: ${batch.size} records from ${config.tableName} (total=${allRecords.size})")
+            Log.d(TAG, "Pulled page $page: ${batch.size} fetched, $newInBatch new from ${config.tableName} (total=${allRecords.size})")
         } while (batch.size == pullPageSize)
 
         stateMachine.onEvent(SyncEvent.PullComplete(config.tableName, allRecords.size))

@@ -25,7 +25,7 @@ enum class ChangeOperation { INSERT, UPDATE, DELETE }
  */
 interface SyncRemoteClient {
     /**
-     * Pull records from [table] where [timestampColumn] > [since].
+     * Pull records from [table] where [timestampColumn] >= [since].
      *
      * NOTE: Overlap window handling is the caller's responsibility
      * (PullCoordinator subtracts the window before calling this method).

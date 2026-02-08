@@ -53,7 +53,7 @@ class FakeSupabaseClient : SyncRemoteClient {
         return remoteTables[table]
             ?.filter { record ->
                 val ts = record[timestampColumn] as? Long ?: 0L
-                ts > since
+                ts >= since
             }
             ?.sortedBy { record ->
                 (record[timestampColumn] as? Long) ?: 0L
