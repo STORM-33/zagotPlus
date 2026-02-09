@@ -34,6 +34,9 @@ interface SyncRemoteClient {
      *
      * @param limit max records to return (pagination page size). Implementations
      *   MUST respect this to enable cursor-based pagination in [PullCoordinator].
+     * @param primaryKey column name used as secondary cursor for compound pagination.
+     * @param afterPk when non-null, only return records where
+     *   `(timestamp > since) OR (timestamp = since AND pk > afterPk)`.
      */
     suspend fun pull(
         table: String,
@@ -41,6 +44,8 @@ interface SyncRemoteClient {
         since: Long,
         overlapWindowMs: Long = 0L,
         limit: Int = 1000,
+        primaryKey: String = "id",
+        afterPk: String? = null,
     ): List<Record>
 
     /** Push (upsert) records to [table], keyed on [primaryKey]. */

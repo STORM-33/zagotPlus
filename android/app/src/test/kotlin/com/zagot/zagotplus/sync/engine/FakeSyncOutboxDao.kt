@@ -2,6 +2,7 @@ package com.zagot.zagotplus.sync.engine
 
 import com.zagot.syncengine.db.SyncOutboxDao
 import com.zagot.syncengine.db.SyncOutboxEntity
+import com.zagot.syncengine.db.TablePendingCount
 
 /**
  * Shared in-memory fake for [SyncOutboxDao] used across sync engine tests.
@@ -59,4 +60,41 @@ class FakeSyncOutboxDao : SyncOutboxDao {
         }
     }
     override suspend fun deleteAll() { entries.clear() }
+
+    override suspend fun markFailedBatch(ids: List<Long>, reason: String) {
+        entries.forEachIndexed { idx, e ->
+            if (e.id in ids) {
+                entries[idx] = e.copy(synced = 2, failReason = reason)
+            }
+        }
+    }
+    override suspend fun getFailed() = entries.filter { it.synced == 2 }.sortedBy { it.createdAt }
+    override suspend fun countFailed() = entries.count { it.synced == 2 }
+    override suspend fun retryFailed(id: Long) {
+        val idx = entries.indexOfFirst { it.id == id && it.synced == 2 }
+        if (idx >= 0) entries[idx] = entries[idx].copy(synced = 0, failReason = null)
+    }
+    override suspend fun retryAllFailed(tableName: String) {
+        entries.forEachIndexed { idx, e ->
+            if (e.synced == 2 && e.tableName == tableName) {
+                entries[idx] = e.copy(synced = 0, failReason = null)
+            }
+        }
+    }
+    override suspend fun discardFailed(id: Long) {
+        entries.removeAll { it.id == id && it.synced == 2 }
+    }
+    override suspend fun discardAllFailed(tableName: String) {
+        entries.removeAll { it.synced == 2 && it.tableName == tableName }
+    }
+    override suspend fun countPendingByTable(): List<TablePendingCount> {
+        return entries.filter { it.synced == 0 }
+            .groupBy { it.tableName }
+            .map { (table, list) -> TablePendingCount(table, list.size) }
+    }
+    override suspend fun countFailedByTable(): List<TablePendingCount> {
+        return entries.filter { it.synced == 2 }
+            .groupBy { it.tableName }
+            .map { (table, list) -> TablePendingCount(table, list.size) }
+    }
 }

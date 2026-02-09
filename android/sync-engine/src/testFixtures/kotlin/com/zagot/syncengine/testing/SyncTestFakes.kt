@@ -48,18 +48,35 @@ class FakeSupabaseClient : SyncRemoteClient {
         since: Long,
         overlapWindowMs: Long,
         limit: Int,
+        primaryKey: String,
+        afterPk: String?,
     ): List<Record> {
         maybeFail()
         return remoteTables[table]
             ?.filter { record ->
-                val ts = record[timestampColumn] as? Long ?: 0L
-                ts >= since
+                val ts = parseTs(record[timestampColumn])
+                val pk = record[primaryKey]?.toString() ?: ""
+                if (afterPk != null) {
+                    ts > since || (ts == since && pk > afterPk)
+                } else {
+                    ts >= since
+                }
             }
-            ?.sortedBy { record ->
-                (record[timestampColumn] as? Long) ?: 0L
-            }
+            ?.sortedWith(compareBy<Record> { parseTs(it[timestampColumn]) }.thenBy { it[primaryKey]?.toString() ?: "" })
             ?.take(limit)
             ?: emptyList()
+    }
+
+    /** Parse timestamp from Long, Number, or ISO-8601 String. */
+    private fun parseTs(value: Any?): Long = when (value) {
+        is Long -> value
+        is Number -> value.toLong()
+        is String -> try {
+            java.time.Instant.parse(value).toEpochMilli()
+        } catch (_: Exception) {
+            value.toLongOrNull() ?: 0L
+        }
+        else -> 0L
     }
 
     override suspend fun push(table: String, primaryKey: String, records: List<Record>) {

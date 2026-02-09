@@ -1,6 +1,6 @@
 # History Index
 
-Last updated: 2026-02-08
+Last updated: 2026-02-09
 
 ## Plans
 
@@ -134,6 +134,10 @@ Last updated: 2026-02-08
 | 2026-01-12 | Test Coverage | Test complexity drives coverage depth | Low=smoke tests, Medium=full coverage, High=edge cases | viewmodel-tests |
 | 2026-02-05 | Production Readiness Audit | DTO decimal fields must use String to avoid precision loss | audit-data-layer |
 | 2026-02-05 | Production Readiness Audit | Verify release signing + R8 minification early to avoid ship blockers | audit-build-and-dependencies |
+
+| 2026-02-08 | Production Readiness Audit | Avoid collecting infinite Flow when a single emission is needed; use first() | audit-ui-and-viewmodels |
+| 2026-02-08 | Production Readiness Audit | Launch suspend calls from viewModelScope to ensure they run | audit-ui-and-viewmodels |
+| 2026-02-08 | Production Readiness Audit | Move large transaction queries off main thread (use IO dispatcher) | audit-ui-and-viewmodels |
 
 ## Patterns & Solutions
 

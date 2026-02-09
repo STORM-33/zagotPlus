@@ -72,4 +72,40 @@ interface SyncOutboxDao {
     /** Delete all entries (for testing). */
     @Query("DELETE FROM sync_outbox")
     suspend fun deleteAll()
+
+    /** Mark entries as failed with a reason. */
+    @Query("UPDATE sync_outbox SET synced = 2, fail_reason = :reason WHERE id IN (:ids)")
+    suspend fun markFailedBatch(ids: List<Long>, reason: String)
+
+    /** Get all failed entries. */
+    @Query("SELECT * FROM sync_outbox WHERE synced = 2 ORDER BY created_at ASC")
+    suspend fun getFailed(): List<SyncOutboxEntity>
+
+    /** Get failed entry count. */
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE synced = 2")
+    suspend fun countFailed(): Int
+
+    /** Retry a failed entry (move back to pending). */
+    @Query("UPDATE sync_outbox SET synced = 0, fail_reason = NULL WHERE id = :id AND synced = 2")
+    suspend fun retryFailed(id: Long)
+
+    /** Retry all failed entries for a table. */
+    @Query("UPDATE sync_outbox SET synced = 0, fail_reason = NULL WHERE synced = 2 AND table_name = :tableName")
+    suspend fun retryAllFailed(tableName: String)
+
+    /** Discard (delete) a failed entry permanently. */
+    @Query("DELETE FROM sync_outbox WHERE id = :id AND synced = 2")
+    suspend fun discardFailed(id: Long)
+
+    /** Discard (delete) all failed entries for a table. */
+    @Query("DELETE FROM sync_outbox WHERE synced = 2 AND table_name = :tableName")
+    suspend fun discardAllFailed(tableName: String)
+
+    /** Count pending entries per table. */
+    @Query("SELECT table_name, COUNT(*) as cnt FROM sync_outbox WHERE synced = 0 GROUP BY table_name")
+    suspend fun countPendingByTable(): List<TablePendingCount>
+
+    /** Count failed entries per table. */
+    @Query("SELECT table_name, COUNT(*) as cnt FROM sync_outbox WHERE synced = 2 GROUP BY table_name")
+    suspend fun countFailedByTable(): List<TablePendingCount>
 }

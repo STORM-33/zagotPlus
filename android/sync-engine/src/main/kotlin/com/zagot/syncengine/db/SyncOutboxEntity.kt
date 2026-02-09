@@ -39,7 +39,15 @@ data class SyncOutboxEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 
-    /** 0 = pending, 1 = synced. */
+    /** 0 = pending, 1 = synced, 2 = failed. */
     @ColumnInfo(name = "synced")
     val synced: Int = 0,
+
+    /** Reason for failure (only set when synced = 2). */
+    @ColumnInfo(name = "fail_reason", defaultValue = "NULL")
+    val failReason: String? = null,
+
+    /** Number of push attempts (for retry tracking). */
+    @ColumnInfo(name = "push_attempts", defaultValue = "0")
+    val pushAttempts: Int = 0,
 )

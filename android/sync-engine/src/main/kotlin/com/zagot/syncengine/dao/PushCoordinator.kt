@@ -63,20 +63,21 @@ class PushCoordinator @Inject constructor(
      * Push all pending outbox entries for a table.
      * Groups entries by table and pushes in FIFO order.
      *
-     * @return number of successfully pushed entries
+     * @return [PushResult] with success count and details of any terminal failures
      */
     suspend fun pushPending(
         remoteClient: SyncRemoteClient,
         tableConfigs: List<SyncTableConfig>,
-    ): Int {
+    ): PushResult {
         val pending = outboxDao.getPending()
         if (pending.isEmpty()) {
             Log.d(TAG, "No pending outbox entries")
-            return 0
+            return PushResult(successCount = 0, failedEntries = emptyList())
         }
 
         Log.d(TAG, "Pushing ${pending.size} pending entries")
         var successCount = 0
+        val failures = mutableListOf<PushFailure>()
 
         // Group by table, then iterate in FK dependency order (tableConfigs order)
         // to avoid FK constraint violations on the remote database.
@@ -113,10 +114,14 @@ class PushCoordinator @Inject constructor(
 
                 when (category) {
                     PushErrorCategory.TERMINAL -> {
-                        // Skip terminal errors — mark as synced to avoid infinite retry
-                        Log.e(TAG, "Terminal error, skipping entries for ${config.tableName}")
+                        // Mark terminal errors as FAILED so they're visible to the user
+                        Log.e(TAG, "Terminal error, marking entries as FAILED for ${config.tableName}")
                         val ids = entries.map { it.id }
-                        outboxDao.markSyncedBatch(ids)
+                        val reason = e.message ?: "Terminal error ($category)"
+                        outboxDao.markFailedBatch(ids, reason)
+                        entries.forEach { entry ->
+                            failures.add(PushFailure(config.tableName, entry.recordId, reason))
+                        }
                     }
                     PushErrorCategory.AUTH -> {
                         // Auth failure — stop pushing, caller should handle re-auth
@@ -134,7 +139,7 @@ class PushCoordinator @Inject constructor(
             }
         }
 
-        return successCount
+        return PushResult(successCount = successCount, failedEntries = failures)
     }
 
     /**

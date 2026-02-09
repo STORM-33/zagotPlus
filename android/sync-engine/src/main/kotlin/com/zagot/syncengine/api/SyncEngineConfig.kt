@@ -44,4 +44,17 @@ data class SyncEngineConfig(
 
     /** Max attempts for FK constraint retry on realtime events. */
     val fkRetryMaxAttempts: Int = 3,
+
+    /**
+     * Called when a push fails terminally (400/404).
+     * Apps can use this to show a toast, log to analytics, etc.
+     * Called on the sync engine's IO dispatcher — don't block.
+     */
+    val onPushFailed: ((tableName: String, recordId: String, reason: String) -> Unit)? = null,
+
+    /**
+     * Called when a full sync cycle completes (catch-up or safety sync).
+     * Includes timing for observability.
+     */
+    val onSyncComplete: ((durationMs: Long, recordsPulled: Int, recordsPushed: Int) -> Unit)? = null,
 )
