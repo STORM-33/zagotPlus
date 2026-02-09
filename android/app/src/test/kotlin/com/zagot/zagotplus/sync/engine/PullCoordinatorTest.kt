@@ -6,6 +6,7 @@ import com.zagot.syncengine.dao.PullCoordinator
 import com.zagot.syncengine.db.SyncMetadataDao
 import com.zagot.syncengine.db.SyncMetadataEntity
 import com.zagot.syncengine.state.SyncStateMachine
+import com.zagot.syncengine.util.SyncTableConfig
 import org.junit.Before
 import org.junit.Test
 
@@ -52,9 +53,9 @@ class PullCoordinatorTest {
     fun `maxTimestamp extracts max updated_at from records`() {
         val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine)
         val records = listOf(
-            mapOf("id" to "a", "updated_at" to 100L),
-            mapOf("id" to "b", "updated_at" to 300L),
-            mapOf("id" to "c", "updated_at" to 200L),
+            mapOf("id" to "a", "updated_at" to "1970-01-01T00:00:00.100Z"),
+            mapOf("id" to "b", "updated_at" to "1970-01-01T00:00:00.300Z"),
+            mapOf("id" to "c", "updated_at" to "1970-01-01T00:00:00.200Z"),
         )
         assertThat(coordinator.maxTimestamp(records, "updated_at")).isEqualTo(300L)
     }
@@ -72,6 +73,21 @@ class PullCoordinatorTest {
             runBlocking { fakeClient.pull("products", "updated_at", 0L) }
         }.exceptionOrNull()
         assertThat(exception).isNotNull()
+    }
+
+    @Test
+    fun `pull collects paginated results`() = runBlocking {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine).apply {
+            pullPageSize = 2
+        }
+        val config = SyncTableConfig(tableName = "products", timestampColumn = "updated_at")
+
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p1", "updated_at" to "1970-01-01T00:00:00.100Z"))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p2", "updated_at" to "1970-01-01T00:00:00.200Z"))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p3", "updated_at" to "1970-01-01T00:00:00.300Z"))
+
+        val records = coordinator.pull(fakeClient, config)
+        assertThat(records.mapNotNull { it["id"]?.toString() }).containsExactly("p1", "p2", "p3").inOrder()
     }
 
     // Minimal in-memory SyncMetadataDao for unit tests

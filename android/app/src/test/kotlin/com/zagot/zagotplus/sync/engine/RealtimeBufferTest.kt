@@ -41,22 +41,26 @@ class RealtimeBufferTest {
     }
 
     @Test
-    fun `buffer overflow discards events and sets flag`() {
+    fun `buffer overflow drops oldest and sets flag`() {
         repeat(RealtimeBuffer.MAX_BUFFER_SIZE + 1) { i ->
             buffer.add(makeEvent("products", "p$i"))
         }
         assertThat(buffer.overflowed).isTrue()
-        assertThat(buffer.size).isEqualTo(0) // cleared on overflow
+        assertThat(buffer.size).isEqualTo(RealtimeBuffer.MAX_BUFFER_SIZE)
+
+        // Oldest event should have been dropped.
+        assertThat(buffer.buffer.first().record["id"]).isEqualTo("p1")
     }
 
     @Test
-    fun `events added after overflow are discarded`() {
+    fun `events added after overflow are still accepted`() {
         repeat(RealtimeBuffer.MAX_BUFFER_SIZE + 1) { i ->
             buffer.add(makeEvent("products", "p$i"))
         }
         buffer.add(makeEvent("products", "extra"))
-        assertThat(buffer.size).isEqualTo(0)
+        assertThat(buffer.size).isEqualTo(RealtimeBuffer.MAX_BUFFER_SIZE)
         assertThat(buffer.overflowed).isTrue()
+        assertThat(buffer.buffer.last().record["id"]).isEqualTo("extra")
     }
 
     @Test

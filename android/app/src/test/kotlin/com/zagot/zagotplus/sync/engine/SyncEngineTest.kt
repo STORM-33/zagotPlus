@@ -132,6 +132,7 @@ class SyncEngineTest {
         assertThat(config.timestampColumn).isEqualTo("server_updated_at")
         assertThat(config.softDeleteColumn).isEqualTo("deleted_at")
         assertThat(config.conflictResolver).isEqualTo(LastWriteWins)
+        assertThat(config.pullPageSize).isNull()
     }
 
     @Test

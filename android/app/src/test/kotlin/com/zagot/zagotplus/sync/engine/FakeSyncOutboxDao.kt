@@ -10,6 +10,8 @@ class FakeSyncOutboxDao : SyncOutboxDao {
     private var autoId = 1L
     private val entries = mutableListOf<SyncOutboxEntity>()
 
+    val findPendingForRecordsCallSizes = mutableListOf<Int>()
+
     override suspend fun insert(entry: SyncOutboxEntity): Long {
         val id = autoId++
         entries.add(entry.copy(id = id))
@@ -21,6 +23,19 @@ class FakeSyncOutboxDao : SyncOutboxDao {
     override suspend fun getPending() = entries.filter { it.synced == 0 }.sortedBy { it.createdAt }
     override suspend fun getPendingForTable(tableName: String) =
         entries.filter { it.synced == 0 && it.tableName == tableName }.sortedBy { it.createdAt }
+
+    override suspend fun findPendingForRecords(tableName: String, recordIds: List<String>): List<SyncOutboxEntity> {
+        findPendingForRecordsCallSizes.add(recordIds.size)
+        val recordIdSet = recordIds.toHashSet()
+        return entries.filter { it.synced == 0 && it.tableName == tableName && recordIdSet.contains(it.recordId) }
+    }
+
+    override suspend fun hasPendingDelete(tableName: String, recordId: String): Boolean {
+        return entries.any {
+            it.synced == 0 && it.tableName == tableName && it.recordId == recordId && it.operation == "DELETE"
+        }
+    }
+
     override suspend fun markSynced(id: Long) {
         val idx = entries.indexOfFirst { it.id == id }
         if (idx >= 0) entries[idx] = entries[idx].copy(synced = 1)

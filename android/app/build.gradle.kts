@@ -102,7 +102,7 @@ android {
 
 dependencies {
     implementation(project(":sync-engine"))
-    testImplementation(testFixtures(project(":sync-engine")))
+    testDebugImplementation(testFixtures(project(":sync-engine")))
 
     // AndroidX Core
     implementation(libs.androidx.core.ktx)

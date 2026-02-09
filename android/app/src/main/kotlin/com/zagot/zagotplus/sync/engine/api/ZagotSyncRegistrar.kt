@@ -108,6 +108,7 @@ class ZagotSyncRegistrar @Inject constructor(
         // 6. transactions — FK: locations, products, purchase_batches, sale_batches
         engine.registerTable(SyncTableConfig(
             tableName = "transactions",
+            pullPageSize = 5000,
             applyToRoom = { records ->
                 val entities = records.map { TransactionDto.fromRecord(it).toEntity() }
                 transactionDao.upsertAll(entities)
@@ -117,6 +118,7 @@ class ZagotSyncRegistrar @Inject constructor(
         // 7. cash_operations — FK: locations, expense_categories, purchase_batches
         engine.registerTable(SyncTableConfig(
             tableName = "cash_operations",
+            pullPageSize = 5000,
             applyToRoom = { records ->
                 val entities = records.map { CashOperationDto.fromRecord(it).toEntity() }
                 cashOperationDao.upsertAll(entities)

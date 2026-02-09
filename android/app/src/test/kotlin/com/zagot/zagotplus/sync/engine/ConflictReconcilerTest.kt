@@ -105,6 +105,7 @@ class ConflictReconcilerTest {
         assertThat(outboxDao.countPending()).isEqualTo(1) // only p2 still pending
     }
 
+
     // === Helpers ===
 
     private fun productsConfig() = SyncTableConfig(tableName = "products")
