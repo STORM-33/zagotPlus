@@ -24,6 +24,24 @@ interface SyncOutboxDao {
     @Query("SELECT * FROM sync_outbox WHERE synced = 0 AND table_name = :tableName ORDER BY created_at ASC")
     suspend fun getPendingForTable(tableName: String): List<SyncOutboxEntity>
 
+    /** Find pending outbox entries whose record_id is in the given list. */
+    @Query(
+        """
+        SELECT * FROM sync_outbox
+        WHERE synced = 0 AND table_name = :tableName AND record_id IN (:recordIds)
+        """
+    )
+    suspend fun findPendingForRecords(tableName: String, recordIds: List<String>): List<SyncOutboxEntity>
+
+    /** Check if a pending DELETE exists for a specific record. */
+    @Query(
+        """
+        SELECT COUNT(*) > 0 FROM sync_outbox
+        WHERE synced = 0 AND table_name = :tableName AND record_id = :recordId AND operation = 'DELETE'
+        """
+    )
+    suspend fun hasPendingDelete(tableName: String, recordId: String): Boolean
+
     /** Mark an entry as synced. */
     @Query("UPDATE sync_outbox SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: Long)

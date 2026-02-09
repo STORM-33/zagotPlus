@@ -16,6 +16,10 @@ data class SyncTableConfig(
     val conflictResolver: ConflictResolver = LastWriteWins,
     /** Callback to apply pulled/buffered records to Room via UPSERT. */
     val applyToRoom: (suspend (List<Record>) -> Unit)? = null,
+    /** Optional callback to hard-delete a record from Room on realtime DELETE events. */
+    val deleteFromRoom: (suspend (primaryKeyValue: String) -> Unit)? = null,
+    /** Override pull page size for this table. Null = use engine default. */
+    val pullPageSize: Int? = null,
 )
 
 /**

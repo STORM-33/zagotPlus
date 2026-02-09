@@ -44,6 +44,9 @@ class PullCoordinator @Inject constructor(
     /** Page size for pull requests. Set by SyncEngineImpl from SyncEngineConfig. */
     var pullPageSize: Int = DEFAULT_PAGE_SIZE
 
+    /** Overlap window (ms) subtracted from last_synced_at. Set by SyncEngineImpl. */
+    var overlapWindowMs: Long = OVERLAP_WINDOW_MS
+
     /**
      * Execute a paginated incremental pull for a single table.
      *
@@ -65,7 +68,7 @@ class PullCoordinator @Inject constructor(
             Log.d(TAG, "Full-pulling ${config.tableName} (no incremental filter)")
         } else {
             val lastSyncedAt = syncMetadataDao.getLastSyncedAt(config.tableName) ?: 0L
-            since = maxOf(0L, lastSyncedAt - OVERLAP_WINDOW_MS)
+            since = maxOf(0L, lastSyncedAt - overlapWindowMs)
             Log.d(TAG, "Pulling ${config.tableName}: lastSyncedAt=$lastSyncedAt, effectiveSince=$since")
         }
 

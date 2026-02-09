@@ -18,12 +18,30 @@ data class SyncEngineConfig(
     /** Max records per pull HTTP request. Drives cursor-based pagination. */
     val pullPageSize: Int = 1000,
 
+    /** Overlap window subtracted from last_synced_at when pulling (ms). */
+    val pullOverlapWindowMs: Long = 5_000L,
+
+    /** Max realtime events to buffer during catch-up before overflow is flagged. */
+    val realtimeBufferMaxEvents: Int = 1000,
+
+    /** Max duration for catch-up before forcing LIVE (ms). 0 = no limit. */
+    val maxCatchUpDurationMs: Long = 30 * 60 * 1000L,
+
     /** Max retries for catch-up when realtime buffer overflows repeatedly. */
     val maxCatchUpRetries: Int = 3,
+
+    /** Backoff base for catch-up overflow retry (ms). */
+    val catchUpOverflowBackoffBaseMs: Long = 1_000L,
+
+    /** Backoff max for catch-up overflow retry (ms). */
+    val catchUpOverflowBackoffMaxMs: Long = 30_000L,
 
     /** How long to keep synced outbox entries before pruning (ms). */
     val outboxPruneRetentionMs: Long = 30 * 60 * 1_000L,
 
     /** Delay before FK constraint retry on realtime events (ms). */
     val fkRetryDelayMs: Long = 500L,
+
+    /** Max attempts for FK constraint retry on realtime events. */
+    val fkRetryMaxAttempts: Int = 3,
 )

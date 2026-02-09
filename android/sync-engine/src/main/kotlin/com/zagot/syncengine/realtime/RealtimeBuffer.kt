@@ -5,12 +5,6 @@ import com.zagot.syncengine.api.RealtimeChangeEvent
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Manages the realtime event buffer during CATCHING_UP state (spec Section 6).
- *
- * Events received from Realtime while in CATCHING_UP are buffered in-memory
- * and drained after the pull completes. Buffer cap prevents unbounded memory growth.
- */
 @Singleton
 class RealtimeBuffer @Inject constructor() {
 
@@ -19,42 +13,43 @@ class RealtimeBuffer @Inject constructor() {
         const val MAX_BUFFER_SIZE = 1000
     }
 
-    private val _buffer = mutableListOf<RealtimeChangeEvent>()
-    val buffer: List<RealtimeChangeEvent> get() = _buffer.toList()
+    private val lock = Any()
+    private val _buffer = ArrayDeque<RealtimeChangeEvent>(MAX_BUFFER_SIZE)
+    val buffer: List<RealtimeChangeEvent> get() = synchronized(lock) { _buffer.toList() }
 
-    /** True if buffer overflowed and a re-sync is needed. */
+    var maxBufferSize: Int = MAX_BUFFER_SIZE
+        set(value) = synchronized(lock) {
+            field = value.coerceAtLeast(1)
+            while (_buffer.size > field) {
+                overflowed = true
+                _buffer.removeFirst()
+            }
+        }
+
     var overflowed: Boolean = false
         private set
 
-    val size: Int get() = _buffer.size
+    val size: Int get() = synchronized(lock) { _buffer.size }
 
-    /**
-     * Add an event to the buffer. If buffer exceeds MAX_BUFFER_SIZE,
-     * discard all events and flag overflow for re-sync.
-     */
-    fun add(event: RealtimeChangeEvent) {
-        if (overflowed) return // already overflowed, discard
-
-        _buffer.add(event)
-        if (_buffer.size > MAX_BUFFER_SIZE) {
-            Log.w(TAG, "Buffer overflow (>${MAX_BUFFER_SIZE} events), flagging re-sync")
-            _buffer.clear()
+    fun add(event: RealtimeChangeEvent) = synchronized(lock) {
+        val cap = maxBufferSize
+        if (_buffer.size >= cap) {
+            if (!overflowed) {
+                Log.w(TAG, "Buffer overflow (>$cap events), flagging re-sync")
+            }
             overflowed = true
+            _buffer.removeFirst()  // Circular: drop oldest, keep newest
         }
+        _buffer.addLast(event)
     }
 
-    /**
-     * Drain the buffer, returning all events and clearing.
-     * Caller must deduplicate against already-pulled data.
-     */
-    fun drain(): List<RealtimeChangeEvent> {
+    fun drain(): List<RealtimeChangeEvent> = synchronized(lock) {
         val events = _buffer.toList()
         _buffer.clear()
-        return events
+        events
     }
 
-    /** Reset buffer state (after drain or on transition to a new catch-up). */
-    fun reset() {
+    fun reset() = synchronized(lock) {
         _buffer.clear()
         overflowed = false
     }

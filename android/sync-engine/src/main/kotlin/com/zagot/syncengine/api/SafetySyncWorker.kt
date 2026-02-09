@@ -38,7 +38,7 @@ class SafetySyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting safety sync")
         return try {
-            syncEngine.executeSyncCycle()
+            syncEngine.syncNow()
             Log.d(TAG, "Safety sync completed")
             Result.success()
         } catch (e: Exception) {
