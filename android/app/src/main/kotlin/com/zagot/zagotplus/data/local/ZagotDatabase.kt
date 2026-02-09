@@ -24,13 +24,14 @@ import com.zagot.syncengine.db.SyncMetadataDao
 import com.zagot.syncengine.db.SyncMetadataEntity
 import com.zagot.syncengine.db.SyncOutboxDao
 import com.zagot.syncengine.db.SyncOutboxEntity
+import com.zagot.syncengine.db.SyncOutboxMigrations
 
 /**
  * Room database for Zagot+ application.
  * Offline-first local storage with Supabase sync.
  *
  * Entities: LocationEntity, ProductEntity, TransactionEntity, PurchaseBatchEntity, SaleBatchEntity, ExpenseCategoryEntity, CashOperationEntity
- * Version: 15 (add sync_metadata and sync_outbox tables for realtime sync engine)
+ * Version: 16 (add sync_outbox failure tracking columns)
  */
 @Database(
     entities = [
@@ -44,7 +45,7 @@ import com.zagot.syncengine.db.SyncOutboxEntity
         SyncMetadataEntity::class,
         SyncOutboxEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -587,5 +588,10 @@ abstract class ZagotDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sync_outbox_created_at ON sync_outbox(created_at)")
             }
         }
+
+        /**
+         * Migration from version 15 to 16: Add failure tracking columns to sync_outbox.
+         */
+        val MIGRATION_15_16 = SyncOutboxMigrations.addFailureTracking(15, 16)
     }
 }

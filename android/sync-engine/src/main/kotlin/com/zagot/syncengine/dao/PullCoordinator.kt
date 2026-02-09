@@ -8,6 +8,8 @@ import com.zagot.syncengine.db.SyncMetadataEntity
 import com.zagot.syncengine.state.SyncEvent
 import com.zagot.syncengine.state.SyncStateMachine
 import com.zagot.syncengine.util.SyncTableConfig
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,12 +22,10 @@ import javax.inject.Singleton
  * and same-timestamp races. Deduplication via UPSERT by PK handles any
  * re-fetched records cheaply.
  *
- * Uses cursor-based pagination to handle tables with more records than a
- * single page (default 1000). The cursor advances by the max timestamp in
- * each batch, using `gte` (greater-than-or-equal) so records sharing the
- * boundary timestamp are not skipped. Duplicates from re-fetched boundary
- * records are filtered by PK within the pagination loop and also handled
- * by the caller's UPSERT-by-PK logic.
+ * Uses compound cursor `(timestamp, pk)` pagination to handle tables with
+ * more records than a single page (default 1000). When the timestamp cursor
+ * doesn't advance (same-timestamp records), the PK cursor provides strict
+ * forward progress, eliminating the need for in-memory dedup sets.
  */
 @Singleton
 class PullCoordinator @Inject constructor(
@@ -44,24 +44,50 @@ class PullCoordinator @Inject constructor(
     /** Page size for pull requests. Set by SyncEngineImpl from SyncEngineConfig. */
     var pullPageSize: Int = DEFAULT_PAGE_SIZE
 
-    /** Overlap window (ms) subtracted from last_synced_at. Set by SyncEngineImpl. */
+    /** Overlap window (ms) subtracted from last_synced_at for incremental pulls. */
     var overlapWindowMs: Long = OVERLAP_WINDOW_MS
 
     /**
-     * Execute a paginated incremental pull for a single table.
+     * Execute a paginated incremental pull for a single table, emitting each
+     * page as a separate element in a cold [Flow].
      *
-     * Fetches pages of [pullPageSize] records, advancing the cursor by the max
-     * timestamp in each batch. Stops when a page returns fewer than [pullPageSize]
-     * records (meaning the server has no more).
+     * Callers should collect this flow inside a transaction boundary to apply
+     * batches without accumulating all records in memory.
      *
      * @param remoteClient the remote data source
      * @param config table configuration
-     * @return all pulled records across all pages (caller applies to Room)
+     * @return a cold Flow emitting one [List<Record>] per fetched page
      */
-    suspend fun pull(
+    fun pull(
         remoteClient: SyncRemoteClient,
         config: SyncTableConfig,
-    ): List<Record> {
+    ): Flow<List<Record>> = flow {
+        pullStreaming(remoteClient, config) { batch, _ ->
+            if (batch.isNotEmpty()) {
+                emit(batch)
+            }
+        }
+    }
+
+    /**
+     * Streaming pull: fetches page-by-page and invokes [onBatch] for each page.
+     *
+     * This is the core primitive used by SyncEngineImpl to apply pulled records
+     * in short per-batch transactions to avoid OOM/WAL blowups on large tables.
+     *
+     * Uses compound cursor `(timestamp, pk)` for deterministic pagination —
+     * each page is strictly after the previous one, so no dedup set is needed.
+     *
+     * @param remoteClient the remote data source
+     * @param config table configuration
+     * @param onBatch callback invoked per page with records and max timestamp
+     * @return summary of the streaming pull
+     */
+    suspend fun pullStreaming(
+        remoteClient: SyncRemoteClient,
+        config: SyncTableConfig,
+        onBatch: suspend (batch: List<Record>, batchMaxTimestamp: Long) -> Unit,
+    ): PullStreamingResult {
         var since: Long
         if (config.fullPull) {
             since = 0L
@@ -69,68 +95,86 @@ class PullCoordinator @Inject constructor(
         } else {
             val lastSyncedAt = syncMetadataDao.getLastSyncedAt(config.tableName) ?: 0L
             since = maxOf(0L, lastSyncedAt - overlapWindowMs)
-            Log.d(TAG, "Pulling ${config.tableName}: lastSyncedAt=$lastSyncedAt, effectiveSince=$since")
+            Log.d(TAG, "Pulling ${config.tableName}: lastSyncedAt=$lastSyncedAt, overlapMs=$overlapWindowMs, effectiveSince=$since")
         }
 
-        val allRecords = mutableListOf<Record>()
-        val seenPks = mutableSetOf<String>()
+        val pageSize = config.pullPageSize ?: pullPageSize
         var page = 0
+        var totalRecords = 0
+        var lastPk: String? = null
 
         do {
             val batch = remoteClient.pull(
                 table = config.tableName,
                 timestampColumn = config.timestampColumn,
                 since = since,
-                overlapWindowMs = 0L, // we already subtracted the overlap
-                limit = pullPageSize,
+                overlapWindowMs = 0L,
+                limit = pageSize,
+                primaryKey = config.primaryKey,
+                afterPk = lastPk,
             )
-
-            // Deduplicate: gte re-fetches boundary records from the previous page.
-            // Filter by PK to only add genuinely new records.
-            var newInBatch = 0
-            for (record in batch) {
-                val pk = record[config.primaryKey]?.toString() ?: continue
-                if (seenPks.add(pk)) {
-                    allRecords.add(record)
-                    newInBatch++
-                }
-            }
 
             page++
 
-            if (batch.size == pullPageSize) {
-                // Advance cursor to the max timestamp in this batch for next page.
-                // Uses gte so records sharing the boundary timestamp are included
-                // in the next fetch — dedup above filters out already-seen records.
-                val batchMaxTs = maxTimestamp(batch, config.timestampColumn)
-                if (batchMaxTs > since) {
-                    since = batchMaxTs
-                } else if (newInBatch == 0) {
-                    // Cursor didn't advance AND no new records — we're stuck.
-                    // This means 1000+ records share the exact same timestamp (pathological).
-                    Log.w(TAG, "Cursor stuck for ${config.tableName} at $since with no new records, breaking pagination")
-                    break
-                }
-                // If cursor didn't advance but we still got new records (duplicates
-                // were filtered), keep going — there are more records at this timestamp.
+            val batchMaxTs = maxTimestamp(batch, config.timestampColumn)
+
+            if (batch.isNotEmpty()) {
+                totalRecords += batch.size
+                onBatch(batch, batchMaxTs)
             }
 
-            Log.d(TAG, "Pulled page $page: ${batch.size} fetched, $newInBatch new from ${config.tableName} (total=${allRecords.size})")
-        } while (batch.size == pullPageSize)
+            if (batch.size == pageSize) {
+                val batchLastPk = batch.lastOrNull()?.get(config.primaryKey)?.toString()
+                if (batchLastPk != null) {
+                    if (batchMaxTs > since || batchLastPk != lastPk) {
+                        since = batchMaxTs
+                        lastPk = batchLastPk
+                    } else {
+                        Log.w(TAG, "Cursor stuck for ${config.tableName} at $since, breaking pagination")
+                        break
+                    }
+                } else {
+                    Log.w(TAG, "Cursor missing PK for ${config.tableName} at $since, breaking pagination")
+                    break
+                }
+            }
 
-        stateMachine.onEvent(SyncEvent.PullComplete(config.tableName, allRecords.size))
-        return allRecords
+            Log.d(TAG, "Pulled page $page: ${batch.size} fetched from ${config.tableName} (total=$totalRecords)")
+        } while (batch.size == pageSize)
+
+        stateMachine.onEvent(SyncEvent.PullComplete(config.tableName, totalRecords))
+        return PullStreamingResult(totalRecords = totalRecords, pagesProcessed = page)
     }
 
     /**
      * Compute the max updated_at timestamp from a list of pulled records.
-     * Parses ISO-8601 strings from Supabase into epoch millis for metadata storage.
+     * Handles ISO-8601 strings from Supabase and numeric epoch millis.
      */
     fun maxTimestamp(records: List<Record>, timestampColumn: String): Long {
         return records.maxOfOrNull { record ->
-            val ts = record[timestampColumn] as? String
-            ts?.let { Instant.parse(it).toEpochMilli() } ?: 0L
+            when (val ts = record[timestampColumn]) {
+                is String -> try {
+                    Instant.parse(ts).toEpochMilli()
+                } catch (_: Exception) {
+                    ts.toLongOrNull() ?: 0L
+                }
+                is Number -> ts.toLong()
+                else -> 0L
+            }
         } ?: 0L
+    }
+
+    /** Read last_synced_at for a table via the DAO. */
+    suspend fun getLastSyncedAt(tableName: String): Long {
+        return syncMetadataDao.getLastSyncedAt(tableName) ?: 0L
+    }
+
+    /**
+     * Force-set last_synced_at for a table, even if it moves backwards.
+     * Used for catch-up overflow retry rollback.
+     */
+    suspend fun setLastSyncedAt(tableName: String, lastSyncedAt: Long) {
+        syncMetadataDao.upsert(SyncMetadataEntity(tableName, lastSyncedAt))
     }
 
     /**
@@ -146,3 +190,11 @@ class PullCoordinator @Inject constructor(
         }
     }
 }
+
+/**
+ * Summary of a streaming pull operation.
+ */
+data class PullStreamingResult(
+    val totalRecords: Int,
+    val pagesProcessed: Int,
+)

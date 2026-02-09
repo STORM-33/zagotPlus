@@ -74,6 +74,7 @@ class CashViewModelTest {
         every { cashRepository.getDailyChangeGlobal(any()) } returns flowOf(BigDecimal("500.00"))
         every { cashRepository.getDailyDepositsGlobal(any()) } returns flowOf(BigDecimal("200.00"))
         every { cashRepository.getActiveCategories() } returns flowOf(testCategories)
+        every { cashRepository.observeCashChangeSignal() } returns flowOf("init")
         coEvery { cashRepository.getTotalHistoryCount() } returns 1
         coEvery { cashRepository.getCashHistoryPaged(any(), any()) } returns testHistoryItems
         every { locationRepository.getAllLocations() } returns flowOf(emptyList())

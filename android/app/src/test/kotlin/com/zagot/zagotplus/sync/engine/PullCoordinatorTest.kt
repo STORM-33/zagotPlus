@@ -2,11 +2,14 @@ package com.zagot.zagotplus.sync.engine
 
 import com.google.common.truth.Truth.assertThat
 import com.zagot.syncengine.testing.FakeSupabaseClient
+import com.zagot.syncengine.api.Record
 import com.zagot.syncengine.dao.PullCoordinator
 import com.zagot.syncengine.db.SyncMetadataDao
 import com.zagot.syncengine.db.SyncMetadataEntity
 import com.zagot.syncengine.state.SyncStateMachine
 import com.zagot.syncengine.util.SyncTableConfig
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 
@@ -86,8 +89,134 @@ class PullCoordinatorTest {
         fakeClient.injectRemoteRecord("products", mapOf("id" to "p2", "updated_at" to "1970-01-01T00:00:00.200Z"))
         fakeClient.injectRemoteRecord("products", mapOf("id" to "p3", "updated_at" to "1970-01-01T00:00:00.300Z"))
 
-        val records = coordinator.pull(fakeClient, config)
+        val records = coordinator.pull(fakeClient, config).toList().flatten()
         assertThat(records.mapNotNull { it["id"]?.toString() }).containsExactly("p1", "p2", "p3").inOrder()
+    }
+
+    @Test
+    fun `pullStreaming invokes onBatch per page`() = runBlocking {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine).apply {
+            pullPageSize = 2
+        }
+        val config = SyncTableConfig(tableName = "products", timestampColumn = "updated_at")
+
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p1", "updated_at" to 100L))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p2", "updated_at" to 200L))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p3", "updated_at" to 300L))
+
+        val batches = mutableListOf<List<Map<String, Any?>>>()
+        val maxTimestamps = mutableListOf<Long>()
+
+        val result = coordinator.pullStreaming(fakeClient, config) { batch, batchMaxTs ->
+            batches.add(batch)
+            maxTimestamps.add(batchMaxTs)
+        }
+
+        assertThat(result.totalRecords).isEqualTo(3)
+        assertThat(result.pagesProcessed).isGreaterThan(1)
+        assertThat(batches.flatMap { it }.mapNotNull { it["id"]?.toString() })
+            .containsExactly("p1", "p2", "p3").inOrder()
+    }
+
+    @Test
+    fun `pullStreaming respects per-table pullPageSize`() = runBlocking {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine).apply {
+            pullPageSize = 100 // engine default
+        }
+        // Table overrides to page size 1
+        val config = SyncTableConfig(tableName = "products", timestampColumn = "updated_at", pullPageSize = 1)
+
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p1", "updated_at" to 100L))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p2", "updated_at" to 200L))
+
+        var batchCount = 0
+        coordinator.pullStreaming(fakeClient, config) { _, _ -> batchCount++ }
+        assertThat(batchCount).isEqualTo(2) // page size 1 = 2 batches for 2 records
+    }
+
+    @Test
+    fun `pullStreaming handles same-timestamp records with compound cursor`() = runBlocking {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine).apply {
+            pullPageSize = 3
+        }
+        val config = SyncTableConfig(tableName = "products", timestampColumn = "updated_at")
+
+        // 7 records all with same timestamp — more than 2 pages
+        repeat(7) { i ->
+            fakeClient.injectRemoteRecord("products", mapOf(
+                "id" to "p${String.format("%03d", i)}",
+                "updated_at" to 100L,
+            ))
+        }
+
+        val allRecords = mutableListOf<Record>()
+        coordinator.pullStreaming(fakeClient, config) { batch, _ ->
+            allRecords.addAll(batch)
+        }
+
+        assertThat(allRecords.map { it["id"] }).containsExactly(
+            "p000", "p001", "p002", "p003", "p004", "p005", "p006"
+        ).inOrder()
+    }
+
+    @Test
+    fun `pullStreaming breaks on stuck cursor`() = runBlocking {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine).apply {
+            pullPageSize = 2
+        }
+        val config = SyncTableConfig(tableName = "products", timestampColumn = "updated_at")
+
+        // 3 records share same timestamp — compound cursor handles this now
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p1", "updated_at" to 100L))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p2", "updated_at" to 100L))
+        fakeClient.injectRemoteRecord("products", mapOf("id" to "p3", "updated_at" to 100L))
+
+        val result = coordinator.pullStreaming(fakeClient, config) { _, _ -> }
+        // Compound cursor fetches all same-timestamp records
+        assertThat(result.totalRecords).isEqualTo(3)
+    }
+
+    @Test
+    fun `maxTimestamp handles numeric timestamps`() {
+        val coordinator = PullCoordinator(FakeSyncMetadataDao(), stateMachine)
+        val records = listOf(
+            mapOf("id" to "a", "updated_at" to 100L),
+            mapOf("id" to "b", "updated_at" to 300L),
+            mapOf("id" to "c", "updated_at" to 200L),
+        )
+        assertThat(coordinator.maxTimestamp(records, "updated_at")).isEqualTo(300L)
+    }
+
+    @Test
+    fun `getLastSyncedAt and setLastSyncedAt round-trip`() = runBlocking {
+        val dao = FakeSyncMetadataDao()
+        val coordinator = PullCoordinator(dao, stateMachine)
+
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(0L)
+
+        coordinator.setLastSyncedAt("products", 12345L)
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(12345L)
+
+        // setLastSyncedAt can move backwards (for overflow retry rollback)
+        coordinator.setLastSyncedAt("products", 100L)
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(100L)
+    }
+
+    @Test
+    fun `updateLastSyncedAt only advances forward`() = runBlocking {
+        val dao = FakeSyncMetadataDao()
+        val coordinator = PullCoordinator(dao, stateMachine)
+
+        coordinator.updateLastSyncedAt("products", 500L)
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(500L)
+
+        // Should NOT go backwards
+        coordinator.updateLastSyncedAt("products", 300L)
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(500L)
+
+        // Should go forward
+        coordinator.updateLastSyncedAt("products", 700L)
+        assertThat(coordinator.getLastSyncedAt("products")).isEqualTo(700L)
     }
 
     // Minimal in-memory SyncMetadataDao for unit tests

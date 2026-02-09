@@ -106,6 +106,57 @@ class ConflictReconcilerTest {
     }
 
 
+    @Test
+    fun `reconcileBatch only checks PKs in the batch`() = runBlocking {
+        outboxDao.insert(makeOutboxEntry("products", "p1", 100L))
+        outboxDao.insert(makeOutboxEntry("products", "p2", 100L))
+
+        val remoteBatch = listOf(
+            mapOf("id" to "p2", "server_updated_at" to 200L)
+        )
+
+        val losers = reconciler.reconcileBatch(remoteBatch, productsConfig())
+        assertThat(losers).hasSize(1)
+        assertThat(outboxDao.countPending()).isEqualTo(1) // p1 still pending
+        assertThat(outboxDao.findPendingForRecordsCallSizes).containsExactly(1).inOrder()
+    }
+
+    @Test
+    fun `reconcileBatch chunks IN clause to 900`() = runBlocking {
+        val remoteBatch = mutableListOf<Map<String, Any?>>()
+        repeat(901) { i ->
+            val id = "p${i + 1}"
+            outboxDao.insert(makeOutboxEntry("products", id, 100L))
+            remoteBatch.add(mapOf("id" to id, "server_updated_at" to 200L))
+        }
+
+        val losers = reconciler.reconcileBatch(remoteBatch, productsConfig())
+        assertThat(losers).hasSize(901)
+        assertThat(outboxDao.countPending()).isEqualTo(0)
+        assertThat(outboxDao.findPendingForRecordsCallSizes).containsExactly(900, 1).inOrder()
+    }
+
+    @Test
+    fun `reconcileBatch returns empty for empty batch`() = runBlocking {
+        outboxDao.insert(makeOutboxEntry("products", "p1", 100L))
+        val losers = reconciler.reconcileBatch(emptyList(), productsConfig())
+        assertThat(losers).isEmpty()
+        assertThat(outboxDao.countPending()).isEqualTo(1) // untouched
+    }
+
+    @Test
+    fun `reconcileBatch local wins leaves outbox pending`() = runBlocking {
+        outboxDao.insert(makeOutboxEntry("products", "p1", 500L)) // local is newer
+
+        val remoteBatch = listOf(
+            mapOf("id" to "p1", "server_updated_at" to 200L)
+        )
+
+        val losers = reconciler.reconcileBatch(remoteBatch, productsConfig())
+        assertThat(losers).isEmpty()
+        assertThat(outboxDao.countPending()).isEqualTo(1) // still pending, will be pushed
+    }
+
     // === Helpers ===
 
     private fun productsConfig() = SyncTableConfig(tableName = "products")

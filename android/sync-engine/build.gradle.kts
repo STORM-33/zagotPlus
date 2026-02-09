@@ -11,8 +11,11 @@ android {
     testFixtures { enable = true }
     sourceSets {
         // Kotlin plugin doesn't currently compile android testFixtures variants;
-        // include fakes in debug sources so app unit tests can compile against them.
+        // include fakes in debug/release sources so app unit tests can compile against them.
         getByName("debug") {
+            kotlin.srcDir("src/testFixtures/kotlin")
+        }
+        getByName("release") {
             kotlin.srcDir("src/testFixtures/kotlin")
         }
     }

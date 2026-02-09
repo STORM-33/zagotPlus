@@ -134,6 +134,9 @@ class HistoryViewModelTest {
         every { locationRepository.getAllLocations() } returns flowOf(listOf(testLocation, testLocation2))
         every { purchaseBatchRepository.observeTotalBatchCount() } returns purchaseBatchCountFlow
         every { saleBatchRepository.observeTotalBatchCount() } returns saleBatchCountFlow
+        every { purchaseBatchRepository.observeLatestUpdate() } returns flowOf(null)
+        every { saleBatchRepository.observeLatestUpdate() } returns flowOf(null)
+        every { transactionRepository.observeLatestUpdate() } returns flowOf(null)
         coEvery { purchaseBatchRepository.getTotalBatchCount() } returns 2
         coEvery { saleBatchRepository.getTotalBatchCount() } returns 0
         coEvery { purchaseBatchRepository.getAllBatchesPaginated(any(), any()) } returns listOf(testBatch, testBatch2)
