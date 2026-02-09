@@ -87,6 +87,14 @@ class SyncEngineImpl @Inject constructor(
 
     companion object {
         private const val TAG = "SyncEngine"
+        /**
+         * Max records to pass to applyToRoom in a single call.
+         * Prevents Room from building an excessively large WAL journal
+         * when applying thousands of pulled records within one transaction.
+         */
+        private const val APPLY_CHUNK_SIZE = 500
+        /** Log a warning when total pulled records across all tables exceeds this. */
+        private const val LARGE_PULL_THRESHOLD = 5_000
     }
 
     private val registeredTables = mutableListOf<SyncTableConfig>()
@@ -279,11 +287,13 @@ class SyncEngineImpl @Inject constructor(
 
                 // Step 6: Drain realtime buffer (deduplicated against pulled data)
                 if (!realtimeBuffer.overflowed) {
+                    // Pre-index pulled records by (table, pk) for O(1) dedup lookups.
+                    val pulledIndex = buildPulledIndex(allPulled)
+
                     val bufferedEvents = realtimeBuffer.drain()
                     for (event in bufferedEvents) {
                         val config = registeredTables.find { it.tableName == event.table } ?: continue
-                        val pulledRecords = allPulled[config] ?: emptyList()
-                        if (!isDuplicate(event, pulledRecords, config)) {
+                        if (!isDuplicate(event, pulledIndex, config)) {
                             applyRecordsToRoom(config, listOf(event.record))
                         }
                     }
@@ -368,12 +378,22 @@ class SyncEngineImpl @Inject constructor(
     }
 
     /**
-     * Apply records from a pull to Room.
-     * Delegates to the per-table applyToRoom callback.
+     * Apply records from a pull to Room in chunks.
+     * Delegates to the per-table applyToRoom callback, splitting large
+     * record sets to keep Room WAL pressure manageable.
      */
     private suspend fun applyRecordsToRoom(config: SyncTableConfig, records: List<Record>) {
-        config.applyToRoom?.invoke(records)
-            ?: Log.w(TAG, "No applyToRoom callback for ${config.tableName}, ${records.size} records skipped")
+        val callback = config.applyToRoom
+        if (callback == null) {
+            Log.w(TAG, "No applyToRoom callback for ${config.tableName}, ${records.size} records skipped")
+            return
+        }
+        if (records.size > LARGE_PULL_THRESHOLD) {
+            Log.w(TAG, "Large pull for ${config.tableName}: ${records.size} records — consider incremental sync frequency")
+        }
+        for (chunk in records.chunked(APPLY_CHUNK_SIZE)) {
+            callback.invoke(chunk)
+        }
     }
 
     /**
@@ -415,20 +435,55 @@ class SyncEngineImpl @Inject constructor(
     }
 
     /**
+     * Build an index of pulled records keyed by (tableName, primaryKeyValue)
+     * for O(1) deduplication during realtime buffer drain.
+     */
+    private fun buildPulledIndex(
+        allPulled: Map<SyncTableConfig, List<Record>>,
+    ): Map<String, Record> {
+        val index = mutableMapOf<String, Record>()
+        for ((config, records) in allPulled) {
+            for (record in records) {
+                val pk = record[config.primaryKey]?.toString() ?: continue
+                val key = "${config.tableName}:$pk"
+                // If multiple records with the same PK (shouldn't happen), keep latest
+                val existing = index[key]
+                if (existing == null) {
+                    index[key] = record
+                } else {
+                    val existingTs = parseTimestampSafe(existing[config.timestampColumn])
+                    val newTs = parseTimestampSafe(record[config.timestampColumn])
+                    if (newTs > existingTs) index[key] = record
+                }
+            }
+        }
+        return index
+    }
+
+    private fun parseTimestampSafe(value: Any?): Long {
+        return when (value) {
+            is String -> try { Instant.parse(value).toEpochMilli() } catch (_: Exception) { 0L }
+            is Long -> value
+            is Number -> value.toLong()
+            else -> 0L
+        }
+    }
+
+    /**
      * Check if a buffered realtime event duplicates an already-pulled record.
      * Same PK and event.updated_at <= pulled.updated_at → skip.
-     * Timestamps are ISO-8601 strings from Supabase.
+     * Uses pre-built index for O(1) lookup.
      */
-    private suspend fun isDuplicate(
+    private fun isDuplicate(
         event: RealtimeChangeEvent,
-        pulledRecords: List<Record>,
+        pulledIndex: Map<String, Record>,
         config: SyncTableConfig,
     ): Boolean {
         val eventPk = event.record[config.primaryKey]?.toString() ?: return false
         val eventTsStr = event.record[config.timestampColumn] as? String ?: return false
 
-        val pulled = pulledRecords.find { it[config.primaryKey]?.toString() == eventPk }
-            ?: return false
+        val key = "${event.table}:$eventPk"
+        val pulled = pulledIndex[key] ?: return false
         val pulledTsStr = pulled[config.timestampColumn] as? String ?: return false
 
         val eventTs = try { Instant.parse(eventTsStr).toEpochMilli() } catch (_: Exception) { return false }

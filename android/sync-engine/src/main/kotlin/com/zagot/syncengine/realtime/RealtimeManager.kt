@@ -3,6 +3,7 @@ package com.zagot.syncengine.realtime
 import android.util.Log
 import com.zagot.syncengine.api.RealtimeChangeEvent
 import com.zagot.syncengine.api.RealtimeChannelContract
+import com.zagot.syncengine.api.Record
 import com.zagot.syncengine.state.SyncEvent
 import com.zagot.syncengine.state.SyncState
 import com.zagot.syncengine.state.SyncStateMachine
@@ -69,20 +70,22 @@ class RealtimeManager @Inject constructor(
             SyncState.CATCHING_UP -> {
                 // Buffer during catch-up — don't apply yet
                 realtimeBuffer.add(event)
+                val pk = extractPk(event.record)
                 stateMachine.onEvent(
-                    SyncEvent.RealtimeEventBuffered(event.table, event.record["id"]?.toString())
+                    SyncEvent.RealtimeEventBuffered(event.table, pk)
                 )
-                Log.d(TAG, "Buffered event: ${event.table}/${event.record["id"]}")
+                Log.d(TAG, "Buffered event: ${event.table}/$pk")
             }
 
             SyncState.LIVE -> {
                 // Apply immediately in LIVE state
+                val pk = extractPk(event.record)
                 try {
                     onLiveEvent?.invoke(event)
                     stateMachine.onEvent(
-                        SyncEvent.RealtimeEventApplied(event.table, event.record["id"]?.toString())
+                        SyncEvent.RealtimeEventApplied(event.table, pk)
                     )
-                    Log.d(TAG, "Applied live event: ${event.table}/${event.record["id"]}")
+                    Log.d(TAG, "Applied live event: ${event.table}/$pk")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to apply live event: ${e.message}")
                 }
@@ -93,5 +96,13 @@ class RealtimeManager @Inject constructor(
                 Log.w(TAG, "Received event while OFFLINE, discarding")
             }
         }
+    }
+
+    /**
+     * Extract a primary key value from a record for logging.
+     * Tries common PK column names since RealtimeManager doesn't have table config.
+     */
+    private fun extractPk(record: Record): String? {
+        return (record["id"] ?: record["uuid"] ?: record["pk"])?.toString()
     }
 }

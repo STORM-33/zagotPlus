@@ -122,8 +122,13 @@ class PushCoordinator @Inject constructor(
                         // Auth failure — stop pushing, caller should handle re-auth
                         throw e
                     }
+                    PushErrorCategory.CONFLICT -> {
+                        // 409: server has a newer version. Don't retry with stale data —
+                        // entries stay in outbox, safety sync will pull latest → reconcile → re-push.
+                        Log.w(TAG, "Conflict for ${config.tableName}, deferring to safety sync")
+                    }
                     else -> {
-                        // Transient / rate limit / conflict — entries stay in outbox for retry
+                        // Transient / rate limit — entries stay in outbox for retry
                     }
                 }
             }
@@ -165,8 +170,11 @@ class PushCoordinator @Inject constructor(
                 val category = classifyError(e)
                 attempt++
 
-                if (category == PushErrorCategory.TERMINAL || category == PushErrorCategory.AUTH) {
-                    throw e // don't retry these
+                if (category == PushErrorCategory.TERMINAL
+                    || category == PushErrorCategory.AUTH
+                    || category == PushErrorCategory.CONFLICT
+                ) {
+                    throw e // don't retry — TERMINAL/AUTH are fatal, CONFLICT needs pull+reconcile first
                 }
 
                 if (attempt >= MAX_RETRIES) {
