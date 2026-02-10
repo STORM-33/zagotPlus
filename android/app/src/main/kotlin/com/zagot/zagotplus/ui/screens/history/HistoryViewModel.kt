@@ -3,6 +3,8 @@ package com.zagot.zagotplus.ui.screens.history
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zagot.zagotplus.data.DefaultDispatcher
+import com.zagot.zagotplus.data.IoDispatcher
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.DateRange
 import com.zagot.zagotplus.ui.components.DateRangePreset
@@ -18,6 +20,7 @@ import com.zagot.zagotplus.domain.repository.TransactionRepository
 import com.zagot.zagotplus.sync.SyncStatus
 import com.zagot.zagotplus.sync.SyncStatusRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -91,7 +95,9 @@ class HistoryViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val locationRepository: LocationRepository,
     private val devicePreferences: com.zagot.zagotplus.data.preferences.DevicePreferences,
-    private val syncStatusRepository: SyncStatusRepository
+    private val syncStatusRepository: SyncStatusRepository,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -210,8 +216,12 @@ class HistoryViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 // Load reference data (include inactive products for history display)
-                products = productRepository.getAllProducts().first().associateBy { it.id }
-                val locationsList = locationRepository.getAllLocations().first()
+                val (productsMap, locationsList) = withContext(ioDispatcher) {
+                    val productsMap = productRepository.getAllProducts().first().associateBy { it.id }
+                    val locationsList = locationRepository.getAllLocations().first()
+                    productsMap to locationsList
+                }
+                products = productsMap
                 locationsMap = locationsList.associateBy { it.id }
 
                 // Load batches with current filter
@@ -267,114 +277,6 @@ class HistoryViewModel @Inject constructor(
                 }
             }
 
-            // Build maps for merging voided+correction batches
-            // Map: original batch ID -> correction batch (for purchase batches)
-            val purchaseCorrectionMap = realPurchaseBatches
-                .filter { it.correctsBatchId != null }
-                .associateBy { it.correctsBatchId!! }
-
-            // Set of voided batch IDs that have corrections (will be merged)
-            val purchaseVoidedWithCorrection = purchaseCorrectionMap.keys
-
-            // Convert purchase batches to display items, filtering by location and date
-            val purchaseBatchDisplayItems = realPurchaseBatches
-                .filter { batch ->
-                    // Apply date filter
-                    (startDate == null || !batch.createdAt.isBefore(startDate)) &&
-                    (endDate == null || !batch.createdAt.isAfter(endDate))
-                }
-                .filter { batch ->
-                    // Apply location filter
-                    state.selectedLocationId == null || batch.locationId == state.selectedLocationId
-                }
-                .filter { _ ->
-                    // Apply type filter - only show purchase batches if PURCHASE is selected or no filter
-                    state.selectedTypes.isEmpty() || BatchType.PURCHASE in state.selectedTypes
-                }
-                .mapNotNull { batch ->
-                    when {
-                        // This is a voided batch with a correction -> skip (will be merged with correction)
-                        batch.isVoided && batch.id in purchaseVoidedWithCorrection -> null
-
-                        // This is a voided batch without a correction -> hide unless showDeleted is true
-                        batch.isVoided && batch.id !in purchaseVoidedWithCorrection -> {
-                            if (state.showDeleted) {
-                                HistoryBatchDisplayItem.RealBatch(
-                                    batchId = batch.id,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    isVoided = true,
-                                    isCorrection = false,
-                                    correctionReason = null,
-                                    correctsBatchId = null
-                                )
-                            } else null
-                        }
-
-                        // This is a correction batch -> merge with original
-                        batch.correctsBatchId != null -> {
-                            val originalBatch = purchaseBatchesById[batch.correctsBatchId]
-                            if (originalBatch != null) {
-                                HistoryBatchDisplayItem.EditedBatch(
-                                    currentBatchId = batch.id,
-                                    originalBatchId = originalBatch.id,
-                                    batchType = BatchType.PURCHASE,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    correctionReason = batch.correctionReason,
-                                    originalTotalWeightKg = originalBatch.totalWeightKg ?: BigDecimal.ZERO,
-                                    originalTotalAmount = originalBatch.totalAmount,
-                                    originalItemCount = originalBatch.itemCount ?: 0,
-                                    originalNotes = originalBatch.notes,
-                                    originalCreatedAt = originalBatch.createdAt
-                                )
-                            } else {
-                                // Original not found (shouldn't happen now), show as regular correction
-                                HistoryBatchDisplayItem.RealBatch(
-                                    batchId = batch.id,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    isVoided = false,
-                                    isCorrection = true,
-                                    correctionReason = batch.correctionReason,
-                                    correctsBatchId = batch.correctsBatchId
-                                )
-                            }
-                        }
-
-                        // Normal batch
-                        else -> HistoryBatchDisplayItem.RealBatch(
-                            batchId = batch.id,
-                            createdAt = batch.createdAt,
-                            totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                            totalAmount = batch.totalAmount,
-                            itemCount = batch.itemCount ?: 0,
-                            locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                            isSynced = batch.syncedAt != null,
-                            notes = batch.notes,
-                            isVoided = false,
-                            isCorrection = false,
-                            correctionReason = null,
-                            correctsBatchId = null
-                        )
-                    }
-                }
-
             // Load real sale batches (include voided if showDeleted filter is active)
             val realSaleBatches = saleBatchRepository.getAllBatchesPaginated(
                 limit = PAGE_SIZE * 2,
@@ -397,112 +299,6 @@ class HistoryViewModel @Inject constructor(
                 }
             }
 
-            // Build maps for merging voided+correction batches (for sale batches)
-            val saleCorrectionMap = realSaleBatches
-                .filter { it.correctsBatchId != null }
-                .associateBy { it.correctsBatchId!! }
-
-            val saleVoidedWithCorrection = saleCorrectionMap.keys
-
-            // Convert sale batches to display items, filtering by location and date
-            val saleBatchDisplayItems = realSaleBatches
-                .filter { batch ->
-                    // Apply date filter
-                    (startDate == null || !batch.createdAt.isBefore(startDate)) &&
-                    (endDate == null || !batch.createdAt.isAfter(endDate))
-                }
-                .filter { batch ->
-                    // Apply location filter
-                    state.selectedLocationId == null || batch.locationId == state.selectedLocationId
-                }
-                .filter { _ ->
-                    // Apply type filter - only show sale batches if SALE is selected or no filter
-                    state.selectedTypes.isEmpty() || BatchType.SALE in state.selectedTypes
-                }
-                .mapNotNull { batch ->
-                    when {
-                        // This is a voided batch with a correction -> skip (will be merged with correction)
-                        batch.isVoided && batch.id in saleVoidedWithCorrection -> null
-
-                        // This is a voided batch without a correction -> hide unless showDeleted is true
-                        batch.isVoided && batch.id !in saleVoidedWithCorrection -> {
-                            if (state.showDeleted) {
-                                HistoryBatchDisplayItem.RealSaleBatch(
-                                    batchId = batch.id,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    isVoided = true,
-                                    isCorrection = false,
-                                    correctionReason = null,
-                                    correctsBatchId = null
-                                )
-                            } else null
-                        }
-
-                        // This is a correction batch -> merge with original
-                        batch.correctsBatchId != null -> {
-                            val originalBatch = saleBatchesById[batch.correctsBatchId]
-                            if (originalBatch != null) {
-                                HistoryBatchDisplayItem.EditedBatch(
-                                    currentBatchId = batch.id,
-                                    originalBatchId = originalBatch.id,
-                                    batchType = BatchType.SALE,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    correctionReason = batch.correctionReason,
-                                    originalTotalWeightKg = originalBatch.totalWeightKg ?: BigDecimal.ZERO,
-                                    originalTotalAmount = originalBatch.totalAmount,
-                                    originalItemCount = originalBatch.itemCount ?: 0,
-                                    originalNotes = originalBatch.notes,
-                                    originalCreatedAt = originalBatch.createdAt
-                                )
-                            } else {
-                                // Original not found (shouldn't happen now), show as regular correction
-                                HistoryBatchDisplayItem.RealSaleBatch(
-                                    batchId = batch.id,
-                                    createdAt = batch.createdAt,
-                                    totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                                    totalAmount = batch.totalAmount,
-                                    itemCount = batch.itemCount ?: 0,
-                                    locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                                    isSynced = batch.syncedAt != null,
-                                    notes = batch.notes,
-                                    isVoided = false,
-                                    isCorrection = true,
-                                    correctionReason = batch.correctionReason,
-                                    correctsBatchId = batch.correctsBatchId
-                                )
-                            }
-                        }
-
-                        // Normal batch
-                        else -> HistoryBatchDisplayItem.RealSaleBatch(
-                            batchId = batch.id,
-                            createdAt = batch.createdAt,
-                            totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
-                            totalAmount = batch.totalAmount,
-                            itemCount = batch.itemCount ?: 0,
-                            locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
-                            isSynced = batch.syncedAt != null,
-                            notes = batch.notes,
-                            isVoided = false,
-                            isCorrection = false,
-                            correctionReason = null,
-                            correctsBatchId = null
-                        )
-                    }
-                }
-
             // Load unbatched transactions for virtual batches (transfers and adjustments)
             val unbatchedTransactions = transactionRepository.getFilteredTransactions(
                 filter = transactionFilter.copy(
@@ -516,21 +312,240 @@ class HistoryViewModel @Inject constructor(
                 offset = 0
             )
 
-            // Group unbatched transactions into virtual batches
-            val virtualBatches = groupIntoVirtualBatches(unbatchedTransactions)
-                .filter { batch ->
-                    // Apply type filter
-                    state.selectedTypes.isEmpty() || batch.batchType in state.selectedTypes
-                }
+            val totalPurchaseCount = purchaseBatchRepository.getTotalBatchCount()
+            val totalSaleCount = saleBatchRepository.getTotalBatchCount()
 
-            // Merge and sort all batches by createdAt DESC
-            val allBatches = (purchaseBatchDisplayItems + saleBatchDisplayItems + virtualBatches)
-                .sortedByDescending { it.createdAt }
-                .take(PAGE_SIZE)
+            val (allBatches, totalBatchCount) = withContext(defaultDispatcher) {
+                // Build maps for merging voided+correction batches
+                // Map: original batch ID -> correction batch (for purchase batches)
+                val purchaseCorrectionMap = realPurchaseBatches
+                    .filter { it.correctsBatchId != null }
+                    .associateBy { it.correctsBatchId!! }
 
-            val totalBatchCount = purchaseBatchRepository.getTotalBatchCount() + 
-                                  saleBatchRepository.getTotalBatchCount() + 
-                                  virtualBatches.size
+                // Set of voided batch IDs that have corrections (will be merged)
+                val purchaseVoidedWithCorrection = purchaseCorrectionMap.keys
+
+                // Convert purchase batches to display items, filtering by location and date
+                val purchaseBatchDisplayItems = realPurchaseBatches
+                    .filter { batch ->
+                        // Apply date filter
+                        (startDate == null || !batch.createdAt.isBefore(startDate)) &&
+                        (endDate == null || !batch.createdAt.isAfter(endDate))
+                    }
+                    .filter { batch ->
+                        // Apply location filter
+                        state.selectedLocationId == null || batch.locationId == state.selectedLocationId
+                    }
+                    .filter { _ ->
+                        // Apply type filter - only show purchase batches if PURCHASE is selected or no filter
+                        state.selectedTypes.isEmpty() || BatchType.PURCHASE in state.selectedTypes
+                    }
+                    .mapNotNull { batch ->
+                        when {
+                            // This is a voided batch with a correction -> skip (will be merged with correction)
+                            batch.isVoided && batch.id in purchaseVoidedWithCorrection -> null
+
+                            // This is a voided batch without a correction -> hide unless showDeleted is true
+                            batch.isVoided && batch.id !in purchaseVoidedWithCorrection -> {
+                                if (state.showDeleted) {
+                                    HistoryBatchDisplayItem.RealBatch(
+                                        batchId = batch.id,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        isVoided = true,
+                                        isCorrection = false,
+                                        correctionReason = null,
+                                        correctsBatchId = null
+                                    )
+                                } else null
+                            }
+
+                            // This is a correction batch -> merge with original
+                            batch.correctsBatchId != null -> {
+                                val originalBatch = purchaseBatchesById[batch.correctsBatchId]
+                                if (originalBatch != null) {
+                                    HistoryBatchDisplayItem.EditedBatch(
+                                        currentBatchId = batch.id,
+                                        originalBatchId = originalBatch.id,
+                                        batchType = BatchType.PURCHASE,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        correctionReason = batch.correctionReason,
+                                        originalTotalWeightKg = originalBatch.totalWeightKg ?: BigDecimal.ZERO,
+                                        originalTotalAmount = originalBatch.totalAmount,
+                                        originalItemCount = originalBatch.itemCount ?: 0,
+                                        originalNotes = originalBatch.notes,
+                                        originalCreatedAt = originalBatch.createdAt
+                                    )
+                                } else {
+                                    // Original not found (shouldn't happen now), show as regular correction
+                                    HistoryBatchDisplayItem.RealBatch(
+                                        batchId = batch.id,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        isVoided = false,
+                                        isCorrection = true,
+                                        correctionReason = batch.correctionReason,
+                                        correctsBatchId = batch.correctsBatchId
+                                    )
+                                }
+                            }
+
+                            // Normal batch
+                            else -> HistoryBatchDisplayItem.RealBatch(
+                                batchId = batch.id,
+                                createdAt = batch.createdAt,
+                                totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                totalAmount = batch.totalAmount,
+                                itemCount = batch.itemCount ?: 0,
+                                locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                isSynced = batch.syncedAt != null,
+                                notes = batch.notes,
+                                isVoided = false,
+                                isCorrection = false,
+                                correctionReason = null,
+                                correctsBatchId = null
+                            )
+                        }
+                    }
+
+                // Build maps for merging voided+correction batches (for sale batches)
+                val saleCorrectionMap = realSaleBatches
+                    .filter { it.correctsBatchId != null }
+                    .associateBy { it.correctsBatchId!! }
+
+                val saleVoidedWithCorrection = saleCorrectionMap.keys
+
+                // Convert sale batches to display items, filtering by location and date
+                val saleBatchDisplayItems = realSaleBatches
+                    .filter { batch ->
+                        // Apply date filter
+                        (startDate == null || !batch.createdAt.isBefore(startDate)) &&
+                        (endDate == null || !batch.createdAt.isAfter(endDate))
+                    }
+                    .filter { batch ->
+                        // Apply location filter
+                        state.selectedLocationId == null || batch.locationId == state.selectedLocationId
+                    }
+                    .filter { _ ->
+                        // Apply type filter - only show sale batches if SALE is selected or no filter
+                        state.selectedTypes.isEmpty() || BatchType.SALE in state.selectedTypes
+                    }
+                    .mapNotNull { batch ->
+                        when {
+                            // This is a voided batch with a correction -> skip (will be merged with correction)
+                            batch.isVoided && batch.id in saleVoidedWithCorrection -> null
+
+                            // This is a voided batch without a correction -> hide unless showDeleted is true
+                            batch.isVoided && batch.id !in saleVoidedWithCorrection -> {
+                                if (state.showDeleted) {
+                                    HistoryBatchDisplayItem.RealSaleBatch(
+                                        batchId = batch.id,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        isVoided = true,
+                                        isCorrection = false,
+                                        correctionReason = null,
+                                        correctsBatchId = null
+                                    )
+                                } else null
+                            }
+
+                            // This is a correction batch -> merge with original
+                            batch.correctsBatchId != null -> {
+                                val originalBatch = saleBatchesById[batch.correctsBatchId]
+                                if (originalBatch != null) {
+                                    HistoryBatchDisplayItem.EditedBatch(
+                                        currentBatchId = batch.id,
+                                        originalBatchId = originalBatch.id,
+                                        batchType = BatchType.SALE,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        correctionReason = batch.correctionReason,
+                                        originalTotalWeightKg = originalBatch.totalWeightKg ?: BigDecimal.ZERO,
+                                        originalTotalAmount = originalBatch.totalAmount,
+                                        originalItemCount = originalBatch.itemCount ?: 0,
+                                        originalNotes = originalBatch.notes,
+                                        originalCreatedAt = originalBatch.createdAt
+                                    )
+                                } else {
+                                    // Original not found (shouldn't happen now), show as regular correction
+                                    HistoryBatchDisplayItem.RealSaleBatch(
+                                        batchId = batch.id,
+                                        createdAt = batch.createdAt,
+                                        totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                        totalAmount = batch.totalAmount,
+                                        itemCount = batch.itemCount ?: 0,
+                                        locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                        isSynced = batch.syncedAt != null,
+                                        notes = batch.notes,
+                                        isVoided = false,
+                                        isCorrection = true,
+                                        correctionReason = batch.correctionReason,
+                                        correctsBatchId = batch.correctsBatchId
+                                    )
+                                }
+                            }
+
+                            // Normal batch
+                            else -> HistoryBatchDisplayItem.RealSaleBatch(
+                                batchId = batch.id,
+                                createdAt = batch.createdAt,
+                                totalWeightKg = batch.totalWeightKg ?: BigDecimal.ZERO,
+                                totalAmount = batch.totalAmount,
+                                itemCount = batch.itemCount ?: 0,
+                                locationName = locationsMap[batch.locationId]?.name ?: "Невідома локація",
+                                isSynced = batch.syncedAt != null,
+                                notes = batch.notes,
+                                isVoided = false,
+                                isCorrection = false,
+                                correctionReason = null,
+                                correctsBatchId = null
+                            )
+                        }
+                    }
+
+                // Group unbatched transactions into virtual batches
+                val virtualBatches = groupIntoVirtualBatches(unbatchedTransactions)
+                    .filter { batch ->
+                        // Apply type filter
+                        state.selectedTypes.isEmpty() || batch.batchType in state.selectedTypes
+                    }
+
+                // Merge and sort all batches by createdAt DESC
+                val allBatches = (purchaseBatchDisplayItems + saleBatchDisplayItems + virtualBatches)
+                    .sortedByDescending { it.createdAt }
+                    .take(PAGE_SIZE)
+
+                val totalBatchCount = totalPurchaseCount + totalSaleCount + virtualBatches.size
+
+                allBatches to totalBatchCount
+            }
 
             _uiState.update {
                 it.copy(

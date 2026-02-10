@@ -1,5 +1,6 @@
 package com.zagot.zagotplus.ui.screens.history
 
+import androidx.lifecycle.viewModelScope
 import com.zagot.zagotplus.data.preferences.DevicePreferences
 import com.zagot.zagotplus.domain.model.Location
 import com.zagot.zagotplus.ui.components.DateRange
@@ -154,11 +155,24 @@ class HistoryViewModelTest {
     fun tearDown() {
         // Cancel any running coroutines in the test scope (including ViewModel's viewModelScope)
         testScope.cancel()
+        if (::viewModel.isInitialized) {
+            viewModel.viewModelScope.cancel()
+        }
         Dispatchers.resetMain()
     }
 
     private fun createViewModel(): HistoryViewModel {
-        return HistoryViewModel(transactionRepository, purchaseBatchRepository, saleBatchRepository, productRepository, locationRepository, devicePreferences, syncStatusRepository)
+        return HistoryViewModel(
+            transactionRepository,
+            purchaseBatchRepository,
+            saleBatchRepository,
+            productRepository,
+            locationRepository,
+            devicePreferences,
+            syncStatusRepository,
+            testDispatcher,
+            testDispatcher
+        )
     }
 
     @Test

@@ -161,22 +161,34 @@ fun AnimatedCounter(
     fontWeight: FontWeight? = null,
     textAlign: TextAlign? = null,
     stiffness: Float = 300f,
+    animate: Boolean = true,
 ) {
-    val animatable = remember { Animatable(targetValue.toFloat()) }
+    if (!animate) {
+        Text(
+            text = formatter(targetValue),
+            modifier = modifier,
+            style = style,
+            color = color,
+            fontWeight = fontWeight,
+            textAlign = textAlign,
+        )
+    } else {
+        val animatable = remember { Animatable(targetValue.toFloat()) }
 
-    LaunchedEffect(targetValue) {
-        animatable.animateTo(
-            targetValue = targetValue.toFloat(),
-            animationSpec = spring(stiffness = stiffness)
+        LaunchedEffect(targetValue) {
+            animatable.animateTo(
+                targetValue = targetValue.toFloat(),
+                animationSpec = spring(stiffness = stiffness)
+            )
+        }
+
+        Text(
+            text = formatter(BigDecimal(animatable.value.toDouble())),
+            modifier = modifier,
+            style = style,
+            color = color,
+            fontWeight = fontWeight,
+            textAlign = textAlign,
         )
     }
-
-    Text(
-        text = formatter(BigDecimal(animatable.value.toDouble())),
-        modifier = modifier,
-        style = style,
-        color = color,
-        fontWeight = fontWeight,
-        textAlign = textAlign,
-    )
 }

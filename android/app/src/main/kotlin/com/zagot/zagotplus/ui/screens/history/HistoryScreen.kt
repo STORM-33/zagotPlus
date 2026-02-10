@@ -518,6 +518,7 @@ private fun HistoryContent(
                     }.toSortedMap(compareByDescending { it })
                 }
                 val itemSpacing = adaptiveItemSpacing()
+                val enableAnimations = uiState.batches.size <= 200
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -539,12 +540,56 @@ private fun HistoryContent(
                             val transactions = expandedBatchTransactions[batch.id]
                             val isLoadingTransactions = batch.id in isLoadingBatchDetails
 
-                            AnimatedListItem {
+                            if (enableAnimations) {
+                                AnimatedListItem {
+                                    ExpandableBatchCard(
+                                        batch = batch,
+                                        isExpanded = isExpanded,
+                                        transactions = transactions,
+                                        isLoadingTransactions = isLoadingTransactions,
+                                        enableAnimations = true,
+                                        onClick = { onToggleBatchExpansion(batch.id) },
+                                        onEditClick = { batchId ->
+                                            when (batch) {
+                                                is HistoryBatchDisplayItem.RealBatch ->
+                                                    onNavigateToEditPurchase(batchId.toString())
+                                                is HistoryBatchDisplayItem.RealSaleBatch ->
+                                                    onNavigateToEditSale(batchId.toString())
+                                                is HistoryBatchDisplayItem.EditedBatch -> {
+                                                    when (batch.batchType) {
+                                                        BatchType.PURCHASE -> onNavigateToEditPurchase(batchId.toString())
+                                                        BatchType.SALE -> onNavigateToEditSale(batchId.toString())
+                                                        else -> { }
+                                                    }
+                                                }
+                                                is HistoryBatchDisplayItem.VirtualBatch,
+                                                is HistoryBatchDisplayItem.TransferBatch -> { }
+                                            }
+                                        },
+                                        onDeleteClick = { batchId ->
+                                            when (batch) {
+                                                is HistoryBatchDisplayItem.RealBatch ->
+                                                    onVoidBatch(batchId, BatchType.PURCHASE)
+                                                is HistoryBatchDisplayItem.RealSaleBatch ->
+                                                    onVoidBatch(batchId, BatchType.SALE)
+                                                is HistoryBatchDisplayItem.EditedBatch ->
+                                                    onVoidBatch(batchId, batch.batchType)
+                                                is HistoryBatchDisplayItem.VirtualBatch,
+                                                is HistoryBatchDisplayItem.TransferBatch -> { }
+                                            }
+                                        },
+                                        currencyFormat = currencyFormat,
+                                        weightFormat = weightFormat,
+                                        dateFormatter = dateFormatter,
+                                    )
+                                }
+                            } else {
                                 ExpandableBatchCard(
                                     batch = batch,
                                     isExpanded = isExpanded,
                                     transactions = transactions,
                                     isLoadingTransactions = isLoadingTransactions,
+                                    enableAnimations = false,
                                     onClick = { onToggleBatchExpansion(batch.id) },
                                     onEditClick = { batchId ->
                                         when (batch) {
@@ -860,6 +905,7 @@ private fun ExpandableBatchCard(
     isExpanded: Boolean,
     transactions: List<HistoryDisplayItem>?,
     isLoadingTransactions: Boolean,
+    enableAnimations: Boolean,
     onClick: () -> Unit,
     onEditClick: (batchId: java.util.UUID) -> Unit,
     onDeleteClick: (batchId: java.util.UUID) -> Unit,
@@ -921,6 +967,8 @@ private fun ExpandableBatchCard(
                   batch !is HistoryBatchDisplayItem.TransferBatch &&
                   batch !is HistoryBatchDisplayItem.EditedBatch  // Edited batches shouldn't be re-edited
     
+    val contentModifier = if (enableAnimations) Modifier.animateContentSize() else Modifier
+
     Box {
         Card(
             modifier = modifier
@@ -936,7 +984,7 @@ private fun ExpandableBatchCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize()
+                    .then(contentModifier)
             ) {
                 // Batch header (always visible)
                 Row(
@@ -1053,7 +1101,8 @@ private fun ExpandableBatchCard(
                                         targetValue = batch.originalTotalWeightKg,
                                         formatter = { "${weightFormat.format(it)} кг" },
                                         style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        animate = enableAnimations
                                     )
                                 }
                                 // Current weight
@@ -1061,7 +1110,8 @@ private fun ExpandableBatchCard(
                                     targetValue = weightValue,
                                     formatter = { "${weightPrefix}${weightFormat.format(it)} кг" },
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    animate = enableAnimations
                                 )
                                 // Show difference
                                 if (hasWeightChange) {
@@ -1074,7 +1124,8 @@ private fun ExpandableBatchCard(
                                         color = if (weightDiff > java.math.BigDecimal.ZERO)
                                             MaterialTheme.colorScheme.primary
                                         else
-                                            MaterialTheme.colorScheme.error
+                                            MaterialTheme.colorScheme.error,
+                                        animate = enableAnimations
                                     )
                                 }
                                 // Amount with change
@@ -1092,7 +1143,8 @@ private fun ExpandableBatchCard(
                                                 targetValue = amount,
                                                 formatter = { "₴${currencyFormat.format(it)}" },
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.primary
+                                                color = MaterialTheme.colorScheme.primary,
+                                                animate = enableAnimations
                                             )
                                         }
                                         if (hasAmountChange) {
@@ -1104,7 +1156,8 @@ private fun ExpandableBatchCard(
                                                 color = if (amountDiff > java.math.BigDecimal.ZERO)
                                                     MaterialTheme.colorScheme.primary
                                                 else
-                                                    MaterialTheme.colorScheme.error
+                                                    MaterialTheme.colorScheme.error,
+                                                animate = enableAnimations
                                             )
                                         }
                                     }
@@ -1115,14 +1168,16 @@ private fun ExpandableBatchCard(
                                     targetValue = weightValue,
                                     formatter = { "${weightPrefix}${weightFormat.format(it)} кг" },
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    animate = enableAnimations
                                 )
                                 amountValue?.let { amount ->
                                     AnimatedCounter(
                                         targetValue = amount,
                                         formatter = { "₴${currencyFormat.format(it)}" },
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.primary,
+                                        animate = enableAnimations
                                     )
                                 }
                             }
@@ -1162,7 +1217,8 @@ private fun ExpandableBatchCard(
                                     TransactionRow(
                                         transaction = transaction,
                                         currencyFormat = currencyFormat,
-                                        weightFormat = weightFormat
+                                        weightFormat = weightFormat,
+                                        enableAnimations = enableAnimations
                                     )
                                 }
                                 
@@ -1335,14 +1391,16 @@ private fun ExpandableBatchCard(
                                                             MaterialTheme.colorScheme.onSurfaceVariant
                                                         else
                                                             MaterialTheme.colorScheme.onSurface,
-                                                        modifier = Modifier.weight(1f)
+                                                        modifier = Modifier.weight(1f),
+                                                        animate = enableAnimations
                                                     )
                                                     AnimatedCounter(
                                                         targetValue = batch.totalWeightKg,
                                                         formatter = { "${weightFormat.format(it)} кг" },
                                                         style = MaterialTheme.typography.bodySmall,
                                                         fontWeight = if (hasWeightChange) FontWeight.Medium else FontWeight.Normal,
-                                                        modifier = Modifier.weight(1f)
+                                                        modifier = Modifier.weight(1f),
+                                                        animate = enableAnimations
                                                     )
                                                     if (hasWeightChange) {
                                                         val sign = if (weightDiff > java.math.BigDecimal.ZERO) "+" else ""
@@ -1355,7 +1413,8 @@ private fun ExpandableBatchCard(
                                                                 MaterialTheme.colorScheme.primary
                                                             else
                                                                 MaterialTheme.colorScheme.error,
-                                                            modifier = Modifier.weight(1f)
+                                                            modifier = Modifier.weight(1f),
+                                                            animate = enableAnimations
                                                         )
                                                     } else {
                                                         Text(
@@ -1390,14 +1449,16 @@ private fun ExpandableBatchCard(
                                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                                             else
                                                                 MaterialTheme.colorScheme.onSurface,
-                                                            modifier = Modifier.weight(1f)
+                                                            modifier = Modifier.weight(1f),
+                                                            animate = enableAnimations
                                                         )
                                                         AnimatedCounter(
                                                             targetValue = batch.totalAmount ?: java.math.BigDecimal.ZERO,
                                                             formatter = { "₴${currencyFormat.format(it)}" },
                                                             style = MaterialTheme.typography.bodySmall,
                                                             fontWeight = if (hasAmountChange) FontWeight.Medium else FontWeight.Normal,
-                                                            modifier = Modifier.weight(1f)
+                                                            modifier = Modifier.weight(1f),
+                                                            animate = enableAnimations
                                                         )
                                                         if (hasAmountChange) {
                                                             val sign = if (amountDiff > java.math.BigDecimal.ZERO) "+" else "-"
@@ -1410,7 +1471,8 @@ private fun ExpandableBatchCard(
                                                                     MaterialTheme.colorScheme.primary
                                                                 else
                                                                     MaterialTheme.colorScheme.error,
-                                                                modifier = Modifier.weight(1f)
+                                                                modifier = Modifier.weight(1f),
+                                                                animate = enableAnimations
                                                             )
                                                         } else {
                                                             Text(
@@ -1561,6 +1623,7 @@ private fun TransactionRow(
     transaction: HistoryDisplayItem,
     currencyFormat: DecimalFormat,
     weightFormat: DecimalFormat,
+    enableAnimations: Boolean,
     modifier: Modifier = Modifier
 ) {
     val pricePerKg = transaction.totalAmount?.let { amount ->
@@ -1615,7 +1678,8 @@ private fun TransactionRow(
                         targetValue = price,
                         formatter = { "₴${currencyFormat.format(it)}/кг" },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        animate = enableAnimations
                     )
                 }
             }
@@ -1626,14 +1690,16 @@ private fun TransactionRow(
                 formatter = { "${weightPrefix}${weightFormat.format(it)} кг" },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = weightColor
+                color = weightColor,
+                animate = enableAnimations
             )
             transaction.totalAmount?.let { amount ->
                 AnimatedCounter(
                     targetValue = amount.abs(),
                     formatter = { "₴${currencyFormat.format(it)}" },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    animate = enableAnimations
                 )
             }
         }
