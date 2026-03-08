@@ -54,6 +54,10 @@ class PurchaseEntryViewModel @Inject constructor(
         private const val TAG = "PurchaseEntryVM"
     }
 
+    private var lastReceiptNumber: String? = null
+    private var lastReceiptPositions: List<TransactionPosition>? = null
+    private var lastReceiptNotes: String? = null
+
     // Removed abstract overrides since they are passed in constructor now
 
     override fun getDefaultPrice(product: Product): BigDecimal? = product.defaultBuyPrice
@@ -121,12 +125,27 @@ class PurchaseEntryViewModel @Inject constructor(
             purchaseBatchRepository.createBatchWithTransactions(batch, transactions)
         }
 
+        // Store receipt data for reprint
+        lastReceiptNumber = batchLocalId.take(8).uppercase()
+        lastReceiptPositions = positions
+        lastReceiptNotes = notes.ifBlank { null }
+
         // Try to print receipt
         tryPrintReceipt(
-            receiptNumber = batchLocalId.take(8).uppercase(),
+            receiptNumber = lastReceiptNumber!!,
             positions = positions,
-            notes = notes.ifBlank { null }
+            notes = lastReceiptNotes
         )
+    }
+
+    fun reprintReceipt() {
+        val number = lastReceiptNumber ?: return
+        val positions = lastReceiptPositions ?: return
+        if (!printerService.isReady()) {
+            Log.d(TAG, "Printer not ready for reprint")
+            return
+        }
+        tryPrintReceipt(number, positions, lastReceiptNotes)
     }
 
     override suspend fun loadExistingBatch(batchId: UUID): EditingBatchData? {

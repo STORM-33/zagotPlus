@@ -123,7 +123,7 @@ class PurchaseReceiptBuilder(
             .separator('=')
             .alignCenter()
             .text("Дякуємо за співпрацю!")
-            .feedLines(3)
+            .feedLines(6)
             .cut()
 
         return encoder.toByteArray()

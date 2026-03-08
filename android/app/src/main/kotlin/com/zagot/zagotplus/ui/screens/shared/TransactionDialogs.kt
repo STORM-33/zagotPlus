@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -455,6 +457,7 @@ fun TransactionSummaryOverlay(
     totalAmount: BigDecimal,
     transactionType: TransactionType,
     onExit: () -> Unit,
+    onPrintReceipt: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val decimalFormat = remember { DecimalFormat("#,##0.00") }
@@ -568,7 +571,30 @@ fun TransactionSummaryOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Print receipt button (purchase only)
+            if (onPrintReceipt != null) {
+                OutlinedButton(
+                    onClick = onPrintReceipt,
+                    modifier = Modifier
+                        .fillMaxWidth(if (isTabletDevice) 0.4f else 0.8f)
+                        .height(if (isTabletDevice) 56.dp else 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Print,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Друкувати чек",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Exit button
             Button(

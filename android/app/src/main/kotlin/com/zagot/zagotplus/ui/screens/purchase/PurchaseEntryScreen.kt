@@ -93,6 +93,9 @@ fun PurchaseEntryScreen(
             onFinalize = viewModel::finalize,
             onSetTabletMode = viewModel::setTabletMode,
 
+            // Receipt
+            onPrintReceipt = viewModel::reprintReceipt,
+
             // Exit dialog
             onConfirmExit = viewModel::confirmExit,
             onDismissExitConfirmation = viewModel::dismissExitConfirmation,

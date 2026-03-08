@@ -159,6 +159,9 @@ data class TransactionEntryCallbacks(
     val onFinalize: () -> Unit,
     val onSetTabletMode: (Boolean) -> Unit,
 
+    // Receipt
+    val onPrintReceipt: (() -> Unit)? = null,
+
     // Exit dialog
     val onConfirmExit: () -> Unit,
     val onDismissExitConfirmation: () -> Unit,
@@ -295,7 +298,8 @@ fun TransactionEntryScreen(
                         totalWeight = uiState.totalWeight,
                         totalAmount = uiState.totalAmount,
                         transactionType = config.transactionType,
-                        onExit = callbacks.onExitFromSummary
+                        onExit = callbacks.onExitFromSummary,
+                        onPrintReceipt = callbacks.onPrintReceipt
                     )
                 } else {
                     when {
