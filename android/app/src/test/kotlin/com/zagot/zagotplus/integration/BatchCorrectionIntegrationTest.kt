@@ -68,7 +68,8 @@ class BatchCorrectionIntegrationTest {
             transactionDao = database.transactionDao(),
             productDao = database.productDao(),
             syncManager = syncManager,
-            devicePreferences = mockk(relaxed = true)
+            devicePreferences = mockk(relaxed = true),
+            transactionRepository = mockk(relaxed = true)
         )
         
         saleBatchRepository = SaleBatchRepositoryImpl(
