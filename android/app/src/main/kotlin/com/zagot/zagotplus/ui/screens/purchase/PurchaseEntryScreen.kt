@@ -96,6 +96,10 @@ fun PurchaseEntryScreen(
             // Receipt
             onPrintReceipt = viewModel::reprintReceipt,
 
+            // Weight restore
+            onConfirmWeightRestore = viewModel::confirmWeightRestore,
+            onDismissWeightRestore = viewModel::dismissWeightRestore,
+
             // Exit dialog
             onConfirmExit = viewModel::confirmExit,
             onDismissExitConfirmation = viewModel::dismissExitConfirmation,

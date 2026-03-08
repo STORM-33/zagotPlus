@@ -444,6 +444,52 @@ private fun EditBatchDialog(
     )
 }
 
+// ==================== Weight Restore Dialog ====================
+
+/**
+ * Dialog shown when user removes product from scales and selects a different product
+ * without adding a position. Offers to add the missed position.
+ */
+@Composable
+fun WeightRestoreDialog(
+    data: WeightRestoreData,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val formatter = remember { DecimalFormat("#,##0.00") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Додати позицію?") },
+        text = {
+            Column {
+                Text(
+                    text = data.product.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Вага: ${formatter.format(data.weight)} кг")
+                Text("Ціна: ${formatter.format(data.price)} ₴/кг")
+                Text(
+                    "Сума: ${formatter.format(data.weight.multiply(data.price))} ₴",
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("Додати")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Пропустити")
+            }
+        }
+    )
+}
+
 // ==================== Summary Overlay ====================
 
 /**

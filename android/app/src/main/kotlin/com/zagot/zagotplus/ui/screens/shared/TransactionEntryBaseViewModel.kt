@@ -55,6 +55,14 @@ abstract class TransactionEntryBaseViewModel(
         internal val INTEGER_PATTERN = Regex("^\\d+$")
     }
 
+    // ==================== WEIGHT RESTORE TRACKING ====================
+    // Tracks stable weight readings to detect missed positions (REGULAR mode only)
+    private var lastStableWeight: BigDecimal? = null
+    private var lastStableProduct: Product? = null
+    private var lastStablePrice: String = ""
+    private var weightDroppedToZero: Boolean = false
+    private var pendingProductAfterRestore: Product? = null
+
     // ==================== ABSTRACT MEMBERS ====================
 
     /** Get default price for a product (buyPrice for purchase, sellPrice for sale) */
@@ -161,6 +169,24 @@ abstract class TransactionEntryBaseViewModel(
                         )
                     }
                 }
+
+                // Weight restore tracking (REGULAR mode only)
+                val state = _uiState.value
+                if (state.entryMode == TransactionEntryMode.REGULAR) {
+                    if (reading.isStable && reading.weightKg > BigDecimal.ZERO) {
+                        // Stable non-zero reading: store state
+                        val activeProduct = state.activeProduct
+                        if (activeProduct != null) {
+                            lastStableWeight = reading.weightKg
+                            lastStableProduct = activeProduct
+                            lastStablePrice = state.currentPrice
+                            weightDroppedToZero = false
+                        }
+                    } else if (reading.weightKg.compareTo(BigDecimal.ZERO) == 0 && lastStableWeight != null) {
+                        // Weight dropped to zero after a stable reading
+                        weightDroppedToZero = true
+                    }
+                }
             }
         }
     }
@@ -181,6 +207,54 @@ abstract class TransactionEntryBaseViewModel(
         }
     }
 
+    // ==================== WEIGHT RESTORE ====================
+
+    private fun clearWeightRestoreState() {
+        lastStableWeight = null
+        lastStableProduct = null
+        lastStablePrice = ""
+        weightDroppedToZero = false
+        pendingProductAfterRestore = null
+    }
+
+    fun confirmWeightRestore() {
+        val data = _uiState.value.weightRestoreData ?: return
+        val pendingProduct = pendingProductAfterRestore
+
+        // Add position for the missed weighing
+        val batch = WeighingBatch(grossWeightKg = data.weight, tareCount = 0)
+        val position = TransactionPosition(
+            product = data.product,
+            batches = listOf(batch),
+            tareWeightPerUnit = BigDecimal.ZERO,
+            pricePerKg = data.price
+        )
+        _uiState.update {
+            it.copy(
+                positions = it.positions + position,
+                weightRestoreData = null
+            )
+        }
+
+        clearWeightRestoreState()
+
+        // Continue with the new product selection
+        if (pendingProduct != null) {
+            selectProduct(pendingProduct)
+        }
+    }
+
+    fun dismissWeightRestore() {
+        val pendingProduct = pendingProductAfterRestore
+        _uiState.update { it.copy(weightRestoreData = null) }
+        clearWeightRestoreState()
+
+        // Continue with the new product selection
+        if (pendingProduct != null) {
+            selectProduct(pendingProduct)
+        }
+    }
+
     // ==================== PRODUCT SELECTION ====================
 
     fun onProductOrderChanged(newOrder: List<UUID>) {
@@ -192,6 +266,31 @@ abstract class TransactionEntryBaseViewModel(
 
     open fun selectProduct(product: Product) {
         val state = _uiState.value
+
+        // REGULAR MODE - check weight restore trigger
+        if (state.entryMode == TransactionEntryMode.REGULAR &&
+            weightDroppedToZero &&
+            lastStableWeight != null &&
+            lastStableProduct != null &&
+            lastStableProduct!!.id != product.id
+        ) {
+            // Show weight restore popup
+            val price = lastStablePrice.toBigDecimalOrNull()
+                ?: getDefaultPrice(lastStableProduct!!)
+                ?: BigDecimal.ZERO
+            _uiState.update {
+                it.copy(
+                    weightRestoreData = WeightRestoreData(
+                        product = lastStableProduct!!,
+                        weight = lastStableWeight!!,
+                        price = price
+                    )
+                )
+            }
+            // Store the pending product selection to apply after dialog
+            pendingProductAfterRestore = product
+            return
+        }
 
         // REGULAR MODE
         if (state.entryMode == TransactionEntryMode.REGULAR) {
@@ -674,6 +773,9 @@ abstract class TransactionEntryBaseViewModel(
         // Validate minimum totalAmount to prevent zero-sum transactions
         val minAmount = BigDecimal("0.01")
         if (position.totalAmount < minAmount) return
+
+        // Reset weight restore tracking since position was added normally
+        clearWeightRestoreState()
 
         _uiState.update {
             it.copy(

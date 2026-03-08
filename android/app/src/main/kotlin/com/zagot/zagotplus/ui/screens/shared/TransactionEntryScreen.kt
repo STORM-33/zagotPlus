@@ -162,6 +162,10 @@ data class TransactionEntryCallbacks(
     // Receipt
     val onPrintReceipt: (() -> Unit)? = null,
 
+    // Weight restore
+    val onConfirmWeightRestore: () -> Unit = {},
+    val onDismissWeightRestore: () -> Unit = {},
+
     // Exit dialog
     val onConfirmExit: () -> Unit,
     val onDismissExitConfirmation: () -> Unit,
@@ -361,6 +365,15 @@ fun TransactionEntryScreen(
                 onDeleteBatch = { batchId ->
                     callbacks.onDeletePositionBatch(position.id, batchId)
                 }
+            )
+        }
+
+        // Weight restore dialog
+        uiState.weightRestoreData?.let { data ->
+            WeightRestoreDialog(
+                data = data,
+                onConfirm = callbacks.onConfirmWeightRestore,
+                onDismiss = callbacks.onDismissWeightRestore
             )
         }
 

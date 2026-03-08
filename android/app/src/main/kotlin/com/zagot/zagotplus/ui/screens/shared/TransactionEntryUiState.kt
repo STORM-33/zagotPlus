@@ -81,6 +81,9 @@ data class TransactionEntryUiState(
     val inventory: List<InventoryItem> = emptyList(),
     val availableWeight: BigDecimal = BigDecimal.ZERO,
 
+    // Weight restore popup (REGULAR mode only)
+    val weightRestoreData: WeightRestoreData? = null,
+
     // Event tracking
     val lastWeighingAddedId: Long = 0L // Incrementing counter to trigger UI events
 ) {
@@ -224,3 +227,13 @@ data class TransactionEntryUiState(
 
 typealias PurchaseEntryUiState = TransactionEntryUiState
 typealias SaleEntryUiState = TransactionEntryUiState
+
+/**
+ * Data for the weight restore popup shown when user switches product
+ * after removing weighed product from scales without adding a position.
+ */
+data class WeightRestoreData(
+    val product: Product,
+    val weight: BigDecimal,
+    val price: BigDecimal
+)
