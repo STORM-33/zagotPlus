@@ -13,6 +13,7 @@ import com.zagot.zagotplus.domain.model.PurchaseBatch
 import com.zagot.zagotplus.domain.model.Transaction
 import com.zagot.zagotplus.domain.model.TransactionType
 import com.zagot.zagotplus.domain.repository.PurchaseBatchRepository
+import com.zagot.zagotplus.domain.repository.TransactionRepository
 import com.zagot.zagotplus.sync.SyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -35,7 +36,8 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao,
     private val syncManager: SyncManager,
-    private val devicePreferences: DevicePreferences
+    private val devicePreferences: DevicePreferences,
+    private val transactionRepository: TransactionRepository
 ) : PurchaseBatchRepository {
 
     override fun observeAll(): Flow<List<PurchaseBatch>> =
@@ -60,9 +62,10 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     override fun observeTodaysProductTotals(): Flow<List<ProductDailyTotal>> {
         val (startMillis, endMillis) = getTodayRange()
         return combine(
-            transactionDao.observeTodaysPurchaseTotalsWithAvg(startMillis, endMillis),
-            productDao.getAllFlow()
-        ) { totals, products ->
+            transactionDao.observeTodaysPurchaseTotals(startMillis, endMillis),
+            productDao.getAllFlow(),
+            transactionRepository.getProductAvgPurchasePrices()
+        ) { totals, products, avgPrices ->
             val productMap = products.associate { it.id to Pair(it.name, it.imageUri) }
             totals.mapNotNull { result ->
                 val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
@@ -73,7 +76,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
                     totalWeightKg = BigDecimal(result.totalWeightKg),
                     totalAmount = BigDecimal(result.totalAmount ?: "0"),
                     imageUri = productInfo.second,
-                    avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
+                    avgPricePerKg = avgPrices[productId]
                 )
             }.sortedBy { it.productName }
         }
@@ -82,9 +85,10 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
     override fun observeTodaysProductTotals(locationId: UUID): Flow<List<ProductDailyTotal>> {
         val (startMillis, endMillis) = getTodayRange()
         return combine(
-            transactionDao.observeTodaysPurchaseTotalsWithAvgByLocation(startMillis, endMillis, locationId),
-            productDao.getAllFlow()
-        ) { totals, products ->
+            transactionDao.observeTodaysPurchaseTotalsByLocation(startMillis, endMillis, locationId),
+            productDao.getAllFlow(),
+            transactionRepository.getProductAvgPurchasePrices()
+        ) { totals, products, avgPrices ->
             val productMap = products.associate { it.id to Pair(it.name, it.imageUri) }
             totals.mapNotNull { result ->
                 val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
@@ -95,7 +99,7 @@ class PurchaseBatchRepositoryImpl @Inject constructor(
                     totalWeightKg = BigDecimal(result.totalWeightKg),
                     totalAmount = BigDecimal(result.totalAmount ?: "0"),
                     imageUri = productInfo.second,
-                    avgPricePerKg = result.avgPricePerKg?.let { BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) }
+                    avgPricePerKg = avgPrices[productId]
                 )
             }.sortedBy { it.productName }
         }

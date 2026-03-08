@@ -179,12 +179,22 @@ class TransactionRepositoryImpl @Inject constructor(
         }
 
     override fun getProductAvgPurchasePrices(): Flow<Map<UUID, BigDecimal>> =
-        transactionDao.observeProductAvgPurchasePrices().map { results ->
-            results.mapNotNull { result ->
-                val productId = try { UUID.fromString(result.productId) } catch (_: Exception) { return@mapNotNull null }
-                val avgPrice = result.avgPricePerKg?.let { 
-                    BigDecimal(it).setScale(2, java.math.RoundingMode.HALF_UP) 
-                } ?: return@mapNotNull null
+        transactionDao.getInventoryAggregatedFlow().map { inventoryResults ->
+            // Aggregate inventory across all locations per product
+            val inventoryByProduct = inventoryResults
+                .groupBy { it.productId }
+                .mapValues { (_, items) -> items.sumOf { BigDecimal(it.totalWeightKg) } }
+
+            // Fetch all purchase transactions (newest first)
+            val allPurchases = transactionDao.getAllPurchaseTransactionsDesc()
+            val purchasesByProduct = allPurchases.groupBy { it.productId }
+
+            inventoryByProduct.mapNotNull { (productIdStr, totalWeight) ->
+                if (totalWeight <= BigDecimal.ZERO) return@mapNotNull null
+                val productId = try { UUID.fromString(productIdStr) } catch (_: Exception) { return@mapNotNull null }
+                val purchases = purchasesByProduct[productId] ?: return@mapNotNull null
+                val avgPrice = computeSmartWeightedAvg(totalWeight, purchases)
+                    ?: return@mapNotNull null
                 productId to avgPrice
             }.toMap()
         }
@@ -309,6 +319,43 @@ class TransactionRepositoryImpl @Inject constructor(
         transactionDao.insert(entity)
         syncManager.triggerManualSync()
         return entity.toDomain()
+    }
+
+    /**
+     * Smart weighted average: walk back from newest purchases until covering inventory weight.
+     * Applies proportional coefficient to the oldest included transaction.
+     */
+    private fun computeSmartWeightedAvg(
+        inventoryWeight: BigDecimal,
+        purchasesDesc: List<TransactionEntity>
+    ): BigDecimal? {
+        if (purchasesDesc.isEmpty() || inventoryWeight <= BigDecimal.ZERO) return null
+
+        var remaining = inventoryWeight
+        var weightedSum = BigDecimal.ZERO
+        var totalWeight = BigDecimal.ZERO
+
+        for (tx in purchasesDesc) {
+            if (remaining <= BigDecimal.ZERO) break
+            val txWeight = tx.weightKg // positive for purchases
+            val txPrice = tx.pricePerKg ?: continue
+            if (txWeight <= BigDecimal.ZERO) continue
+
+            if (txWeight <= remaining) {
+                weightedSum += txWeight.multiply(txPrice)
+                totalWeight += txWeight
+                remaining -= txWeight
+            } else {
+                // Proportional: only use remaining portion of this transaction
+                weightedSum += remaining.multiply(txPrice)
+                totalWeight += remaining
+                remaining = BigDecimal.ZERO
+            }
+        }
+
+        return if (totalWeight > BigDecimal.ZERO) {
+            weightedSum.divide(totalWeight, 2, java.math.RoundingMode.HALF_UP)
+        } else null
     }
 
     private fun TransactionEntity.toDomain()= Transaction(

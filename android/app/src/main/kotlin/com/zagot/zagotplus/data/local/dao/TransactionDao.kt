@@ -287,6 +287,25 @@ interface TransactionDao {
     fun observeTodaysPurchaseTotals(startMillis: Long, endMillis: Long): Flow<List<ProductDailyTotalResult>>
 
     /**
+     * Get today's purchase totals for a specific location grouped by product.
+     * Excludes transactions from voided batches.
+     */
+    @Query("""
+        SELECT t.product_id AS productId,
+               SUM(t.weight_kg) AS totalWeightKg,
+               SUM(t.total_amount) AS totalAmount
+        FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        WHERE t.type = 'purchase'
+          AND t.product_id IS NOT NULL
+          AND t.location_id = :locationId
+          AND t.created_at >= :startMillis AND t.created_at < :endMillis
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+        GROUP BY t.product_id
+    """)
+    fun observeTodaysPurchaseTotalsByLocation(startMillis: Long, endMillis: Long, locationId: UUID): Flow<List<ProductDailyTotalResult>>
+
+    /**
      * Get today's purchase totals grouped by product with average price per kg.
      * Excludes transactions from voided batches.
      */
@@ -350,6 +369,20 @@ interface TransactionDao {
         GROUP BY t.product_id
     """)
     fun observeProductAvgPurchasePrices(): Flow<List<ProductAvgPurchasePriceResult>>
+
+    /**
+     * Get all purchase transactions ordered by created_at DESC, excluding voided batches.
+     * Used for smart weighted average price computation.
+     */
+    @Query("""
+        SELECT t.* FROM transactions t
+        LEFT JOIN purchase_batches pb ON t.batch_id = pb.id
+        WHERE t.type = 'purchase'
+          AND t.product_id IS NOT NULL
+          AND (t.batch_id IS NULL OR pb.is_voided = 0)
+        ORDER BY t.created_at DESC
+    """)
+    suspend fun getAllPurchaseTransactionsDesc(): List<TransactionEntity>
 
     /**
      * Observe max server_updated_at to detect content changes (voids, corrections).
